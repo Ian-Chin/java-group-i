@@ -1,0 +1,6 @@
+bin/
+*.class
+*.log
+*.tmp
+.project
+.settings/
