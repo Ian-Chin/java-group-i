@@ -3,17 +3,15 @@ package Login;
 import javax.swing.*;
 import javax.swing.border.*;
 import java.awt.*;
-import java.awt.event.*;
-import java.awt.geom.RoundRectangle2D;
+
 
 public class UserLogin extends JFrame {
 
     public UserLogin() {
         setTitle("Onboarding");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(500, 560);
-        setLocationRelativeTo(null);
-        setResizable(false);
+        setExtendedState(JFrame.MAXIMIZED_BOTH);
+        setMinimumSize(new Dimension(500, 560));
         getContentPane().setBackground(new Color(240, 240, 245));
 
         // Main panel
@@ -29,9 +27,6 @@ public class UserLogin extends JFrame {
         };
         card.setOpaque(false);
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
-        card.setBorder(new EmptyBorder(40, 50, 40, 50));
-
-        
         card.setBorder(BorderFactory.createCompoundBorder(
             new DropShadowBorder(),
             new EmptyBorder(40, 50, 40, 50)
@@ -89,7 +84,10 @@ public class UserLogin extends JFrame {
         createBtn.setBorderPainted(false);
         createBtn.setFocusPainted(false);
         createBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        createBtn.addActionListener(e -> JOptionPane.showMessageDialog(this, "Navigate to registration!"));
+        createBtn.addActionListener(e -> {
+            dispose();
+            new CreateAccount();
+        });
 
         card.add(createBtn);
         card.add(Box.createVerticalStrut(12));
@@ -117,7 +115,10 @@ public class UserLogin extends JFrame {
         loginBtn.setBorderPainted(false);
         loginBtn.setFocusPainted(false);
         loginBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        loginBtn.addActionListener(e -> JOptionPane.showMessageDialog(this, "Navigate to login!")); // Button redirecting
+        loginBtn.addActionListener(e -> {
+            dispose();
+            new LoginPage();
+        });
 
         card.add(loginBtn);
 

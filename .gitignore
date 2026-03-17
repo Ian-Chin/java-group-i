@@ -4,3 +4,4 @@ bin/
 *.tmp
 .project
 .settings/
+.classpath
