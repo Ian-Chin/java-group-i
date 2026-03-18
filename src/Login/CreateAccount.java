@@ -235,9 +235,14 @@ public class CreateAccount extends JFrame {
     }
 
     private boolean saveAccount(String name, String email, String password) {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter("accounts.txt", true))) {
-            writer.write(name + "," + email + "," + password);
-            writer.newLine();
+        File file = new File("src" + File.separator + "TxtFile" + File.separator + "accounts.txt");
+        try {
+            File parent = file.getParentFile();
+            if (parent != null && !parent.exists()) parent.mkdirs();
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(file, true))) {
+                writer.write(name + "," + email + "," + password);
+                writer.newLine();
+            }
             return true;
         } catch (IOException e) {
             e.printStackTrace();
