@@ -158,7 +158,8 @@ public class LoginPage extends JFrame {
     }
 
     private boolean validateLogin(String email, String password) {
-        try (BufferedReader reader = new BufferedReader(new FileReader("accounts.txt"))) {
+    	File file = new File("src" + File.separator + "TxtFile" + File.separator + "accounts.txt");
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 String[] parts = line.split(",");
