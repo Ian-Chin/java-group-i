@@ -11,6 +11,7 @@ public class LoginPage extends JPanel {
 
     private final AppFrame app;
     private final AccountService accountService;
+    private JButton loginBtn; // keylistener: enter/login btn
 
     public LoginPage(AppFrame app) {
         this.app = app;
@@ -72,7 +73,7 @@ public class LoginPage extends JPanel {
         card.add(Box.createVerticalStrut(28));
 
         // Login button
-        JButton loginBtn = UIFactory.createPrimaryButton("Login");
+        loginBtn = UIFactory.createPrimaryButton("Login");
         loginBtn.addActionListener(e -> handleLogin(emailField, passwordField));
         card.add(loginBtn);
         card.add(Box.createVerticalStrut(16));
@@ -93,6 +94,11 @@ public class LoginPage extends JPanel {
         wrapper.add(card);
         add(wrapper, BorderLayout.CENTER);
     }
+	    @Override
+	    public void addNotify() {
+	        super.addNotify();
+	        SwingUtilities.getRootPane(loginBtn).setDefaultButton(loginBtn);
+	    }
 
     private void handleLogin(JTextField emailField, JPasswordField passwordField) {
         String email = UIFactory.getFieldValue(emailField, "Enter your email");
