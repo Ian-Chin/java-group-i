@@ -38,6 +38,14 @@ public class AppFrame extends JFrame {
 
     public void showPage(PageName page) {
         cardLayout.show(mainPanel, page.name());
+        if (page == PageName.DASHBOARD) {
+            for (Component c : mainPanel.getComponents()) {
+                if (c instanceof AdminDashboard) {
+                    ((AdminDashboard) c).refreshUser();
+                    break;
+                }
+            }
+        }
     }
 
     public AccountService getAccountService() {

@@ -59,7 +59,7 @@ public class AdminDashboard extends JPanel {
         refreshUser();
     }
 
-    private void refreshUser() {
+    public void refreshUser() {
         String name = app.getLoggedInUser();
         if (name == null || name.isEmpty()) name = "Admin";
         if (welcomeLabel != null) welcomeLabel.setText("Welcome back, " + name);
