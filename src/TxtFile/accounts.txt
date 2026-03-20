@@ -1,4 +1,5 @@
-Ian,ian@apu.asc.com,admin1234
-Bowie,b@gmail.com,Bowie1234
-xxx,x@gmail.com,XXX1234
-bbb,bo@gmail.com,Bowie1234
+Ian,ian@apu.asc.com,admin1234,admin
+Bowie,b@gmail.com,Bowie1234,admin
+xxx,x@gmail.com,XXX1234,staff
+bbb,bo@gmail.com,Bowie1234,customer
+test,t@gmail.com,123456789ss,customer

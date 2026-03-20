@@ -131,7 +131,7 @@ public class CreateAccountPage extends JPanel {
         }
 
         // Register
-        User newUser = new User(name, email, password);
+        User newUser = new User(name, email, password, "customer");
         if (accountService.register(newUser)) {
             JOptionPane.showMessageDialog(app, "Account created successfully!", "Success",
                     JOptionPane.INFORMATION_MESSAGE);
