@@ -43,6 +43,34 @@ public class AccountService {
         }
     }
 
+    public boolean updateUser(String originalEmail, User updatedUser) {
+        List<User> users = loadAll();
+        boolean found = false;
+        for (int i = 0; i < users.size(); i++) {
+            if (users.get(i).getEmail().equalsIgnoreCase(originalEmail)) {
+                users.set(i, updatedUser);
+                found = true;
+                break;
+            }
+        }
+        if (!found) return false;
+        return saveAll(users);
+    }
+
+    private boolean saveAll(List<User> users) {
+        File file = new File(FILE_PATH);
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file, false))) {
+            for (User user : users) {
+                writer.write(user.toCsv());
+                writer.newLine();
+            }
+            return true;
+        } catch (IOException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
     private List<User> loadAll() {
         List<User> users = new ArrayList<>();
         File file = new File(FILE_PATH);

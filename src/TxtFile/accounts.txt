@@ -1,5 +1,5 @@
-Ian,ian@apu.asc.com,admin1234,admin
-Bowie,b@gmail.com,Bowie1234,admin
-xxx,x@gmail.com,XXX1234,staff
-bbb,bo@gmail.com,Bowie1234,customer
-test,t@gmail.com,123456789ss,customer
+Ian Chin,ian@gmail.com,admin1234,admin,0
+Bowie,b@gmail.com,Bowie1234,admin,0
+xxx,x@gmail.com,XXX1234,staff,0
+bbb,bo@gmail.com,Bowie1234,customer,0
+test,t@gmail.com,123456789ss,customer,0

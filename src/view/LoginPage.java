@@ -117,6 +117,7 @@ public class LoginPage extends JPanel {
             emailField.setForeground(Color.GRAY);
             passwordField.setText("");
             app.setLoggedInUser(user.getName());
+            app.setLoggedInUserObj(user);
             app.showPage(PageName.DASHBOARD);
         } else {
             JOptionPane.showMessageDialog(app, "Invalid email or password.",

@@ -1,6 +1,7 @@
 package view;
 
 import model.AccountService;
+import model.User;
 
 import javax.swing.*;
 import java.awt.*;
@@ -10,6 +11,7 @@ public class AppFrame extends JFrame {
     private CardLayout cardLayout;
     private JPanel mainPanel;
     private String loggedInUser = "";
+    private User loggedInUserObj;
     private final AccountService accountService;
 
     public AppFrame() {
@@ -58,5 +60,13 @@ public class AppFrame extends JFrame {
 
     public String getLoggedInUser() {
         return loggedInUser;
+    }
+
+    public void setLoggedInUserObj(User user) {
+        this.loggedInUserObj = user;
+    }
+
+    public User getLoggedInUserObj() {
+        return loggedInUserObj;
     }
 }

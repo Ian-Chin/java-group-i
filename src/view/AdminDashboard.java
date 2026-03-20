@@ -1,5 +1,8 @@
 package view;
 
+import model.AccountService;
+import model.User;
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
@@ -17,6 +20,32 @@ public class AdminDashboard extends JPanel {
     private JLabel welcomeLabel;
     private JLabel profileLabel;
     private JLabel avatarLabel;
+    private JLabel headerTitle;
+
+    // Profile section fields
+    private JTextField profileNameField;
+    private JTextField profileEmailField;
+    private JLabel profileRoleLabel;
+    private JLabel profileAvatarDisplay;
+    private int selectedAvatarIndex = 0;
+    private JPanel avatarSelectionPanel;
+
+    // Built-in avatar colors
+    private static final Color[] AVATAR_COLORS = {
+            new Color(80, 110, 230),   // Blue
+            new Color(230, 80, 80),    // Red
+            new Color(80, 190, 110),   // Green
+            new Color(230, 160, 40),   // Orange
+            new Color(160, 80, 230),   // Purple
+            new Color(40, 180, 200),   // Teal
+            new Color(230, 80, 160),   // Pink
+            new Color(100, 100, 120),  // Gray
+    };
+
+    private static final String[] AVATAR_ICONS = {
+            "\u263A", "\u2605", "\u2665", "\u2666",
+            "\u263C", "\u2708", "\u266B", "\u2618"
+    };
 
     private static final String[] NAV_ITEMS = {
             "Dashboard", "Manage Staff", "Service Price", "View Feedback", "Report"
@@ -48,6 +77,7 @@ public class AdminDashboard extends JPanel {
         contentPanel.add(buildPlaceholderContent("Service Price", "Configure and update service pricing."), "Service Price");
         contentPanel.add(buildPlaceholderContent("View Feedback", "Review customer feedback and ratings."), "View Feedback");
         contentPanel.add(buildPlaceholderContent("Report", "Generate and view business reports."), "Report");
+        contentPanel.add(buildProfileContent(), "Profile");
 
         rightSide.add(contentPanel, BorderLayout.CENTER);
         add(rightSide, BorderLayout.CENTER);
@@ -64,7 +94,15 @@ public class AdminDashboard extends JPanel {
         if (name == null || name.isEmpty()) name = "Admin";
         if (welcomeLabel != null) welcomeLabel.setText("Welcome back, " + name);
         if (profileLabel != null) profileLabel.setText(name);
-        if (avatarLabel != null) avatarLabel.setText(String.valueOf(name.charAt(0)).toUpperCase());
+
+        User user = app.getLoggedInUserObj();
+        if (user != null) {
+            selectedAvatarIndex = user.getProfilePicture();
+        }
+        if (avatarLabel != null) {
+            avatarLabel.setText(AVATAR_ICONS[selectedAvatarIndex]);
+            avatarLabel.repaint();
+        }
     }
 
     // ─── Header ──────────────────────────────────────────────────
@@ -78,9 +116,9 @@ public class AdminDashboard extends JPanel {
                 new EmptyBorder(0, 30, 0, 25)
         ));
 
-        JLabel headerTitle = new JLabel("Admin Panel");
-        headerTitle.setFont(UIConstants.FONT_BODY);
-        headerTitle.setForeground(UIConstants.TEXT_MUTED);
+        headerTitle = new JLabel("Dashboard");
+        headerTitle.setFont(UIConstants.FONT_BODY_BOLD);
+        headerTitle.setForeground(UIConstants.TEXT_PRIMARY);
         header.add(headerTitle, BorderLayout.WEST);
 
         header.add(buildProfileArea(), BorderLayout.EAST);
@@ -92,18 +130,18 @@ public class AdminDashboard extends JPanel {
         profileArea.setBackground(UIConstants.BG_HEADER);
 
         // Avatar circle
-        avatarLabel = new JLabel("A") {
+        avatarLabel = new JLabel(AVATAR_ICONS[selectedAvatarIndex]) {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(UIConstants.PRIMARY);
+                g2.setColor(AVATAR_COLORS[selectedAvatarIndex]);
                 g2.fillOval(0, 0, 38, 38);
                 g2.dispose();
                 super.paintComponent(g);
             }
         };
-        avatarLabel.setFont(UIConstants.FONT_SIDEBAR);
+        avatarLabel.setFont(new Font("SansSerif", Font.PLAIN, 18));
         avatarLabel.setForeground(Color.WHITE);
         avatarLabel.setHorizontalAlignment(SwingConstants.CENTER);
         avatarLabel.setVerticalAlignment(SwingConstants.CENTER);
@@ -134,6 +172,12 @@ public class AdminDashboard extends JPanel {
         profileMenu.setBackground(Color.WHITE);
 
         JMenuItem viewProfile = createMenuItem("View Profile");
+        viewProfile.addActionListener(e -> {
+            activeNav = "";
+            headerTitle.setText("My Profile");
+            contentLayout.show(contentPanel, "Profile");
+            refreshProfileFields();
+        });
         JMenuItem logout = createMenuItem("Logout");
         logout.setForeground(UIConstants.TEXT_DANGER);
         logout.addActionListener(e -> {
@@ -234,6 +278,7 @@ public class AdminDashboard extends JPanel {
                 for (int j = 0; j < navButtons.length; j++) {
                     updateNavButtonStyle(navButtons[j], NAV_ITEMS[j].equals(activeNav));
                 }
+                headerTitle.setText(navName);
                 contentLayout.show(contentPanel, navName);
             });
             sidebar.add(navButtons[i]);
@@ -292,11 +337,243 @@ public class AdminDashboard extends JPanel {
         page.setBorder(new EmptyBorder(40, 40, 40, 40));
 
         welcomeLabel = new JLabel("Welcome back, Admin");
-        welcomeLabel.setFont(UIConstants.FONT_HEADING_1);
+        welcomeLabel.setFont(UIConstants.FONT_HEADING_2);
         welcomeLabel.setForeground(UIConstants.TEXT_PRIMARY);
 
         page.add(welcomeLabel, BorderLayout.NORTH);
         return page;
+    }
+
+    // ─── Profile section ─────────────────────────────────────────
+
+    private void refreshProfileFields() {
+        User user = app.getLoggedInUserObj();
+        if (user == null) return;
+        if (profileNameField != null) {
+            profileNameField.setText(user.getName());
+            profileNameField.setForeground(Color.BLACK);
+        }
+        if (profileEmailField != null) {
+            profileEmailField.setText(user.getEmail());
+            profileEmailField.setForeground(Color.BLACK);
+        }
+        if (profileRoleLabel != null) {
+            String role = user.getRole();
+            profileRoleLabel.setText(role.substring(0, 1).toUpperCase() + role.substring(1));
+        }
+        selectedAvatarIndex = user.getProfilePicture();
+        updateAvatarSelection();
+    }
+
+    private void updateAvatarSelection() {
+        if (profileAvatarDisplay != null) {
+            profileAvatarDisplay.setText(AVATAR_ICONS[selectedAvatarIndex]);
+            profileAvatarDisplay.repaint();
+        }
+        if (avatarSelectionPanel != null) {
+            Component[] avatars = avatarSelectionPanel.getComponents();
+            for (int i = 0; i < avatars.length; i++) {
+                if (avatars[i] instanceof JLabel) {
+                    JLabel lbl = (JLabel) avatars[i];
+                    lbl.setBorder(i == selectedAvatarIndex
+                            ? BorderFactory.createLineBorder(UIConstants.PRIMARY, 3)
+                            : BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1));
+                }
+            }
+        }
+        // Also update header avatar
+        if (avatarLabel != null) {
+            avatarLabel.setText(AVATAR_ICONS[selectedAvatarIndex]);
+            avatarLabel.repaint();
+        }
+    }
+
+    private JPanel buildProfileContent() {
+        JPanel page = new JPanel(new BorderLayout());
+        page.setBackground(UIConstants.BG_CONTENT);
+
+        // Scrollable center
+        JPanel center = new JPanel(new GridBagLayout());
+        center.setBackground(UIConstants.BG_CONTENT);
+
+        JPanel card = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(UIConstants.BG_CARD);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
+                g2.dispose();
+            }
+        };
+        card.setOpaque(false);
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setBorder(new EmptyBorder(40, 50, 40, 50));
+
+        // Profile avatar display (large)
+        profileAvatarDisplay = new JLabel(AVATAR_ICONS[0]) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(AVATAR_COLORS[selectedAvatarIndex]);
+                g2.fillOval(0, 0, 80, 80);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        profileAvatarDisplay.setFont(new Font("SansSerif", Font.PLAIN, 36));
+        profileAvatarDisplay.setForeground(Color.WHITE);
+        profileAvatarDisplay.setHorizontalAlignment(SwingConstants.CENTER);
+        profileAvatarDisplay.setVerticalAlignment(SwingConstants.CENTER);
+        profileAvatarDisplay.setPreferredSize(new Dimension(80, 80));
+        profileAvatarDisplay.setMaximumSize(new Dimension(80, 80));
+        profileAvatarDisplay.setAlignmentX(Component.CENTER_ALIGNMENT);
+        card.add(profileAvatarDisplay);
+        card.add(Box.createVerticalStrut(20));
+
+        // Avatar selection label
+        JLabel chooseLabel = new JLabel("Choose Profile Picture");
+        chooseLabel.setFont(UIConstants.FONT_SMALL_BOLD);
+        chooseLabel.setForeground(UIConstants.TEXT_DARK);
+        chooseLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        card.add(chooseLabel);
+        card.add(Box.createVerticalStrut(12));
+
+        // Avatar selection grid
+        avatarSelectionPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
+        avatarSelectionPanel.setOpaque(false);
+        avatarSelectionPanel.setMaximumSize(new Dimension(460, 60));
+
+        for (int i = 0; i < AVATAR_COLORS.length; i++) {
+            final int index = i;
+            JLabel avatar = new JLabel(AVATAR_ICONS[i]) {
+                @Override
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2.setColor(AVATAR_COLORS[index]);
+                    g2.fillOval(2, 2, 42, 42);
+                    g2.dispose();
+                    super.paintComponent(g);
+                }
+            };
+            avatar.setFont(new Font("SansSerif", Font.PLAIN, 20));
+            avatar.setForeground(Color.WHITE);
+            avatar.setHorizontalAlignment(SwingConstants.CENTER);
+            avatar.setVerticalAlignment(SwingConstants.CENTER);
+            avatar.setPreferredSize(new Dimension(46, 46));
+            avatar.setCursor(new Cursor(Cursor.HAND_CURSOR));
+            avatar.setBorder(BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1));
+            avatar.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    selectedAvatarIndex = index;
+                    updateAvatarSelection();
+                }
+            });
+            avatarSelectionPanel.add(avatar);
+        }
+        card.add(avatarSelectionPanel);
+        card.add(Box.createVerticalStrut(30));
+
+        // Separator
+        JSeparator sep = new JSeparator();
+        sep.setForeground(UIConstants.BORDER_DEFAULT);
+        sep.setMaximumSize(new Dimension(380, 1));
+        sep.setAlignmentX(Component.CENTER_ALIGNMENT);
+        card.add(sep);
+        card.add(Box.createVerticalStrut(25));
+
+        // Name field
+        JLabel nameLabel = UIFactory.createFieldLabel("Name");
+        card.add(nameLabel);
+        card.add(Box.createVerticalStrut(6));
+        profileNameField = UIFactory.createTextField("Enter your name");
+        card.add(profileNameField);
+        card.add(Box.createVerticalStrut(16));
+
+        // Email field
+        JLabel emailLabel = UIFactory.createFieldLabel("Email");
+        card.add(emailLabel);
+        card.add(Box.createVerticalStrut(6));
+        profileEmailField = UIFactory.createTextField("Enter your email");
+        card.add(profileEmailField);
+        card.add(Box.createVerticalStrut(16));
+
+        // Role (read-only)
+        JLabel roleLabel = UIFactory.createFieldLabel("Role");
+        card.add(roleLabel);
+        card.add(Box.createVerticalStrut(6));
+        profileRoleLabel = new JLabel("—");
+        profileRoleLabel.setFont(UIConstants.FONT_BODY);
+        profileRoleLabel.setForeground(UIConstants.TEXT_SECONDARY);
+        profileRoleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        profileRoleLabel.setMaximumSize(new Dimension(380, 30));
+        profileRoleLabel.setBorder(new EmptyBorder(8, 14, 8, 14));
+        card.add(profileRoleLabel);
+        card.add(Box.createVerticalStrut(28));
+
+        // Save button
+        JButton saveBtn = UIFactory.createPrimaryButton("Save Changes");
+        saveBtn.addActionListener(e -> handleProfileSave());
+        card.add(saveBtn);
+
+        center.add(card);
+
+        JScrollPane scroll = new JScrollPane(center);
+        scroll.setBorder(null);
+        scroll.getViewport().setBackground(UIConstants.BG_CONTENT);
+        page.add(scroll, BorderLayout.CENTER);
+        return page;
+    }
+
+    private void handleProfileSave() {
+        User user = app.getLoggedInUserObj();
+        if (user == null) return;
+
+        String newName = UIFactory.getFieldValue(profileNameField, "Enter your name");
+        String newEmail = UIFactory.getFieldValue(profileEmailField, "Enter your email");
+
+        if (newName.isEmpty() || newEmail.isEmpty()) {
+            JOptionPane.showMessageDialog(app, "Name and email cannot be empty.",
+                    "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        if (!newName.matches("[a-zA-Z ]{2,50}")) {
+            JOptionPane.showMessageDialog(app, "Name must be 2-50 characters and contain only letters.",
+                    "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        if (!newEmail.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
+            JOptionPane.showMessageDialog(app, "Please enter a valid email address.",
+                    "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        // Check if email changed and already exists
+        AccountService accountService = app.getAccountService();
+        if (!newEmail.equalsIgnoreCase(user.getEmail()) && accountService.emailExists(newEmail)) {
+            JOptionPane.showMessageDialog(app, "An account with this email already exists.",
+                    "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        String originalEmail = user.getEmail();
+        User updatedUser = new User(newName, newEmail, user.getPassword(), user.getRole(), selectedAvatarIndex);
+
+        if (accountService.updateUser(originalEmail, updatedUser)) {
+            app.setLoggedInUser(newName);
+            app.setLoggedInUserObj(updatedUser);
+            refreshUser();
+            JOptionPane.showMessageDialog(app, "Profile updated successfully!",
+                    "Success", JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            JOptionPane.showMessageDialog(app, "Failed to save profile. Please try again.",
+                    "Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     // ─── Placeholder pages ───────────────────────────────────────
@@ -304,16 +581,6 @@ public class AdminDashboard extends JPanel {
     private JPanel buildPlaceholderContent(String title, String description) {
         JPanel page = new JPanel(new BorderLayout());
         page.setBackground(UIConstants.BG_CONTENT);
-
-        JPanel topBar = new JPanel(new BorderLayout());
-        topBar.setBackground(UIConstants.BG_CONTENT);
-        topBar.setBorder(new EmptyBorder(25, 35, 15, 35));
-
-        JLabel pageTitle = new JLabel(title);
-        pageTitle.setFont(UIConstants.FONT_HEADING_4);
-        pageTitle.setForeground(UIConstants.TEXT_PRIMARY);
-        topBar.add(pageTitle, BorderLayout.WEST);
-        page.add(topBar, BorderLayout.NORTH);
 
         JPanel center = new JPanel(new GridBagLayout());
         center.setBackground(UIConstants.BG_CONTENT);
