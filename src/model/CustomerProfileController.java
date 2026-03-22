@@ -68,8 +68,36 @@ public class CustomerProfileController extends ProfileController {
         if (success) {
             appAccessor.setLoggedInUser(newName);
             appAccessor.setLoggedInUserObj(updated);
+
+            // If email changed, rename image files so they still load correctly
+            if (!originalEmail.equalsIgnoreCase(newEmail)) {
+                renameImageFile("src" + java.io.File.separator + "ProfilePic",
+                        originalEmail, newEmail);
+                renameImageFile("src" + java.io.File.separator + "BackgroundImg",
+                        originalEmail, newEmail);
+            }
         }
         return success;
+    }
+
+    /**
+     * Renames {folder}/{oldEmail}.jpg to {folder}/{newEmail}.jpg
+     * so profile picture and background still load after email change.
+     */
+    private void renameImageFile(String folder, String oldEmail, String newEmail) {
+        String sanitised_old = oldEmail.trim().replaceAll("[^a-zA-Z0-9@._\\-]", "_");
+        String sanitised_new = newEmail.trim().replaceAll("[^a-zA-Z0-9@._\\-]", "_");
+
+        java.io.File root = new java.io.File(System.getProperty("user.dir"), folder);
+        java.io.File oldFile = new java.io.File(root, sanitised_old + ".jpg");
+        java.io.File newFile = new java.io.File(root, sanitised_new + ".jpg");
+
+        if (oldFile.exists()) {
+            boolean renamed = oldFile.renameTo(newFile);
+            System.out.println("[CustomerProfileController] Renamed image: "
+                    + oldFile.getName() + " → " + newFile.getName()
+                    + "  success=" + renamed);
+        }
     }
 
     /**
