@@ -3,10 +3,14 @@ package view;
 import model.CustomerProfileController;
 import model.User;
 import model.VehicleService;
+import model.ProfilePicStorage;
+import model.BackgroundImageStorage;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.awt.FileDialog;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Ellipse2D;
@@ -61,6 +65,10 @@ public class CustomerDashboard extends JPanel {
     // ── Vehicle card ─────────────────────────────────────────────
     private JPanel vehicleListPanel;
     private final VehicleService vehicleService = new VehicleService();
+
+    // ── Image storage services ────────────────────────────────────
+    private final ProfilePicStorage profilePictureService = new ProfilePicStorage();
+    private final BackgroundImageStorage backgroundImageService = new BackgroundImageStorage();
 
     // ── Profile/banner images (set by file chooser later) ───────
     private BufferedImage profileImage = null;
@@ -155,10 +163,18 @@ public class CustomerDashboard extends JPanel {
                 String r = user.getRole();
                 profileRoleDisplay.setText(r.substring(0, 1).toUpperCase() + r.substring(1));
             }
+
+            // Load saved profile picture and banner via model services
+            profileImage = profilePictureService.loadImage(user.getEmail());
+            bannerImage  = backgroundImageService.loadImage(user.getEmail());
+            if (profilePicLabel != null) profilePicLabel.repaint();
+            if (profileBanner   != null) profileBanner.repaint();
+            if (avatarLabel     != null) avatarLabel.repaint();
         }
 
         refreshVehicleList();
     }
+
 
     // ═══════════════════════════════════════════════════════════
     // PROFILE PAGE
@@ -168,6 +184,7 @@ public class CustomerDashboard extends JPanel {
         page.setBackground(UIConstants.BG_CONTENT);
 
         JScrollPane scroll = new JScrollPane(buildProfileInner());
+        scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         scroll.setBorder(null);
         scroll.getViewport().setBackground(UIConstants.BG_CONTENT);
         scroll.getVerticalScrollBar().setUnitIncrement(16);
@@ -201,9 +218,9 @@ public class CustomerDashboard extends JPanel {
         JPanel rightCol = new JPanel();
         rightCol.setLayout(new BoxLayout(rightCol, BoxLayout.Y_AXIS));
         rightCol.setOpaque(false);
-        rightCol.setPreferredSize(new Dimension(300, 0));
-        rightCol.setMinimumSize(new Dimension(300, 0));
-        rightCol.setMaximumSize(new Dimension(300, Integer.MAX_VALUE));
+        rightCol.setPreferredSize(new Dimension(440, 0));
+        rightCol.setMinimumSize(new Dimension(440, 0));
+        rightCol.setMaximumSize(new Dimension(440, Integer.MAX_VALUE));
         rightCol.add(buildUpcomingCard());
         rightCol.add(Box.createVerticalStrut(16));
         rightCol.add(buildPaymentSummaryCard());
@@ -255,10 +272,10 @@ public class CustomerDashboard extends JPanel {
         profileBanner.setOpaque(false);
         profileBanner.setLayout(null);
         profileBanner.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        // TODO: profileBanner.addMouseListener(e -> controller.chooseBannerImage());
         profileBanner.addMouseListener(new MouseAdapter() {
             @Override public void mouseEntered(MouseEvent e) { bannerHover[0] = true;  profileBanner.repaint(); }
             @Override public void mouseExited (MouseEvent e) { bannerHover[0] = false; profileBanner.repaint(); }
+            @Override public void mouseClicked(MouseEvent e) { chooseBannerImage(); }
         });
 
         profilePicLabel = new JLabel() {
@@ -292,20 +309,20 @@ public class CustomerDashboard extends JPanel {
         };
         profilePicLabel.setPreferredSize(new Dimension(110, 110));
         profilePicLabel.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        // TODO: profilePicLabel.addMouseListener(e -> controller.chooseProfileImage());
         profilePicLabel.addMouseListener(new MouseAdapter() {
             @Override public void mouseEntered(MouseEvent e) { avatarHover[0] = true;  profilePicLabel.repaint(); }
             @Override public void mouseExited (MouseEvent e) { avatarHover[0] = false; profilePicLabel.repaint(); }
+            @Override public void mouseClicked(MouseEvent e) { chooseProfileImage(); }
         });
 
         hero.addComponentListener(new java.awt.event.ComponentAdapter() {
             @Override
             public void componentResized(java.awt.event.ComponentEvent e) {
-                profileBanner.setBounds(0, 0, hero.getWidth(), 150);
+                profileBanner.setBounds(0, 0, hero.getWidth(), 170);
                 profilePicLabel.setBounds(30, 90, 110, 110);
             }
         });
-        profileBanner.setBounds(0, 0, 800, 150);
+        profileBanner.setBounds(0, 0, 800, 170);
         profilePicLabel.setBounds(30, 90, 110, 110);
 
         hero.add(profileBanner);
@@ -579,6 +596,94 @@ public class CustomerDashboard extends JPanel {
         vehicleListPanel.repaint();
     }
 
+    // ── Image choosers ───────────────────────────────────────────
+
+    /**
+     * Opens a file chooser, lets the user pick an image, saves it to
+     * src/ProfilePic/{email}.jpg, then immediately updates the
+     * profile picture circle and the top-right header avatar.
+     */
+    private void chooseProfileImage() {
+        User user = app.getLoggedInUserObj();
+        if (user == null) return;
+
+        FileDialog fd = new FileDialog((Frame) SwingUtilities.getWindowAncestor(this),
+                "Choose Profile Picture", FileDialog.LOAD);
+        fd.setFile("*.jpg;*.jpeg;*.png;*.gif;*.bmp");
+        fd.setVisible(true);
+
+        if (fd.getFile() == null) return;
+
+        try {
+            java.io.File selected = new java.io.File(fd.getDirectory(), fd.getFile());
+            BufferedImage img = ImageIO.read(selected);
+            if (img == null) {
+                JOptionPane.showMessageDialog(app, "Could not read the selected image.",
+                        "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            // Delegate saving to ProfilePicStorage (model layer)
+            boolean saved = profilePictureService.saveImage(user.getEmail(), img);
+            if (!saved) {
+                JOptionPane.showMessageDialog(app, "Failed to save profile picture.",
+                        "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            profileImage = img;
+            if (profilePicLabel != null) profilePicLabel.repaint();
+            if (avatarLabel     != null) avatarLabel.repaint();
+
+        } catch (java.io.IOException ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(app, "Failed to read the selected image.",
+                    "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /**
+     * Opens a file chooser, lets the user pick an image, saves it to
+     * src/BackgroundImg/{email}.jpg, then immediately updates the banner.
+     */
+    private void chooseBannerImage() {
+        User user = app.getLoggedInUserObj();
+        if (user == null) return;
+
+        FileDialog fd = new FileDialog((Frame) SwingUtilities.getWindowAncestor(this),
+                "Choose Background Image", FileDialog.LOAD);
+        fd.setFile("*.jpg;*.jpeg;*.png;*.gif;*.bmp");
+        fd.setVisible(true);
+
+        if (fd.getFile() == null) return;
+
+        try {
+            java.io.File selected = new java.io.File(fd.getDirectory(), fd.getFile());
+            BufferedImage img = ImageIO.read(selected);
+            if (img == null) {
+                JOptionPane.showMessageDialog(app, "Could not read the selected image.",
+                        "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            // Delegate saving to BackgroundImageStorage (model layer)
+            boolean saved = backgroundImageService.saveImage(user.getEmail(), img);
+            if (!saved) {
+                JOptionPane.showMessageDialog(app, "Failed to save background image.",
+                        "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            bannerImage = img;
+            if (profileBanner != null) profileBanner.repaint();
+
+        } catch (java.io.IOException ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(app, "Failed to read the selected image.",
+                    "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
     /**
      * Vehicle row using CardLayout to swap between display and edit views.
      * The outer box size never changes — CardLayout keeps both views the same height.
@@ -719,13 +824,13 @@ public class CustomerDashboard extends JPanel {
             }
         });
 
-        // Remove — confirm dialog
+        // Remove — confirm dialog, same JOptionPane style as all other popups
         removeBtn.addActionListener(e -> {
-            int choice = JOptionPane.showOptionDialog(app,
+            int choice = JOptionPane.showConfirmDialog(app,
                     "Are you sure you want to remove this vehicle?",
-                    "Confirm Remove", JOptionPane.YES_NO_OPTION,
-                    JOptionPane.WARNING_MESSAGE, null,
-                    new Object[]{"Yes", "No"}, "No");
+                    "Confirm Remove",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.QUESTION_MESSAGE);
             if (choice == JOptionPane.YES_OPTION) {
                 User user = app.getLoggedInUserObj();
                 if (user != null && vehicleService.deleteVehicle(user.getEmail(), plate)) {
@@ -766,7 +871,8 @@ public class CustomerDashboard extends JPanel {
         JLabel lbl = new JLabel(text);
         lbl.setFont(UIConstants.FONT_BODY);
         lbl.setForeground(UIConstants.TEXT_SECONDARY);
-        lbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        lbl.setAlignmentX(Component.CENTER_ALIGNMENT);
+        lbl.setHorizontalAlignment(SwingConstants.CENTER);
         return lbl;
     }
 
@@ -856,10 +962,20 @@ public class CustomerDashboard extends JPanel {
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(AVATAR_COLORS[selectedAvatarIndex]);
-                g2.fillOval(0, 0, 38, 38);
+                if (profileImage != null) {
+                    // Draw the user's profile photo clipped to a circle
+                    g2.setClip(new Ellipse2D.Float(0, 0, 38, 38));
+                    g2.drawImage(profileImage, 0, 0, 38, 38, null);
+                    g2.setClip(null);
+                } else {
+                    g2.setColor(AVATAR_COLORS[selectedAvatarIndex]);
+                    g2.fillOval(0, 0, 38, 38);
+                    g2.dispose();
+                    super.paintComponent(g); // draws the icon text
+                    return;
+                }
                 g2.dispose();
-                super.paintComponent(g);
+                // Don't call super — no icon text needed when photo is shown
             }
         };
         avatarLabel.setFont(new Font("SansSerif", Font.PLAIN, 18));
