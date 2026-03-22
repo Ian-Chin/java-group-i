@@ -118,7 +118,14 @@ public class LoginPage extends JPanel {
             passwordField.setText("");
             app.setLoggedInUser(user.getName());
             app.setLoggedInUserObj(user);
-            app.showPage(PageName.DASHBOARD);
+            
+            // Redirect based on role
+            if(user.getRole().equals("customer")) {
+            	app.showPage(PageName.CUSTOMER_DASHBOARD);
+            }
+            else {
+            	app.showPage(PageName.DASHBOARD);
+            }
         } else {
             JOptionPane.showMessageDialog(app, "Invalid email or password.",
                     "Login Failed", JOptionPane.ERROR_MESSAGE);
