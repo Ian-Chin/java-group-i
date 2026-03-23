@@ -32,6 +32,7 @@ public class AppFrame extends JFrame {
         mainPanel.add(new CreateAccountPage(this), PageName.CREATE_ACCOUNT.name());
         mainPanel.add(new LoginPage(this), PageName.LOGIN.name());
         mainPanel.add(new AdminDashboard(this), PageName.DASHBOARD.name());
+        mainPanel.add(new CustomerDashboard(this), PageName.CUSTOMER_DASHBOARD.name());
 
         add(mainPanel);
         showPage(PageName.ONBOARDING);
@@ -48,6 +49,18 @@ public class AppFrame extends JFrame {
                 }
             }
         }
+        
+     // After switching to CustomerDashboard, push the logged-in name to its labels.
+     // LoginPage sets loggedInUser (from accounts.txt) before calling showPage(),
+     // so refreshUser() here will always receive the real customer name.
+     if (page == PageName.CUSTOMER_DASHBOARD) {
+    	 for (Component c : mainPanel.getComponents()) {
+    		 if (c instanceof CustomerDashboard) {
+    			 ((CustomerDashboard) c).refreshUser();
+                 break;
+             }
+         }
+     }
     }
 
     public AccountService getAccountService() {

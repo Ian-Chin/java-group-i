@@ -4,5 +4,6 @@ public enum PageName {
     ONBOARDING,
     CREATE_ACCOUNT,
     LOGIN,
-    DASHBOARD;
+    DASHBOARD,
+    CUSTOMER_DASHBOARD;
 }

@@ -1,0 +1,4 @@
+V1,bo@gmail.com,WXY1234,Toyota Vios,2021,White
+V2,t@gmail.com,ABC5678,Honda City,2019,Silver
+V5,lin@gmail.com,LIN110,Mercedes AMG Coupe,2025,White
+V6,lin@gmail.com,NEW123,BMW i5,2024,Black
