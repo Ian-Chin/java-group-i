@@ -1,22 +1,7 @@
 package model;
 
-/**
- * CustomerProfileController handles all profile-related actions for customers.
- *
- * It acts as the "middle layer" between the CustomerDashboard (view) and
- * the AccountService (data layer). The dashboard never talks to AccountService
- * directly — it always goes through this controller.
- *
- * Java OOP principles used:
- *  - Inheritance  : extends ProfileController, which provides validate() and
- *                   hasNoChanges() methods for free
- *  - Polymorphism : overrides saveProfile() and deleteAccount() from ProfileController
- *                   so they work specifically for customer accounts
- *  - Encapsulation: CustomerDashboard never reads or writes accounts.txt directly —
- *                   it just calls saveProfile() or deleteAccount() here
- *  - Abstraction  : the dashboard only knows WHAT these methods do, not HOW
- *                   the file reading/writing works underneath
- */
+// CustomerProfileController handles all profile-related actions for customers.
+
 public class CustomerProfileController extends ProfileController {
 
     /**
