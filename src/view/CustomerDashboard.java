@@ -17,115 +17,152 @@ import java.awt.geom.Ellipse2D;
 import java.awt.image.BufferedImage;
 import java.util.List;
 
+/**
+ * CustomerDashboard is the main screen that customers see after logging in.
+ * It shows the customer's profile, vehicles, appointments, and payment history.
+ */
 public class CustomerDashboard extends JPanel {
 
+    // ── Reference to the main application window ─────────────────
     private final AppFrame app;
+
+    // ── Used to switch between different pages (Profile, Appointments, etc.) ─
     private CardLayout contentLayout;
     private JPanel contentPanel;
-    private String activeNav = "Profile";
+    private String activeNav = "Profile"; // tracks which nav button is selected
 
-    // ── Header labels ───────────────────────────────────────────
-    private JLabel profileLabel;
-    private JLabel avatarLabel;
-    private JLabel headerTitle;
+    // ── Labels shown in the top header bar ───────────────────────
+    private JLabel profileLabel;  // shows the customer's name
+    private JLabel avatarLabel;   // shows the small circle avatar icon
+    private JLabel headerTitle;   // shows the current page name
 
-    // ── Avatar colors & icons (header circle) ───────────────────
+    // ── Avatar circle colours and icons (one per profile picture option) ─
     private static final Color[] AVATAR_COLORS = {
-            new Color(80, 110, 230),
-            new Color(230, 80, 80),
-            new Color(80, 190, 110),
-            new Color(230, 160, 40),
-            new Color(160, 80, 230),
-            new Color(40, 180, 200),
-            new Color(230, 80, 160),
-            new Color(100, 100, 120),
+            new Color(80, 110, 230),  // blue
+            new Color(230, 80, 80),   // red
+            new Color(80, 190, 110),  // green
+            new Color(230, 160, 40),  // orange
+            new Color(160, 80, 230),  // purple
+            new Color(40, 180, 200),  // teal
+            new Color(230, 80, 160),  // pink
+            new Color(100, 100, 120), // grey
     };
     private static final String[] AVATAR_ICONS = {
-            "\u263A", "\u2605", "\u2665", "\u2666",
-            "\u263C", "\u2708", "\u266B", "\u2618"
+            "\u263A", // smiley face
+            "\u2605", // star
+            "\u2665", // heart
+            "\u2666", // diamond
+            "\u263C", // sun
+            "\u2708", // plane
+            "\u266B", // music note
+            "\u2618"  // clover
     };
-    private int selectedAvatarIndex = 0;
+    private int selectedAvatarIndex = 0; // which avatar is currently selected
 
-    // ── Profile page UI refs (updated by refreshUser) ───────────
+    // ── Labels on the Profile page that show user information ────
     private JLabel profileNameDisplay;
     private JLabel profileEmailDisplay;
     private JLabel profileRoleDisplay;
 
-    // ── Inline edit refs (Personal Information) ──────────────────
+    // ── Text fields shown when editing personal information ───────
     private JTextField profileNameField;
     private JTextField profileEmailField;
-    private JPanel     nameDisplayPanel;
-    private JPanel     nameEditPanel;
-    private JPanel     emailDisplayPanel;
-    private JPanel     emailEditPanel;
-    private JButton    editBtn;
-    private JButton    saveBtn;
-    private JButton    cancelBtn;
 
-    // ── Vehicle card ─────────────────────────────────────────────
-    private JPanel vehicleListPanel;
+    // ── Panels that swap between "display" and "edit" mode ───────
+    private JPanel nameDisplayPanel;  // shows the name label (read mode)
+    private JPanel nameEditPanel;     // shows the name text field (edit mode)
+    private JPanel emailDisplayPanel; // shows the email label (read mode)
+    private JPanel emailEditPanel;    // shows the email text field (edit mode)
+
+    // ── Buttons for editing personal information ──────────────────
+    private JButton editBtn;   // shown in read mode
+    private JButton saveBtn;   // shown in edit mode
+    private JButton cancelBtn; // shown in edit mode
+
+    // ── Vehicle section ───────────────────────────────────────────
+    private JPanel vehicleListPanel; // holds the list of vehicle rows
+    private JPanel vehicleAddPanel;  // holds the "add new vehicle" form
     private final VehicleService vehicleService = new VehicleService();
 
-    // ── Image storage services ────────────────────────────────────
+    // ── Image storage — saves/loads profile picture and background ─
     private final ProfilePicStorage profilePictureService = new ProfilePicStorage();
     private final BackgroundImageStorage backgroundImageService = new BackgroundImageStorage();
 
-    // ── Profile/banner images (set by file chooser later) ───────
-    private BufferedImage profileImage = null;
-    private BufferedImage bannerImage  = null;
-    private JPanel        profileBanner;
-    private JLabel        profilePicLabel;
+    // ── The actual images shown on screen ─────────────────────────
+    private BufferedImage profileImage = null; // null = show default blue smiley
+    private BufferedImage bannerImage  = null; // null = show default blue gradient
 
-    // ── Controller ───────────────────────────────────────────────
+    // ── References to the banner and profile picture components ───
+    private JPanel profileBanner;
+    private JLabel profilePicLabel;
+
+    // ── Controller that handles saving and validating profile data ─
     private final CustomerProfileController profileController;
 
-    // ── Brand blue ───────────────────────────────────────────────
-    private static final Color BRAND_BLUE  = new Color(80, 110, 230);
-    private static final Color BANNER_BLUE = new Color(100, 130, 240);
+    // ── Brand colours used throughout the dashboard ───────────────
+    private static final Color BRAND_BLUE  = new Color(80, 110, 230); // main blue
+    private static final Color BANNER_BLUE = new Color(100, 130, 240); // lighter blue for banner
 
-    // ── Nav ─────────────────────────────────────────────────────
+    // ── Sidebar navigation items ──────────────────────────────────
     private static final String[] NAV_ITEMS = {
-            "Profile", "Appointment Booking", "Service History",
-            "Payment History", "My Feedback", "Staff Review"
-    };
-    private static String navIcon(int cp) {
-        return new StringBuilder().appendCodePoint(cp).toString();
-    }
-    private static final String[] NAV_ICONS = {
-            navIcon(0x1F464),
-            navIcon(0x1F4C5),
-            navIcon(0x1F504),
-            navIcon(0x1F4B5),
-            navIcon(0x1F4AC),
-            "\u2605"
+            "Profile",
+            "Appointment Booking",
+            "Service History",
+            "Payment History",
+            "My Feedback",
+            "Staff Review"
     };
 
-    // ═══════════════════════════════════════════════════════════
+    // Helper method: converts a Unicode code point to a String emoji
+    private static String navIcon(int codePoint) {
+        return new StringBuilder().appendCodePoint(codePoint).toString();
+    }
+
+    // Icons for each navigation item
+    private static final String[] NAV_ICONS = {
+            navIcon(0x1F464), // 👤 person
+            navIcon(0x1F4C5), // 📅 calendar
+            navIcon(0x1F504), // 🔄 cycle
+            navIcon(0x1F4B5), // 💵 money
+            navIcon(0x1F4AC), // 💬 chat bubble
+            "\u2605"          // ★ star
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    // CONSTRUCTOR — builds the dashboard when the customer logs in
+    // ═══════════════════════════════════════════════════════════════
     public CustomerDashboard(AppFrame app) {
         this.app = app;
 
+        // Set up the profile controller.
+        // We use an AppFrameAccessor so the controller (model) never
+        // directly imports the AppFrame class (view) — keeps layers separate.
         profileController = new CustomerProfileController(
                 app.getAccountService(),
                 new CustomerProfileController.AppFrameAccessor() {
-                    @Override public User   getLoggedInUserObj()       { return app.getLoggedInUserObj(); }
-                    @Override public String getLoggedInUser()          { return app.getLoggedInUser(); }
-                    @Override public void   setLoggedInUser(String n)  { app.setLoggedInUser(n); }
-                    @Override public void   setLoggedInUserObj(User u) { app.setLoggedInUserObj(u); }
+                    @Override public User   getLoggedInUserObj()        { return app.getLoggedInUserObj(); }
+                    @Override public String getLoggedInUser()           { return app.getLoggedInUser(); }
+                    @Override public void   setLoggedInUser(String n)   { app.setLoggedInUser(n); }
+                    @Override public void   setLoggedInUserObj(User u)  { app.setLoggedInUserObj(u); }
                 }
         );
 
+        // Use BorderLayout: sidebar on the LEFT, everything else in the CENTER
         setLayout(new BorderLayout());
         add(buildSidebar(), BorderLayout.WEST);
 
+        // Right side contains the header (top) and the content pages (center)
         JPanel rightSide = new JPanel(new BorderLayout());
         rightSide.setBackground(UIConstants.BG_CONTENT);
         rightSide.add(buildHeader(), BorderLayout.NORTH);
 
+        // ContentPanel uses CardLayout so we can switch between pages
         contentLayout = new CardLayout();
         contentPanel  = new JPanel(contentLayout);
         contentPanel.setBackground(UIConstants.BG_CONTENT);
 
-        contentPanel.add(buildProfilePage(),          "Profile");
+        // Add all the pages to the content panel
+        contentPanel.add(buildProfilePage(), "Profile");
         contentPanel.add(buildPlaceholder("Appointment Booking", "Book and manage your service appointments.",         navIcon(0x1F4C5), 40), "Appointment Booking");
         contentPanel.add(buildPlaceholder("Service History",     "View your past service records and details.",        navIcon(0x1F504), 40), "Service History");
         contentPanel.add(buildPlaceholder("Payment History",     "Review your payment transactions and invoices.",     navIcon(0x1F4B5), 40), "Payment History");
@@ -136,135 +173,186 @@ public class CustomerDashboard extends JPanel {
         add(rightSide, BorderLayout.CENTER);
     }
 
-    // ── Lifecycle ────────────────────────────────────────────────
+    // Called automatically by Java when this panel is added to the screen
     @Override
     public void addNotify() {
         super.addNotify();
         refreshUser();
     }
 
+    /**
+     * Refreshes all displayed information using the currently logged-in user.
+     * Called after login and after any profile changes.
+     */
     public void refreshUser() {
+        // Get the logged-in user's name
         String name = app.getLoggedInUser();
-        if (name == null || name.isEmpty()) name = "Customer";
-        if (profileLabel != null) profileLabel.setText(name);
+        if (name == null || name.isEmpty()) {
+            name = "Customer"; // fallback if name is missing
+        }
 
+        // Update the name shown in the header
+        if (profileLabel != null) {
+            profileLabel.setText(name);
+        }
+
+        // Get the full User object (contains email, role, etc.)
         User user = app.getLoggedInUserObj();
-        if (user != null) selectedAvatarIndex = user.getProfilePicture();
 
+        // Update the avatar icon index
+        if (user != null) {
+            selectedAvatarIndex = user.getProfilePicture();
+        }
+
+        // Repaint the avatar circle in the header
         if (avatarLabel != null) {
             avatarLabel.setText(AVATAR_ICONS[selectedAvatarIndex]);
             avatarLabel.repaint();
         }
 
+        // Update the labels on the Profile page
         if (user != null) {
             if (profileNameDisplay  != null) profileNameDisplay.setText(user.getName());
             if (profileEmailDisplay != null) profileEmailDisplay.setText(user.getEmail());
             if (profileRoleDisplay  != null) {
-                String r = user.getRole();
-                profileRoleDisplay.setText(r.substring(0, 1).toUpperCase() + r.substring(1));
+                // Capitalise the first letter of the role (e.g. "customer" → "Customer")
+                String role = user.getRole();
+                String capitalisedRole = role.substring(0, 1).toUpperCase() + role.substring(1);
+                profileRoleDisplay.setText(capitalisedRole);
             }
 
-            // Load saved profile picture and banner via model services
+            // Load the saved profile picture and background from disk
             profileImage = profilePictureService.loadImage(user.getEmail());
             bannerImage  = backgroundImageService.loadImage(user.getEmail());
+
+            // Repaint the components so they show the loaded images
             if (profilePicLabel != null) profilePicLabel.repaint();
             if (profileBanner   != null) profileBanner.repaint();
             if (avatarLabel     != null) avatarLabel.repaint();
         }
 
+        // Reload the vehicle list
         refreshVehicleList();
     }
 
-
-    // ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     // PROFILE PAGE
-    // ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
+
+    /** Builds the Profile page with a scroll pane. */
     private JPanel buildProfilePage() {
         JPanel page = new JPanel(new BorderLayout());
         page.setBackground(UIConstants.BG_CONTENT);
 
+        // Wrap the content in a scroll pane so it scrolls vertically
         JScrollPane scroll = new JScrollPane(buildProfileInner());
-        scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER); // no horizontal scroll
         scroll.setBorder(null);
         scroll.getViewport().setBackground(UIConstants.BG_CONTENT);
-        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        scroll.getVerticalScrollBar().setUnitIncrement(16); // scroll speed
+
         page.add(scroll, BorderLayout.CENTER);
         return page;
     }
 
+    /** Builds the inner content of the Profile page (banner + two columns). */
     private JPanel buildProfileInner() {
         JPanel inner = new JPanel();
-        inner.setLayout(new BoxLayout(inner, BoxLayout.Y_AXIS));
+        inner.setLayout(new BoxLayout(inner, BoxLayout.Y_AXIS)); // stack vertically
         inner.setBackground(UIConstants.BG_CONTENT);
-        inner.setBorder(new EmptyBorder(0, 0, 40, 0));
+        inner.setBorder(new EmptyBorder(0, 0, 40, 0)); // padding at the bottom
 
+        // Add the banner + profile picture hero section at the top
         inner.add(buildBannerHero());
-        inner.add(Box.createVerticalStrut(24));
+        inner.add(Box.createVerticalStrut(24)); // gap between banner and body
 
-        // BorderLayout: left col stretches, right col stays fixed width
+        // Body uses BorderLayout: left column stretches, right column is fixed width
         JPanel body = new JPanel(new BorderLayout(16, 0));
         body.setBackground(UIConstants.BG_CONTENT);
-        body.setBorder(new EmptyBorder(0, 30, 0, 30));
+        body.setBorder(new EmptyBorder(0, 30, 0, 30)); // left and right padding
 
-        JPanel leftCol = new JPanel();
-        leftCol.setLayout(new BoxLayout(leftCol, BoxLayout.Y_AXIS));
-        leftCol.setOpaque(false);
-        leftCol.add(buildPersonalInfoCard());
-        leftCol.add(Box.createVerticalStrut(16));
-        leftCol.add(buildVehicleCard());
-        body.add(leftCol, BorderLayout.CENTER);
+        // Left column: Personal Information card + My Vehicle card
+        JPanel leftColumn = new JPanel();
+        leftColumn.setLayout(new BoxLayout(leftColumn, BoxLayout.Y_AXIS));
+        leftColumn.setOpaque(false);
+        leftColumn.add(buildPersonalInfoCard());
+        leftColumn.add(Box.createVerticalStrut(16)); // gap between cards
+        leftColumn.add(buildVehicleCard());
+        body.add(leftColumn, BorderLayout.CENTER);
 
-        // Right column — fixed 300px wide, always the same regardless of left col
-        JPanel rightCol = new JPanel();
-        rightCol.setLayout(new BoxLayout(rightCol, BoxLayout.Y_AXIS));
-        rightCol.setOpaque(false);
-        rightCol.setPreferredSize(new Dimension(440, 0));
-        rightCol.setMinimumSize(new Dimension(440, 0));
-        rightCol.setMaximumSize(new Dimension(440, Integer.MAX_VALUE));
-        rightCol.add(buildUpcomingCard());
-        rightCol.add(Box.createVerticalStrut(16));
-        rightCol.add(buildPaymentSummaryCard());
-        body.add(rightCol, BorderLayout.EAST);
+        // Right column: Upcoming Appointments + Payment History (fixed 440px wide)
+        JPanel rightColumn = new JPanel();
+        rightColumn.setLayout(new BoxLayout(rightColumn, BoxLayout.Y_AXIS));
+        rightColumn.setOpaque(false);
+        rightColumn.setPreferredSize(new Dimension(440, 0));
+        rightColumn.setMinimumSize(new Dimension(440, 0));
+        rightColumn.setMaximumSize(new Dimension(440, Integer.MAX_VALUE));
+        rightColumn.add(buildUpcomingCard());
+        rightColumn.add(Box.createVerticalStrut(16)); // gap between cards
+        rightColumn.add(buildPaymentSummaryCard());
+        body.add(rightColumn, BorderLayout.EAST);
 
         inner.add(body);
         return inner;
     }
 
-    // ── Banner + circular profile picture hero ───────────────────
+    // ═══════════════════════════════════════════════════════════════
+    // BANNER + PROFILE PICTURE HERO
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Builds the banner (background image area) and the circular
+     * profile picture that overlaps the bottom of the banner.
+     * Clicking either one opens a file chooser to change the image.
+     */
     private JPanel buildBannerHero() {
+        // Use null layout so we can position banner and profile pic manually
         JPanel hero = new JPanel(null);
         hero.setOpaque(false);
         hero.setPreferredSize(new Dimension(0, 200));
         hero.setMaximumSize(new Dimension(Integer.MAX_VALUE, 200));
 
-        boolean[] bannerHover = {false};
-        boolean[] avatarHover = {false};
+        // Track whether the mouse is hovering over the banner or avatar
+        boolean[] bannerHovered = {false};
+        boolean[] avatarHovered = {false};
 
+        // ── Build the banner panel ────────────────────────────────
         profileBanner = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                // Draw background image if one was chosen, otherwise draw blue gradient
                 if (bannerImage != null) {
                     g2.drawImage(bannerImage, 0, 0, getWidth(), getHeight(), null);
                 } else {
-                    GradientPaint gp = new GradientPaint(
+                    // Default: gradient from light blue to darker blue
+                    GradientPaint gradient = new GradientPaint(
                             0, 0, BANNER_BLUE,
                             getWidth(), getHeight(), new Color(60, 90, 210));
-                    g2.setPaint(gp);
+                    g2.setPaint(gradient);
                     g2.fillRect(0, 0, getWidth(), getHeight());
                 }
-                if (bannerHover[0]) {
-                    g2.setColor(new Color(0, 0, 0, 110));
+
+                // When hovering: darken the banner and show camera icon + text
+                if (bannerHovered[0]) {
+                    g2.setColor(new Color(0, 0, 0, 110)); // semi-transparent black
                     g2.fillRect(0, 0, getWidth(), getHeight());
-                    int cx = getWidth() / 2, cy = getHeight() / 2 - 10;
-                    drawCameraIcon(g2, cx, cy, 28, Color.WHITE);
+
+                    // Draw camera icon in the centre
+                    int centerX = getWidth() / 2;
+                    int centerY = getHeight() / 2 - 10;
+                    drawCameraIcon(g2, centerX, centerY, 28, Color.WHITE);
+
+                    // Draw "Click to change" text below the camera icon
                     g2.setColor(Color.WHITE);
                     g2.setFont(new Font("SansSerif", Font.BOLD, 13));
                     FontMetrics fm = g2.getFontMetrics();
-                    String msg = "Click to change";
-                    g2.drawString(msg, cx - fm.stringWidth(msg) / 2, cy + 44);
+                    String message = "Click to change";
+                    int textX = centerX - fm.stringWidth(message) / 2;
+                    g2.drawString(message, textX, centerY + 44);
                 }
                 g2.dispose();
             }
@@ -273,34 +361,39 @@ public class CustomerDashboard extends JPanel {
         profileBanner.setLayout(null);
         profileBanner.setCursor(new Cursor(Cursor.HAND_CURSOR));
         profileBanner.addMouseListener(new MouseAdapter() {
-            @Override public void mouseEntered(MouseEvent e) { bannerHover[0] = true;  profileBanner.repaint(); }
-            @Override public void mouseExited (MouseEvent e) { bannerHover[0] = false; profileBanner.repaint(); }
-            @Override public void mouseClicked(MouseEvent e) { chooseBannerImage(); }
+            @Override public void mouseEntered(MouseEvent e) { bannerHovered[0] = true;  profileBanner.repaint(); }
+            @Override public void mouseExited (MouseEvent e) { bannerHovered[0] = false; profileBanner.repaint(); }
+            @Override public void mouseClicked(MouseEvent e) { chooseBannerImage(); } // open file chooser
         });
 
+        // ── Build the circular profile picture ────────────────────
         profilePicLabel = new JLabel() {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                int size = Math.min(getWidth(), getHeight());
+                int size = Math.min(getWidth(), getHeight()); // circle size
+
+                // Draw the profile image if one was chosen, otherwise draw default smiley
                 if (profileImage != null) {
-                    Shape clip = new Ellipse2D.Float(0, 0, size, size);
-                    g2.setClip(clip);
+                    // Clip the image into a circle shape
+                    g2.setClip(new Ellipse2D.Float(0, 0, size, size));
                     g2.drawImage(profileImage, 0, 0, size, size, null);
                     g2.setClip(null);
                 } else {
-                    drawDefaultAvatar(g2, size);
+                    drawDefaultAvatar(g2, size); // blue circle with smiley face
                 }
-                if (avatarHover[0]) {
-                    Shape clip = new Ellipse2D.Float(0, 0, size, size);
-                    g2.setClip(clip);
+
+                // When hovering: darken the circle and show camera icon
+                if (avatarHovered[0]) {
+                    g2.setClip(new Ellipse2D.Float(0, 0, size, size));
                     g2.setColor(new Color(0, 0, 0, 110));
                     g2.fillOval(0, 0, size, size);
                     g2.setClip(null);
-                    int cx = size / 2, cy = size / 2;
-                    drawCameraIcon(g2, cx, cy, 20, Color.WHITE);
+                    drawCameraIcon(g2, size / 2, size / 2, 20, Color.WHITE);
                 }
+
+                // Always draw a white border ring around the circle
                 g2.setColor(Color.WHITE);
                 g2.setStroke(new BasicStroke(4));
                 g2.drawOval(2, 2, size - 4, size - 4);
@@ -310,11 +403,12 @@ public class CustomerDashboard extends JPanel {
         profilePicLabel.setPreferredSize(new Dimension(110, 110));
         profilePicLabel.setCursor(new Cursor(Cursor.HAND_CURSOR));
         profilePicLabel.addMouseListener(new MouseAdapter() {
-            @Override public void mouseEntered(MouseEvent e) { avatarHover[0] = true;  profilePicLabel.repaint(); }
-            @Override public void mouseExited (MouseEvent e) { avatarHover[0] = false; profilePicLabel.repaint(); }
-            @Override public void mouseClicked(MouseEvent e) { chooseProfileImage(); }
+            @Override public void mouseEntered(MouseEvent e) { avatarHovered[0] = true;  profilePicLabel.repaint(); }
+            @Override public void mouseExited (MouseEvent e) { avatarHovered[0] = false; profilePicLabel.repaint(); }
+            @Override public void mouseClicked(MouseEvent e) { chooseProfileImage(); } // open file chooser
         });
 
+        // Reposition banner and profile pic whenever the hero panel is resized
         hero.addComponentListener(new java.awt.event.ComponentAdapter() {
             @Override
             public void componentResized(java.awt.event.ComponentEvent e) {
@@ -322,184 +416,257 @@ public class CustomerDashboard extends JPanel {
                 profilePicLabel.setBounds(30, 90, 110, 110);
             }
         });
+
+        // Set initial positions
         profileBanner.setBounds(0, 0, 800, 170);
         profilePicLabel.setBounds(30, 90, 110, 110);
 
+        // Add banner first (painted first = behind), then profile pic (on top)
         hero.add(profileBanner);
         hero.add(profilePicLabel);
-        hero.setComponentZOrder(profilePicLabel, 0);
-        hero.setComponentZOrder(profileBanner,   1);
+
+        // Make sure profile pic is drawn on top of the banner
+        hero.setComponentZOrder(profilePicLabel, 0); // 0 = front
+        hero.setComponentZOrder(profileBanner,   1); // 1 = behind
+
         return hero;
     }
 
+    /** Draws a simple camera icon at the given centre position. */
     private void drawCameraIcon(Graphics2D g2, int cx, int cy, int size, Color color) {
         g2.setColor(color);
         g2.setStroke(new BasicStroke(size / 10f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        int bw = size, bh = size * 7 / 10, bx = cx - bw / 2, by = cy - bh / 2;
-        g2.drawRoundRect(bx, by, bw, bh, size / 5, size / 5);
-        int lr = size * 22 / 100;
-        g2.drawOval(cx - lr, cy - lr + size / 20, lr * 2, lr * 2);
-        int vw = size / 4, vh = size / 6;
-        g2.drawRoundRect(bx + size / 6, by - vh, vw, vh, 2, 2);
+
+        int bodyWidth  = size;
+        int bodyHeight = size * 7 / 10;
+        int bodyX = cx - bodyWidth / 2;
+        int bodyY = cy - bodyHeight / 2;
+
+        g2.drawRoundRect(bodyX, bodyY, bodyWidth, bodyHeight, size / 5, size / 5); // camera body
+        int lensRadius = size * 22 / 100;
+        g2.drawOval(cx - lensRadius, cy - lensRadius + size / 20, lensRadius * 2, lensRadius * 2); // lens
+        g2.drawRoundRect(bodyX + size / 6, bodyY - size / 6, size / 4, size / 6, 2, 2); // viewfinder bump
     }
 
+    /** Draws a blue circle with a white smiley face (the default profile picture). */
     private void drawDefaultAvatar(Graphics2D g2, int size) {
+        // Draw the blue circle background
         g2.setColor(BRAND_BLUE);
         g2.fillOval(0, 0, size, size);
+
+        // Draw white eyes and smile
         g2.setColor(Color.WHITE);
         g2.setStroke(new BasicStroke(size / 18f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        int eyeY = size * 38 / 100, eyeOff = size * 18 / 100, eyeR = size / 14;
-        g2.fillOval(size / 2 - eyeOff - eyeR, eyeY - eyeR, eyeR * 2, eyeR * 2);
-        g2.fillOval(size / 2 + eyeOff - eyeR, eyeY - eyeR, eyeR * 2, eyeR * 2);
+
+        int eyeY      = size * 38 / 100;
+        int eyeOffset = size * 18 / 100;
+        int eyeRadius = size / 14;
+
+        // Left eye
+        g2.fillOval(size / 2 - eyeOffset - eyeRadius, eyeY - eyeRadius, eyeRadius * 2, eyeRadius * 2);
+        // Right eye
+        g2.fillOval(size / 2 + eyeOffset - eyeRadius, eyeY - eyeRadius, eyeRadius * 2, eyeRadius * 2);
+        // Smile arc
         g2.drawArc(size * 28 / 100, size * 44 / 100, size * 44 / 100, size * 26 / 100, 200, 140);
     }
 
-    // ── Personal information card ─────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════
+    // PERSONAL INFORMATION CARD
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Builds the Personal Information card.
+     * Shows Username, Email, Role in read mode.
+     * Clicking Edit switches to inline text fields for editing.
+     */
     private JPanel buildPersonalInfoCard() {
         JPanel card = createCard();
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(new EmptyBorder(28, 28, 28, 28));
 
+        // ── Title row: "Personal Information" + buttons ───────────
         JPanel titleRow = new JPanel(new BorderLayout());
         titleRow.setOpaque(false);
         titleRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
-        JLabel title = new JLabel("Personal Information");
-        title.setFont(new Font("SansSerif", Font.BOLD, 16));
-        title.setForeground(UIConstants.TEXT_PRIMARY);
-        titleRow.add(title, BorderLayout.WEST);
 
-        JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        btnRow.setOpaque(false);
+        JLabel titleLabel = new JLabel("Personal Information");
+        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 16));
+        titleLabel.setForeground(UIConstants.TEXT_PRIMARY);
+        titleRow.add(titleLabel, BorderLayout.WEST);
+
+        // Button panel on the right side of the title row
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        buttonPanel.setOpaque(false);
+
         editBtn   = createActionButton("Edit",   new Color(80, 110, 230), Color.WHITE);
         saveBtn   = createActionButton("Save",   new Color(80, 190, 110), Color.WHITE);
         cancelBtn = createActionButton("Cancel", new Color(150, 150, 165), Color.WHITE);
+
+        // Make Cancel button wider so text is not clipped
         cancelBtn.setPreferredSize(new Dimension(90, 32));
         cancelBtn.setMinimumSize(new Dimension(90, 32));
         cancelBtn.setMaximumSize(new Dimension(90, 32));
+
+        // Save and Cancel are hidden until Edit is clicked
         saveBtn.setVisible(false);
         cancelBtn.setVisible(false);
-        btnRow.add(editBtn);
-        btnRow.add(saveBtn);
-        btnRow.add(cancelBtn);
-        titleRow.add(btnRow, BorderLayout.EAST);
+
+        buttonPanel.add(editBtn);
+        buttonPanel.add(saveBtn);
+        buttonPanel.add(cancelBtn);
+        titleRow.add(buttonPanel, BorderLayout.EAST);
 
         card.add(titleRow);
         card.add(Box.createVerticalStrut(16));
         card.add(makeSeparator());
         card.add(Box.createVerticalStrut(20));
 
-        User user = app.getLoggedInUserObj();
-        String name  = user != null ? user.getName()  : "—";
-        String email = user != null ? user.getEmail() : "—";
-        String role  = user != null ? user.getRole()  : "—";
-        if (!role.equals("—")) role = role.substring(0, 1).toUpperCase() + role.substring(1);
+        // ── Get the current user's details ────────────────────────
+        User currentUser = app.getLoggedInUserObj();
+        String currentName  = currentUser != null ? currentUser.getName()  : "—";
+        String currentEmail = currentUser != null ? currentUser.getEmail() : "—";
+        String currentRole  = currentUser != null ? currentUser.getRole()  : "—";
 
-        // Username display/edit panels
+        // Capitalise the role
+        if (!currentRole.equals("—")) {
+            currentRole = currentRole.substring(0, 1).toUpperCase() + currentRole.substring(1);
+        }
+
+        // ── Username row (display mode) ───────────────────────────
         nameDisplayPanel = new JPanel(new BorderLayout(12, 0));
         nameDisplayPanel.setOpaque(false);
         nameDisplayPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
-        JLabel nameLbl = new JLabel("Username");
-        nameLbl.setFont(UIConstants.FONT_SMALL_BOLD);
-        nameLbl.setForeground(UIConstants.TEXT_MUTED);
-        nameLbl.setPreferredSize(new Dimension(90, 20));
-        profileNameDisplay = new JLabel(name);
+
+        JLabel nameLabel = new JLabel("Username");
+        nameLabel.setFont(UIConstants.FONT_SMALL_BOLD);
+        nameLabel.setForeground(UIConstants.TEXT_MUTED);
+        nameLabel.setPreferredSize(new Dimension(90, 20));
+
+        profileNameDisplay = new JLabel(currentName);
         profileNameDisplay.setFont(UIConstants.FONT_BODY);
         profileNameDisplay.setForeground(UIConstants.TEXT_PRIMARY);
-        nameDisplayPanel.add(nameLbl, BorderLayout.WEST);
+
+        nameDisplayPanel.add(nameLabel, BorderLayout.WEST);
         nameDisplayPanel.add(profileNameDisplay, BorderLayout.CENTER);
 
+        // ── Username row (edit mode — hidden by default) ──────────
         nameEditPanel = new JPanel(new BorderLayout(12, 0));
         nameEditPanel.setOpaque(false);
         nameEditPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
-        JLabel nameLblE = new JLabel("Username");
-        nameLblE.setFont(UIConstants.FONT_SMALL_BOLD);
-        nameLblE.setForeground(UIConstants.TEXT_MUTED);
-        nameLblE.setPreferredSize(new Dimension(90, 20));
-        profileNameField = new JTextField(name);
+
+        JLabel nameLabelEdit = new JLabel("Username");
+        nameLabelEdit.setFont(UIConstants.FONT_SMALL_BOLD);
+        nameLabelEdit.setForeground(UIConstants.TEXT_MUTED);
+        nameLabelEdit.setPreferredSize(new Dimension(90, 20));
+
+        profileNameField = new JTextField(currentName);
         profileNameField.setFont(UIConstants.FONT_BODY);
         profileNameField.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(UIConstants.PRIMARY, 2),
                 new EmptyBorder(4, 8, 4, 8)));
-        nameEditPanel.add(nameLblE, BorderLayout.WEST);
+
+        nameEditPanel.add(nameLabelEdit, BorderLayout.WEST);
         nameEditPanel.add(profileNameField, BorderLayout.CENTER);
-        nameEditPanel.setVisible(false);
+        nameEditPanel.setVisible(false); // hidden until Edit is clicked
 
         card.add(nameDisplayPanel);
         card.add(nameEditPanel);
         card.add(Box.createVerticalStrut(14));
 
-        // Email display/edit panels
+        // ── Email row (display mode) ──────────────────────────────
         emailDisplayPanel = new JPanel(new BorderLayout(12, 0));
         emailDisplayPanel.setOpaque(false);
         emailDisplayPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
-        JLabel emailLbl = new JLabel("Email");
-        emailLbl.setFont(UIConstants.FONT_SMALL_BOLD);
-        emailLbl.setForeground(UIConstants.TEXT_MUTED);
-        emailLbl.setPreferredSize(new Dimension(90, 20));
-        profileEmailDisplay = new JLabel(email);
+
+        JLabel emailLabel = new JLabel("Email");
+        emailLabel.setFont(UIConstants.FONT_SMALL_BOLD);
+        emailLabel.setForeground(UIConstants.TEXT_MUTED);
+        emailLabel.setPreferredSize(new Dimension(90, 20));
+
+        profileEmailDisplay = new JLabel(currentEmail);
         profileEmailDisplay.setFont(UIConstants.FONT_BODY);
         profileEmailDisplay.setForeground(UIConstants.TEXT_PRIMARY);
-        emailDisplayPanel.add(emailLbl, BorderLayout.WEST);
+
+        emailDisplayPanel.add(emailLabel, BorderLayout.WEST);
         emailDisplayPanel.add(profileEmailDisplay, BorderLayout.CENTER);
 
+        // ── Email row (edit mode — hidden by default) ─────────────
         emailEditPanel = new JPanel(new BorderLayout(12, 0));
         emailEditPanel.setOpaque(false);
         emailEditPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
-        JLabel emailLblE = new JLabel("Email");
-        emailLblE.setFont(UIConstants.FONT_SMALL_BOLD);
-        emailLblE.setForeground(UIConstants.TEXT_MUTED);
-        emailLblE.setPreferredSize(new Dimension(90, 20));
-        profileEmailField = new JTextField(email);
+
+        JLabel emailLabelEdit = new JLabel("Email");
+        emailLabelEdit.setFont(UIConstants.FONT_SMALL_BOLD);
+        emailLabelEdit.setForeground(UIConstants.TEXT_MUTED);
+        emailLabelEdit.setPreferredSize(new Dimension(90, 20));
+
+        profileEmailField = new JTextField(currentEmail);
         profileEmailField.setFont(UIConstants.FONT_BODY);
         profileEmailField.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(UIConstants.PRIMARY, 2),
                 new EmptyBorder(4, 8, 4, 8)));
-        emailEditPanel.add(emailLblE, BorderLayout.WEST);
+
+        emailEditPanel.add(emailLabelEdit, BorderLayout.WEST);
         emailEditPanel.add(profileEmailField, BorderLayout.CENTER);
-        emailEditPanel.setVisible(false);
+        emailEditPanel.setVisible(false); // hidden until Edit is clicked
 
         card.add(emailDisplayPanel);
         card.add(emailEditPanel);
         card.add(Box.createVerticalStrut(14));
 
-        // Role (read-only)
-        buildInfoRow(card, "Role", role);
+        // ── Role row (always read-only, never editable) ───────────
+        buildInfoRow(card, "Role", currentRole);
         card.add(Box.createVerticalStrut(4));
 
-        editBtn.addActionListener(e -> enterEditMode());
+        // ── Wire up the button actions ────────────────────────────
+        editBtn.addActionListener(e   -> enterEditMode());
         cancelBtn.addActionListener(e -> exitEditMode());
-        saveBtn.addActionListener(e  -> handleSave());
+        saveBtn.addActionListener(e   -> handleSave());
 
         return card;
     }
 
+    /** Switches to edit mode: shows text fields, hides labels. */
     private void enterEditMode() {
+        // Fill in the current values so the user can edit from there
         profileNameField.setText(profileController.getCurrentName());
         profileEmailField.setText(profileController.getCurrentEmail());
+
+        // Hide the display labels, show the text fields
         nameDisplayPanel.setVisible(false);
         emailDisplayPanel.setVisible(false);
         nameEditPanel.setVisible(true);
         emailEditPanel.setVisible(true);
+
+        // Swap the buttons: hide Edit, show Save + Cancel
         editBtn.setVisible(false);
         saveBtn.setVisible(true);
         cancelBtn.setVisible(true);
+
+        // Put the cursor in the name field so the user can start typing
         profileNameField.requestFocusInWindow();
     }
 
+    /** Switches back to read mode: hides text fields, shows labels. */
     private void exitEditMode() {
+        // Hide the text fields, show the display labels
         nameEditPanel.setVisible(false);
         emailEditPanel.setVisible(false);
         nameDisplayPanel.setVisible(true);
         emailDisplayPanel.setVisible(true);
+
+        // Swap the buttons back: show Edit, hide Save + Cancel
         saveBtn.setVisible(false);
         cancelBtn.setVisible(false);
         editBtn.setVisible(true);
     }
 
+    /** Called when the Save button is clicked. Validates and saves the profile. */
     private void handleSave() {
         String newName  = profileNameField.getText().trim();
         String newEmail = profileEmailField.getText().trim();
 
+        // Check if anything actually changed
         if (profileController.hasNoChanges(newName, newEmail)) {
             JOptionPane.showMessageDialog(app, "No changes were made.",
                     "No Changes", JOptionPane.INFORMATION_MESSAGE);
@@ -507,11 +674,12 @@ public class CustomerDashboard extends JPanel {
             return;
         }
 
+        // Try to save — the controller handles validation
         try {
-            boolean success = profileController.saveProfile(newName, newEmail);
-            if (success) {
+            boolean saved = profileController.saveProfile(newName, newEmail);
+            if (saved) {
                 exitEditMode();
-                refreshUser();
+                refreshUser(); // update all displayed labels
                 JOptionPane.showMessageDialog(app, "Profile updated successfully!",
                         "Success", JOptionPane.INFORMATION_MESSAGE);
             } else {
@@ -519,318 +687,557 @@ public class CustomerDashboard extends JPanel {
                         "Error", JOptionPane.ERROR_MESSAGE);
             }
         } catch (IllegalArgumentException ex) {
+            // The controller threw a validation error — show it to the user
             JOptionPane.showMessageDialog(app, ex.getMessage(),
                     "Validation Error", JOptionPane.WARNING_MESSAGE);
         }
     }
 
+    /**
+     * Helper: adds one field row (label + value) to a card.
+     * Also assigns the value label to profileRoleDisplay if the field is "Role".
+     */
     private JLabel buildInfoRow(JPanel card, String fieldName, String value) {
         JPanel row = new JPanel(new BorderLayout(12, 0));
         row.setOpaque(false);
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
-        JLabel lbl = new JLabel(fieldName);
-        lbl.setFont(UIConstants.FONT_SMALL_BOLD);
-        lbl.setForeground(UIConstants.TEXT_MUTED);
-        lbl.setPreferredSize(new Dimension(90, 20));
-        JLabel val = new JLabel(value);
-        val.setFont(UIConstants.FONT_BODY);
-        val.setForeground(UIConstants.TEXT_PRIMARY);
-        row.add(lbl, BorderLayout.WEST);
-        row.add(val, BorderLayout.CENTER);
+
+        JLabel fieldLabel = new JLabel(fieldName);
+        fieldLabel.setFont(UIConstants.FONT_SMALL_BOLD);
+        fieldLabel.setForeground(UIConstants.TEXT_MUTED);
+        fieldLabel.setPreferredSize(new Dimension(90, 20));
+
+        JLabel valueLabel = new JLabel(value);
+        valueLabel.setFont(UIConstants.FONT_BODY);
+        valueLabel.setForeground(UIConstants.TEXT_PRIMARY);
+
+        row.add(fieldLabel, BorderLayout.WEST);
+        row.add(valueLabel, BorderLayout.CENTER);
         card.add(row);
-        if ("Role".equals(fieldName)) profileRoleDisplay = val;
-        return val;
+
+        // Keep a reference to the Role label so refreshUser() can update it
+        if ("Role".equals(fieldName)) {
+            profileRoleDisplay = valueLabel;
+        }
+
+        return valueLabel;
     }
 
-    // ── My Vehicle card ──────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════
+    // MY VEHICLE CARD
+    // ═══════════════════════════════════════════════════════════════
+
+    /** Builds the My Vehicle card with a list of vehicles and an Add button. */
     private JPanel buildVehicleCard() {
         JPanel card = createCard();
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(new EmptyBorder(22, 28, 22, 28));
 
+        // ── Title row: "My Vehicle" + "+ Add" button ──────────────
         JPanel titleRow = new JPanel(new BorderLayout());
         titleRow.setOpaque(false);
         titleRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
-        JLabel title = new JLabel("My Vehicle");
-        title.setFont(new Font("SansSerif", Font.BOLD, 16));
-        title.setForeground(UIConstants.TEXT_PRIMARY);
-        titleRow.add(title, BorderLayout.WEST);
 
-        JButton addBtn = createActionButton("+ Add", new Color(80, 110, 230), Color.WHITE);
-        // TODO: addBtn.addActionListener(e -> controller.showAddVehicleDialog());
-        titleRow.add(addBtn, BorderLayout.EAST);
+        JLabel titleLabel = new JLabel("My Vehicle");
+        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 16));
+        titleLabel.setForeground(UIConstants.TEXT_PRIMARY);
+        titleRow.add(titleLabel, BorderLayout.WEST);
+
+        JButton addButton = createActionButton("+ Add", new Color(80, 110, 230), Color.WHITE);
+        titleRow.add(addButton, BorderLayout.EAST);
 
         card.add(titleRow);
         card.add(Box.createVerticalStrut(12));
         card.add(makeSeparator());
         card.add(Box.createVerticalStrut(12));
 
+        // Panel that holds all the vehicle rows
         vehicleListPanel = new JPanel();
         vehicleListPanel.setLayout(new BoxLayout(vehicleListPanel, BoxLayout.Y_AXIS));
         vehicleListPanel.setOpaque(false);
         card.add(vehicleListPanel);
+
+        // Build the add form but keep it hidden until "+ Add" is clicked
+        vehicleAddPanel = buildVehicleAddForm();
+        vehicleAddPanel.setVisible(false);
+        card.add(vehicleAddPanel);
+
+        // Toggle the add form when the + Add button is clicked
+        addButton.addActionListener(e -> {
+            boolean currentlyVisible = vehicleAddPanel.isVisible();
+            vehicleAddPanel.setVisible(!currentlyVisible); // flip visibility
+            card.revalidate();
+            card.repaint();
+        });
+
         return card;
     }
 
+    /**
+     * Reads vehicles from vehicles.txt and rebuilds the vehicle list.
+     * Shows a maximum of 3 vehicles.
+     * Called on login and after add/remove operations.
+     */
     private void refreshVehicleList() {
         if (vehicleListPanel == null) return;
+
+        // Remove all existing rows first
         vehicleListPanel.removeAll();
 
         User user = app.getLoggedInUserObj();
+
         if (user == null) {
             vehicleListPanel.add(makeEmptyLabel("No vehicles registered."));
         } else {
             List<String[]> vehicles = vehicleService.getVehiclesByEmail(user.getEmail());
+
             if (vehicles.isEmpty()) {
                 vehicleListPanel.add(makeEmptyLabel("No vehicles registered."));
             } else {
-                int limit = Math.min(3, vehicles.size());
-                for (int i = 0; i < limit; i++) {
-                    String[] v = vehicles.get(i);
-                    vehicleListPanel.add(buildVehicleRow(v[0], v[1], v[2], v[3], v[4]));
-                    if (i < limit - 1) vehicleListPanel.add(Box.createVerticalStrut(10));
+                // Only show the first 3 vehicles (top 3)
+                int numberOfVehiclesToShow = Math.min(3, vehicles.size());
+
+                for (int i = 0; i < numberOfVehiclesToShow; i++) {
+                    String[] vehicle = vehicles.get(i);
+                    // vehicle array: [vehicleID, plate, brand, year, colour]
+                    String vehicleID = vehicle[0];
+                    String plate     = vehicle[1];
+                    String brand     = vehicle[2];
+                    String year      = vehicle[3];
+                    String colour    = vehicle[4];
+
+                    vehicleListPanel.add(buildVehicleRow(vehicleID, plate, brand, year, colour));
+
+                    // Add a gap between rows (except after the last one)
+                    if (i < numberOfVehiclesToShow - 1) {
+                        vehicleListPanel.add(Box.createVerticalStrut(10));
+                    }
                 }
             }
         }
+
         vehicleListPanel.revalidate();
         vehicleListPanel.repaint();
     }
 
-    // ── Image choosers ───────────────────────────────────────────
+    /**
+     * Builds the inline "Add Vehicle" form that appears when + Add is clicked.
+     * Has fields for Car Plate, Brand/Model, Year, Colour.
+     * Save writes to vehicles.txt via VehicleService.
+     */
+    private JPanel buildVehicleAddForm() {
+        JPanel form = new JPanel(new BorderLayout(6, 0));
+        form.setOpaque(false);
+        form.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1),
+                new EmptyBorder(10, 14, 10, 14)));
+        form.setMaximumSize(new Dimension(Integer.MAX_VALUE, 66));
+
+        // ── Four empty input fields ────────────────────────────────
+        JPanel fieldsPanel = new JPanel(new GridLayout(1, 4, 6, 0));
+        fieldsPanel.setOpaque(false);
+
+        JTextField plateField  = makeCompactField("");
+        JTextField brandField  = makeCompactField("");
+        JTextField yearField   = makeCompactField("");
+        JTextField colourField = makeCompactField("");
+
+        fieldsPanel.add(makeLabelledField("Car Plate",    plateField));
+        fieldsPanel.add(makeLabelledField("Brand / Model", brandField));
+        fieldsPanel.add(makeLabelledField("Year",          yearField));
+        fieldsPanel.add(makeLabelledField("Colour",        colourField));
+        form.add(fieldsPanel, BorderLayout.CENTER);
+
+        // ── Save and Cancel buttons ────────────────────────────────
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+        buttonPanel.setOpaque(false);
+
+        JButton saveBtn   = createActionButton("Save",   new Color(80, 190, 110), Color.WHITE);
+        JButton cancelBtn = createActionButton("Cancel", new Color(150, 150, 165), Color.WHITE);
+        cancelBtn.setPreferredSize(new Dimension(90, 32));
+        cancelBtn.setMinimumSize(new Dimension(90, 32));
+        cancelBtn.setMaximumSize(new Dimension(90, 32));
+
+        buttonPanel.add(saveBtn);
+        buttonPanel.add(cancelBtn);
+        form.add(buttonPanel, BorderLayout.EAST);
+
+        // Cancel: clear all fields and hide the form
+        cancelBtn.addActionListener(e -> {
+            plateField.setText("");
+            brandField.setText("");
+            yearField.setText("");
+            colourField.setText("");
+            vehicleAddPanel.setVisible(false);
+        });
+
+        // Save: validate inputs then call VehicleService to write to vehicles.txt
+        saveBtn.addActionListener(e -> {
+            User user = app.getLoggedInUserObj();
+            if (user == null) return;
+
+            // Get the text from each field
+            String plate  = plateField.getText().trim();
+            String brand  = brandField.getText().trim();
+            String year   = yearField.getText().trim();
+            String colour = colourField.getText().trim();
+
+            // Validate all fields using shared validation method
+            String validationError = validateVehicleFields(plate, brand, year, colour);
+            if (validationError != null) {
+                JOptionPane.showMessageDialog(app, validationError,
+                        "Validation Error", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            // All valid — save to vehicles.txt via VehicleService
+            boolean saved = vehicleService.addVehicle(user.getEmail(), plate, brand, year, colour);
+
+            if (saved) {
+                // Clear fields and hide the form
+                plateField.setText("");
+                brandField.setText("");
+                yearField.setText("");
+                colourField.setText("");
+                vehicleAddPanel.setVisible(false);
+                refreshVehicleList(); // reload the list to show the new vehicle
+            } else {
+                JOptionPane.showMessageDialog(app, "Failed to add vehicle.", "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        return form;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // VEHICLE VALIDATION
+    // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Opens a file chooser, lets the user pick an image, saves it to
-     * src/ProfilePic/{email}.jpg, then immediately updates the
-     * profile picture circle and the top-right header avatar.
+     * Validates all four vehicle fields.
+     * Returns an error message if any field is invalid, or null if all valid.
+     *
+     * Rules:
+     *  Car Plate   — must have BOTH letters and numbers, no special characters
+     *                e.g. "WXY1234" ✅   "ABC" ❌   "1234" ❌   "WXY-123" ❌
+     *  Brand/Model — letters and/or numbers only, no special characters
+     *                e.g. "Toyota Vios" ✅   "BMW i5" ✅   "BMW-i5" ❌
+     *  Year        — exactly 4 digits, numbers only
+     *                e.g. "2025" ✅   "25" ❌   "202A" ❌
+     *  Colour      — letters only (spaces allowed), no numbers or special characters
+     *                e.g. "White" ✅   "Dark Blue" ✅   "Blue2" ❌   "Blue-Red" ❌
+     */
+    private String validateVehicleFields(String plate, String brand, String year, String colour) {
+        // ── Car Plate ─────────────────────────────────────────────
+        if (plate.isEmpty()) {
+            return "Car Plate cannot be empty.";
+        }
+        if (!plate.matches("[a-zA-Z0-9 ]+")) {
+            return "Car Plate can only contain letters and numbers (no special characters).";
+        }
+        boolean plateHasLetter = plate.matches(".*[a-zA-Z].*");
+        boolean plateHasNumber = plate.matches(".*[0-9].*");
+        if (!plateHasLetter || !plateHasNumber) {
+            return "Car Plate must contain both letters and numbers (e.g. WXY1234).";
+        }
+
+        // ── Brand / Model ─────────────────────────────────────────
+        if (brand.isEmpty()) {
+            return "Brand / Model cannot be empty.";
+        }
+        if (!brand.matches("[a-zA-Z0-9 ]+")) {
+            return "Brand / Model can only contain letters and numbers (no special characters).";
+        }
+
+        // ── Year ──────────────────────────────────────────────────
+        if (year.isEmpty()) {
+            return "Year cannot be empty.";
+        }
+        if (!year.matches("\\d{4}")) {
+            return "Year must be exactly 4 digits (e.g. 2025).";
+        }
+
+        // ── Colour ────────────────────────────────────────────────
+        if (colour.isEmpty()) {
+            return "Colour cannot be empty.";
+        }
+        if (!colour.matches("[a-zA-Z ]+")) {
+            return "Colour can only contain letters (e.g. White, Dark Blue).";
+        }
+
+        return null; // null = all fields are valid
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // IMAGE CHOOSERS
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Opens the native OS file chooser so the user can pick a profile picture.
+     * Saves the image to src/ProfilePic/{email}.jpg and repaints immediately.
      */
     private void chooseProfileImage() {
         User user = app.getLoggedInUserObj();
         if (user == null) return;
 
-        FileDialog fd = new FileDialog((Frame) SwingUtilities.getWindowAncestor(this),
-                "Choose Profile Picture", FileDialog.LOAD);
-        fd.setFile("*.jpg;*.jpeg;*.png;*.gif;*.bmp");
-        fd.setVisible(true);
+        // Open the native Windows file chooser
+        FileDialog fileChooser = new FileDialog(
+                (Frame) SwingUtilities.getWindowAncestor(this),
+                "Choose Profile Picture",
+                FileDialog.LOAD);
+        fileChooser.setFile("*.jpg;*.jpeg;*.png;*.gif;*.bmp"); // filter by image types
+        fileChooser.setVisible(true);
 
-        if (fd.getFile() == null) return;
+        // If the user cancelled, do nothing
+        if (fileChooser.getFile() == null) return;
 
         try {
-            java.io.File selected = new java.io.File(fd.getDirectory(), fd.getFile());
-            BufferedImage img = ImageIO.read(selected);
-            if (img == null) {
-                JOptionPane.showMessageDialog(app, "Could not read the selected image.",
-                        "Error", JOptionPane.ERROR_MESSAGE);
+            java.io.File selectedFile = new java.io.File(fileChooser.getDirectory(), fileChooser.getFile());
+            BufferedImage image = ImageIO.read(selectedFile);
+
+            if (image == null) {
+                JOptionPane.showMessageDialog(app, "Could not read the selected image.", "Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
-            // Delegate saving to ProfilePicStorage (model layer)
-            boolean saved = profilePictureService.saveImage(user.getEmail(), img);
+            // Save the image to the ProfilePic folder via ProfilePicStorage
+            boolean saved = profilePictureService.saveImage(user.getEmail(), image);
             if (!saved) {
-                JOptionPane.showMessageDialog(app, "Failed to save profile picture.",
-                        "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(app, "Failed to save profile picture.", "Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
-            profileImage = img;
+            // Update in memory and repaint immediately
+            profileImage = image;
             if (profilePicLabel != null) profilePicLabel.repaint();
             if (avatarLabel     != null) avatarLabel.repaint();
 
         } catch (java.io.IOException ex) {
             ex.printStackTrace();
-            JOptionPane.showMessageDialog(app, "Failed to read the selected image.",
-                    "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(app, "Failed to read the selected image.", "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
     /**
-     * Opens a file chooser, lets the user pick an image, saves it to
-     * src/BackgroundImg/{email}.jpg, then immediately updates the banner.
+     * Opens the native OS file chooser so the user can pick a background image.
+     * Saves the image to src/BackgroundImg/{email}.jpg and repaints immediately.
      */
     private void chooseBannerImage() {
         User user = app.getLoggedInUserObj();
         if (user == null) return;
 
-        FileDialog fd = new FileDialog((Frame) SwingUtilities.getWindowAncestor(this),
-                "Choose Background Image", FileDialog.LOAD);
-        fd.setFile("*.jpg;*.jpeg;*.png;*.gif;*.bmp");
-        fd.setVisible(true);
+        FileDialog fileChooser = new FileDialog(
+                (Frame) SwingUtilities.getWindowAncestor(this),
+                "Choose Background Image",
+                FileDialog.LOAD);
+        fileChooser.setFile("*.jpg;*.jpeg;*.png;*.gif;*.bmp");
+        fileChooser.setVisible(true);
 
-        if (fd.getFile() == null) return;
+        if (fileChooser.getFile() == null) return;
 
         try {
-            java.io.File selected = new java.io.File(fd.getDirectory(), fd.getFile());
-            BufferedImage img = ImageIO.read(selected);
-            if (img == null) {
-                JOptionPane.showMessageDialog(app, "Could not read the selected image.",
-                        "Error", JOptionPane.ERROR_MESSAGE);
+            java.io.File selectedFile = new java.io.File(fileChooser.getDirectory(), fileChooser.getFile());
+            BufferedImage image = ImageIO.read(selectedFile);
+
+            if (image == null) {
+                JOptionPane.showMessageDialog(app, "Could not read the selected image.", "Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
-            // Delegate saving to BackgroundImageStorage (model layer)
-            boolean saved = backgroundImageService.saveImage(user.getEmail(), img);
+            // Save via BackgroundImageStorage
+            boolean saved = backgroundImageService.saveImage(user.getEmail(), image);
             if (!saved) {
-                JOptionPane.showMessageDialog(app, "Failed to save background image.",
-                        "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(app, "Failed to save background image.", "Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
-            bannerImage = img;
+            // Update in memory and repaint the banner immediately
+            bannerImage = image;
             if (profileBanner != null) profileBanner.repaint();
 
         } catch (java.io.IOException ex) {
             ex.printStackTrace();
-            JOptionPane.showMessageDialog(app, "Failed to read the selected image.",
-                    "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(app, "Failed to read the selected image.", "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // VEHICLE ROW
+    // ═══════════════════════════════════════════════════════════════
+
     /**
-     * Vehicle row using CardLayout to swap between display and edit views.
-     * The outer box size never changes — CardLayout keeps both views the same height.
+     * Builds one vehicle row.
+     * Uses CardLayout to switch between display mode and edit mode
+     * without changing the size of the row box.
+     *
+     * vehicleID — stored in vehicles.txt, used for delete (not shown on screen)
+     * plate     — car plate number
+     * brand     — car brand/model
+     * year      — year of manufacture
+     * colour    — colour of the car
      */
-    private JPanel buildVehicleRow(String plate, String brand,
-                                   String year, String colour, String carType) {
-        // Fixed-height outer box — same border as before
-        JPanel outer = new JPanel(new BorderLayout());
-        outer.setOpaque(false);
-        outer.setMaximumSize(new Dimension(Integer.MAX_VALUE, 66));
-        outer.setBorder(BorderFactory.createCompoundBorder(
+    private JPanel buildVehicleRow(String vehicleID, String plate,
+                                   String brand, String year, String colour) {
+        // Outer box — fixed height, always stays the same size
+        JPanel outerBox = new JPanel(new BorderLayout());
+        outerBox.setOpaque(false);
+        outerBox.setMaximumSize(new Dimension(Integer.MAX_VALUE, 66));
+        outerBox.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1),
-                new EmptyBorder(10, 14, 10, 14)
-        ));
+                new EmptyBorder(10, 14, 10, 14)));
 
-        // CardLayout swaps between "display" and "edit" inside the fixed box
-        CardLayout rowCards = new CardLayout();
-        JPanel rowContainer = new JPanel(rowCards);
-        rowContainer.setOpaque(false);
+        // CardLayout: switches between "display" card and "edit" card
+        CardLayout switcher = new CardLayout();
+        JPanel switcherPanel = new JPanel(switcher);
+        switcherPanel.setOpaque(false);
 
-        // ── DISPLAY card ─────────────────────────────────────────
-        JPanel displayCard = new JPanel(new BorderLayout(12, 0));
+        // ── DISPLAY MODE card ─────────────────────────────────────
+        JPanel displayCard = new JPanel(new BorderLayout(8, 0));
         displayCard.setOpaque(false);
 
-        JLabel carIcon = new JLabel(new StringBuilder().appendCodePoint(0x1F697).toString());
-        carIcon.setFont(new Font("SansSerif", Font.PLAIN, 26));
-        carIcon.setVerticalAlignment(SwingConstants.CENTER);
-        displayCard.add(carIcon, BorderLayout.WEST);
+        // Car emoji icon on the left
+        JLabel carEmoji = new JLabel(new StringBuilder().appendCodePoint(0x1F697).toString());
+        carEmoji.setFont(new Font("SansSerif", Font.PLAIN, 26));
+        carEmoji.setVerticalAlignment(SwingConstants.CENTER);
+        displayCard.add(carEmoji, BorderLayout.WEST);
 
-        JPanel info = new JPanel();
-        info.setLayout(new BoxLayout(info, BoxLayout.Y_AXIS));
-        info.setOpaque(false);
-        String typeText = (carType != null && !carType.isEmpty())
-                ? brand + "   ·   " + carType : brand;
-        JLabel topLine = new JLabel(typeText);
-        topLine.setFont(new Font("SansSerif", Font.BOLD, 13));
-        topLine.setForeground(UIConstants.TEXT_PRIMARY);
-        JLabel botLine = new JLabel(year + "   ·   " + colour);
-        botLine.setFont(UIConstants.FONT_SMALL);
-        botLine.setForeground(UIConstants.TEXT_MUTED);
-        info.add(Box.createVerticalGlue());
-        info.add(topLine);
-        info.add(Box.createVerticalStrut(3));
-        info.add(botLine);
-        info.add(Box.createVerticalGlue());
-        displayCard.add(info, BorderLayout.CENTER);
+        // Info: Brand on top, Plate · Year · Colour on bottom
+        JPanel infoPanel = new JPanel();
+        infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
+        infoPanel.setOpaque(false);
 
-        JPanel readBtns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
-        readBtns.setOpaque(false);
-        JButton editVehicleBtn = createActionButton("Edit",   new Color(80, 110, 230), Color.WHITE);
-        JButton removeBtn      = createActionButton("Remove", new Color(220, 80, 80),  Color.WHITE);
-        removeBtn.setPreferredSize(new Dimension(90, 32));
-        removeBtn.setMinimumSize(new Dimension(90, 32));
-        removeBtn.setMaximumSize(new Dimension(90, 32));
-        readBtns.add(editVehicleBtn);
-        readBtns.add(removeBtn);
-        displayCard.add(readBtns, BorderLayout.EAST);
+        JLabel brandLine = new JLabel(brand);
+        brandLine.setFont(new Font("SansSerif", Font.BOLD, 13));
+        brandLine.setForeground(UIConstants.TEXT_PRIMARY);
 
-        // ── EDIT card ────────────────────────────────────────────
+        JLabel detailLine = new JLabel(plate + "   ·   " + year + "   ·   " + colour);
+        detailLine.setFont(UIConstants.FONT_SMALL);
+        detailLine.setForeground(UIConstants.TEXT_MUTED);
+
+        infoPanel.add(Box.createVerticalGlue());
+        infoPanel.add(brandLine);
+        infoPanel.add(Box.createVerticalStrut(3));
+        infoPanel.add(detailLine);
+        infoPanel.add(Box.createVerticalGlue());
+        displayCard.add(infoPanel, BorderLayout.CENTER);
+
+        // Edit and Remove buttons on the right
+        JPanel displayButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        displayButtons.setOpaque(false);
+
+        JButton editButton   = createActionButton("Edit",   new Color(80, 110, 230), Color.WHITE);
+        JButton removeButton = createActionButton("Remove", new Color(220, 80, 80),  Color.WHITE);
+        removeButton.setPreferredSize(new Dimension(90, 32));
+        removeButton.setMinimumSize(new Dimension(90, 32));
+        removeButton.setMaximumSize(new Dimension(90, 32));
+
+        displayButtons.add(editButton);
+        displayButtons.add(removeButton);
+        displayCard.add(displayButtons, BorderLayout.EAST);
+
+        // ── EDIT MODE card ────────────────────────────────────────
         JPanel editCard = new JPanel(new BorderLayout(6, 0));
         editCard.setOpaque(false);
 
-        // Four compact fields side by side using GridLayout
-        JPanel fields = new JPanel(new GridLayout(1, 4, 6, 0));
-        fields.setOpaque(false);
+        // Four compact fields in a row
+        JPanel editFields = new JPanel(new GridLayout(1, 4, 6, 0));
+        editFields.setOpaque(false);
 
-        JTextField brandField  = makeCompactField(brand);
-        JTextField yearField   = makeCompactField(year);
-        JTextField colourField = makeCompactField(colour);
-        JTextField typeField   = makeCompactField(carType);
+        JTextField editPlateField  = makeCompactField(plate);
+        JTextField editBrandField  = makeCompactField(brand);
+        JTextField editYearField   = makeCompactField(year);
+        JTextField editColourField = makeCompactField(colour);
 
-        // Each field has a tiny label above it
-        fields.add(makeLabelledField("Brand",   brandField));
-        fields.add(makeLabelledField("Year",    yearField));
-        fields.add(makeLabelledField("Colour",  colourField));
-        fields.add(makeLabelledField("Type",    typeField));
-        editCard.add(fields, BorderLayout.CENTER);
+        editFields.add(makeLabelledField("Car Plate",     editPlateField));
+        editFields.add(makeLabelledField("Brand / Model", editBrandField));
+        editFields.add(makeLabelledField("Year",          editYearField));
+        editFields.add(makeLabelledField("Colour",        editColourField));
+        editCard.add(editFields, BorderLayout.CENTER);
 
-        // Save / Cancel buttons on the right
-        JPanel editBtns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
-        editBtns.setOpaque(false);
-        JButton saveVBtn   = createActionButton("Save",   new Color(80, 190, 110), Color.WHITE);
-        JButton cancelVBtn = createActionButton("Cancel", new Color(150, 150, 165), Color.WHITE);
-        cancelVBtn.setPreferredSize(new Dimension(90, 32));
-        cancelVBtn.setMinimumSize(new Dimension(90, 32));
-        cancelVBtn.setMaximumSize(new Dimension(90, 32));
-        editBtns.add(saveVBtn);
-        editBtns.add(cancelVBtn);
-        editCard.add(editBtns, BorderLayout.EAST);
+        // Save and Cancel buttons on the right of the edit card
+        JPanel editButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+        editButtons.setOpaque(false);
 
-        // Add both cards to the container
-        rowContainer.add(displayCard, "display");
-        rowContainer.add(editCard,    "edit");
-        rowCards.show(rowContainer, "display");
+        JButton saveVehicleBtn   = createActionButton("Save",   new Color(80, 190, 110), Color.WHITE);
+        JButton cancelVehicleBtn = createActionButton("Cancel", new Color(150, 150, 165), Color.WHITE);
+        cancelVehicleBtn.setPreferredSize(new Dimension(90, 32));
+        cancelVehicleBtn.setMinimumSize(new Dimension(90, 32));
+        cancelVehicleBtn.setMaximumSize(new Dimension(90, 32));
 
-        outer.add(rowContainer, BorderLayout.CENTER);
+        editButtons.add(saveVehicleBtn);
+        editButtons.add(cancelVehicleBtn);
+        editCard.add(editButtons, BorderLayout.EAST);
+
+        // Add both cards to the switcher
+        switcherPanel.add(displayCard, "display");
+        switcherPanel.add(editCard,    "edit");
+        switcher.show(switcherPanel, "display"); // start in display mode
+
+        outerBox.add(switcherPanel, BorderLayout.CENTER);
 
         // ── Button actions ────────────────────────────────────────
 
-        // Edit — flip to edit card
-        editVehicleBtn.addActionListener(e -> {
-            brandField.setText(brand);
-            yearField.setText(year);
-            colourField.setText(colour);
-            typeField.setText(carType);
-            rowCards.show(rowContainer, "edit");
+        // Edit button: switch to edit mode and fill in current values
+        editButton.addActionListener(e -> {
+            editPlateField.setText(plate);
+            editBrandField.setText(brand);
+            editYearField.setText(year);
+            editColourField.setText(colour);
+            switcher.show(switcherPanel, "edit");
         });
 
-        // Cancel — flip back to display card
-        cancelVBtn.addActionListener(e -> rowCards.show(rowContainer, "display"));
+        // Cancel button: go back to display mode without saving
+        cancelVehicleBtn.addActionListener(e -> {
+            switcher.show(switcherPanel, "display");
+        });
 
-        // Save — no-changes check, validate, update file
-        saveVBtn.addActionListener(e -> {
-            String newBrand  = brandField.getText().trim();
-            String newYear   = yearField.getText().trim();
-            String newColour = colourField.getText().trim();
-            String newType   = typeField.getText().trim();
+        // Save button: validate, update vehicles.txt IN PLACE, refresh the list
+        saveVehicleBtn.addActionListener(e -> {
+            String newPlate  = editPlateField.getText().trim();
+            String newBrand  = editBrandField.getText().trim();
+            String newYear   = editYearField.getText().trim();
+            String newColour = editColourField.getText().trim();
 
-            if (newBrand.equals(brand) && newYear.equals(year)
-                    && newColour.equals(colour) && newType.equals(carType)) {
+            // Check if anything changed
+            boolean nothingChanged = newPlate.equals(plate) && newBrand.equals(brand)
+                    && newYear.equals(year) && newColour.equals(colour);
+            if (nothingChanged) {
                 JOptionPane.showMessageDialog(app, "No changes were made.",
                         "No Changes", JOptionPane.INFORMATION_MESSAGE);
-                rowCards.show(rowContainer, "display");
+                switcher.show(switcherPanel, "display");
                 return;
             }
-            if (newBrand.isEmpty() || newYear.isEmpty()
-                    || newColour.isEmpty() || newType.isEmpty()) {
-                JOptionPane.showMessageDialog(app, "All fields must be filled in.",
-                        "Error", JOptionPane.ERROR_MESSAGE);
+
+            // Validate all fields before saving
+            String validationError = validateVehicleFields(newPlate, newBrand, newYear, newColour);
+            if (validationError != null) {
+                JOptionPane.showMessageDialog(app, validationError,
+                        "Validation Error", JOptionPane.WARNING_MESSAGE);
                 return;
             }
+
+            // Update the record in place — preserves the original order in vehicles.txt
             User user = app.getLoggedInUserObj();
             if (user != null) {
-                vehicleService.deleteVehicle(user.getEmail(), plate);
-                vehicleService.addVehicle(user.getEmail(), plate,
-                        newBrand, newYear, newColour, newType);
-                refreshVehicleList();
+                boolean updated = vehicleService.updateVehicle(
+                        user.getEmail(), plate, newPlate, newBrand, newYear, newColour);
+                if (updated) {
+                    refreshVehicleList();
+                } else {
+                    JOptionPane.showMessageDialog(app, "Failed to update vehicle.",
+                            "Error", JOptionPane.ERROR_MESSAGE);
+                }
             }
         });
 
-        // Remove — confirm dialog, same JOptionPane style as all other popups
-        removeBtn.addActionListener(e -> {
+        // Remove button: ask for confirmation, then delete from vehicles.txt
+        removeButton.addActionListener(e -> {
             int choice = JOptionPane.showConfirmDialog(app,
                     "Are you sure you want to remove this vehicle?",
                     "Confirm Remove",
                     JOptionPane.YES_NO_OPTION,
                     JOptionPane.QUESTION_MESSAGE);
+
             if (choice == JOptionPane.YES_OPTION) {
                 User user = app.getLoggedInUserObj();
                 if (user != null && vehicleService.deleteVehicle(user.getEmail(), plate)) {
@@ -840,142 +1247,146 @@ public class CustomerDashboard extends JPanel {
                             "Error", JOptionPane.ERROR_MESSAGE);
                 }
             }
+            // If the user clicked No, just close the dialog — nothing happens
         });
 
-        return outer;
+        return outerBox;
     }
 
-    /** Compact text field for vehicle edit card. */
-    private JTextField makeCompactField(String value) {
-        JTextField f = new JTextField(value);
-        f.setFont(new Font("SansSerif", Font.PLAIN, 11));
-        f.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(UIConstants.PRIMARY, 1),
-                new EmptyBorder(2, 4, 2, 4)));
-        return f;
-    }
+    // ═══════════════════════════════════════════════════════════════
+    // UPCOMING APPOINTMENTS CARD
+    // ═══════════════════════════════════════════════════════════════
 
-    /** Tiny label above a compact field — fits inside the fixed row height. */
-    private JPanel makeLabelledField(String label, JTextField field) {
-        JPanel p = new JPanel(new BorderLayout(0, 2));
-        p.setOpaque(false);
-        JLabel lbl = new JLabel(label);
-        lbl.setFont(new Font("SansSerif", Font.BOLD, 10));
-        lbl.setForeground(UIConstants.TEXT_MUTED);
-        p.add(lbl,   BorderLayout.NORTH);
-        p.add(field, BorderLayout.CENTER);
-        return p;
-    }
-
-    private JLabel makeEmptyLabel(String text) {
-        JLabel lbl = new JLabel(text);
-        lbl.setFont(UIConstants.FONT_BODY);
-        lbl.setForeground(UIConstants.TEXT_SECONDARY);
-        lbl.setAlignmentX(Component.CENTER_ALIGNMENT);
-        lbl.setHorizontalAlignment(SwingConstants.CENTER);
-        return lbl;
-    }
-
-    // ── Upcoming appointments card ───────────────────────────────
+    /** Builds the Upcoming Appointments card (top-right). */
     private JPanel buildUpcomingCard() {
         JPanel card = createCard();
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(new EmptyBorder(20, 22, 20, 22));
+
+        // Title row: "Upcoming Appointments" on the left, "Top 3" on the right
         JPanel titleRow = new JPanel(new BorderLayout());
         titleRow.setOpaque(false);
         titleRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
+
         JLabel title = new JLabel("Upcoming Appointments");
         title.setFont(new Font("SansSerif", Font.BOLD, 15));
         title.setForeground(UIConstants.TEXT_PRIMARY);
         titleRow.add(title, BorderLayout.WEST);
-        JLabel hint = new JLabel("Top 3");
-        hint.setFont(UIConstants.FONT_SMALL);
-        hint.setForeground(UIConstants.TEXT_MUTED);
-        titleRow.add(hint, BorderLayout.EAST);
+
+        JLabel topThreeHint = new JLabel("Top 3");
+        topThreeHint.setFont(UIConstants.FONT_SMALL);
+        topThreeHint.setForeground(UIConstants.TEXT_MUTED);
+        titleRow.add(topThreeHint, BorderLayout.EAST);
+
         card.add(titleRow);
         card.add(Box.createVerticalStrut(12));
         card.add(makeSeparator());
         card.add(Box.createVerticalStrut(12));
-        JLabel empty = new JLabel("No upcoming appointments.");
-        empty.setFont(UIConstants.FONT_BODY);
-        empty.setForeground(UIConstants.TEXT_SECONDARY);
-        empty.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(empty);
+
+        // Placeholder message — replace with real data later
+        JLabel emptyMessage = new JLabel("No upcoming appointments.");
+        emptyMessage.setFont(UIConstants.FONT_BODY);
+        emptyMessage.setForeground(UIConstants.TEXT_SECONDARY);
+        emptyMessage.setAlignmentX(Component.CENTER_ALIGNMENT);
+        card.add(emptyMessage);
         card.add(Box.createVerticalStrut(4));
+
         return card;
     }
 
-    // ── Payment summary card ─────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════
+    // PAYMENT HISTORY CARD
+    // ═══════════════════════════════════════════════════════════════
+
+    /** Builds the Payment History card (bottom-right). */
     private JPanel buildPaymentSummaryCard() {
         JPanel card = createCard();
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(new EmptyBorder(20, 22, 20, 22));
+
         JPanel titleRow = new JPanel(new BorderLayout());
         titleRow.setOpaque(false);
         titleRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
+
         JLabel title = new JLabel("Payment History");
         title.setFont(new Font("SansSerif", Font.BOLD, 15));
         title.setForeground(UIConstants.TEXT_PRIMARY);
         titleRow.add(title, BorderLayout.WEST);
-        JLabel hint = new JLabel("Top 3");
-        hint.setFont(UIConstants.FONT_SMALL);
-        hint.setForeground(UIConstants.TEXT_MUTED);
-        titleRow.add(hint, BorderLayout.EAST);
+
+        JLabel topThreeHint = new JLabel("Top 3");
+        topThreeHint.setFont(UIConstants.FONT_SMALL);
+        topThreeHint.setForeground(UIConstants.TEXT_MUTED);
+        titleRow.add(topThreeHint, BorderLayout.EAST);
+
         card.add(titleRow);
         card.add(Box.createVerticalStrut(12));
         card.add(makeSeparator());
         card.add(Box.createVerticalStrut(12));
-        JLabel empty = new JLabel("No payment records found.");
-        empty.setFont(UIConstants.FONT_BODY);
-        empty.setForeground(UIConstants.TEXT_SECONDARY);
-        empty.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(empty);
+
+        JLabel emptyMessage = new JLabel("No payment records found.");
+        emptyMessage.setFont(UIConstants.FONT_BODY);
+        emptyMessage.setForeground(UIConstants.TEXT_SECONDARY);
+        emptyMessage.setAlignmentX(Component.CENTER_ALIGNMENT);
+        card.add(emptyMessage);
         card.add(Box.createVerticalStrut(4));
+
         return card;
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     // HEADER
-    // ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
+
+    /** Builds the top header bar with the page title and user avatar. */
     private JPanel buildHeader() {
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(UIConstants.BG_HEADER);
         header.setPreferredSize(new Dimension(0, UIConstants.HEADER_HEIGHT));
         header.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, UIConstants.BORDER_HEADER),
-                new EmptyBorder(0, 30, 0, 25)
-        ));
+                new EmptyBorder(0, 30, 0, 25)));
+
+        // Page title on the left (e.g. "Profile", "Appointment Booking")
         headerTitle = new JLabel("Profile");
         headerTitle.setFont(new Font("SansSerif", Font.BOLD, 20));
         headerTitle.setForeground(UIConstants.TEXT_PRIMARY);
         header.add(headerTitle, BorderLayout.WEST);
+
+        // User avatar area on the right
         header.add(buildHeaderProfileArea(), BorderLayout.EAST);
+
         return header;
     }
 
+    /**
+     * Builds the avatar circle + name + dropdown arrow on the right side of the header.
+     * Hovering shows a popup menu with "View Profile" and "Logout".
+     */
     private JPanel buildHeaderProfileArea() {
         JPanel profileArea = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 12));
         profileArea.setBackground(UIConstants.BG_HEADER);
 
+        // The small avatar circle in the header
         avatarLabel = new JLabel(AVATAR_ICONS[selectedAvatarIndex]) {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
                 if (profileImage != null) {
-                    // Draw the user's profile photo clipped to a circle
+                    // Show the user's profile photo clipped to a circle
                     g2.setClip(new Ellipse2D.Float(0, 0, 38, 38));
                     g2.drawImage(profileImage, 0, 0, 38, 38, null);
                     g2.setClip(null);
                 } else {
+                    // Show the coloured circle with icon
                     g2.setColor(AVATAR_COLORS[selectedAvatarIndex]);
                     g2.fillOval(0, 0, 38, 38);
                     g2.dispose();
-                    super.paintComponent(g); // draws the icon text
+                    super.paintComponent(g); // draws the icon text on top
                     return;
                 }
                 g2.dispose();
-                // Don't call super — no icon text needed when photo is shown
             }
         };
         avatarLabel.setFont(new Font("SansSerif", Font.PLAIN, 18));
@@ -984,95 +1395,111 @@ public class CustomerDashboard extends JPanel {
         avatarLabel.setVerticalAlignment(SwingConstants.CENTER);
         avatarLabel.setPreferredSize(new Dimension(38, 38));
 
+        // Customer name label
         profileLabel = new JLabel("—");
         profileLabel.setFont(UIConstants.FONT_BODY_BOLD);
         profileLabel.setForeground(UIConstants.TEXT_PRIMARY);
         profileLabel.setBorder(new EmptyBorder(0, 10, 0, 6));
 
-        JLabel arrow = new JLabel("\u25BE");
-        arrow.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        arrow.setForeground(UIConstants.TEXT_MUTED);
+        // Small dropdown arrow
+        JLabel dropdownArrow = new JLabel("\u25BE");
+        dropdownArrow.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        dropdownArrow.setForeground(UIConstants.TEXT_MUTED);
 
-        JPanel profileBtn = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
-        profileBtn.setBackground(UIConstants.BG_HEADER);
-        profileBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        profileBtn.add(avatarLabel);
-        profileBtn.add(profileLabel);
-        profileBtn.add(arrow);
+        // Clickable area containing avatar + name + arrow
+        JPanel profileButton = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        profileButton.setBackground(UIConstants.BG_HEADER);
+        profileButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        profileButton.add(avatarLabel);
+        profileButton.add(profileLabel);
+        profileButton.add(dropdownArrow);
 
-        JPopupMenu menu = new JPopupMenu();
-        menu.setBorder(BorderFactory.createCompoundBorder(
+        // Popup menu shown when hovering
+        JPopupMenu dropdownMenu = new JPopupMenu();
+        dropdownMenu.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(220, 220, 225), 1),
-                new EmptyBorder(6, 0, 6, 0)
-        ));
-        menu.setBackground(Color.WHITE);
+                new EmptyBorder(6, 0, 6, 0)));
+        dropdownMenu.setBackground(Color.WHITE);
 
-        JMenuItem viewProfile = createMenuItem("View Profile");
-        viewProfile.addActionListener(e -> {
+        JMenuItem viewProfileItem = createMenuItem("View Profile");
+        viewProfileItem.addActionListener(e -> {
+            // Navigate to the Profile page
             activeNav = "Profile";
             headerTitle.setText("Profile");
             contentLayout.show(contentPanel, "Profile");
         });
-        JMenuItem logout = createMenuItem("Logout");
-        logout.setForeground(UIConstants.TEXT_DANGER);
-        logout.addActionListener(e -> {
+
+        JMenuItem logoutItem = createMenuItem("Logout");
+        logoutItem.setForeground(UIConstants.TEXT_DANGER);
+        logoutItem.addActionListener(e -> {
+            // Clear the session and go back to the login screen
             app.setLoggedInUser("");
             app.setLoggedInUserObj(null);
             app.showPage(PageName.ONBOARDING);
         });
-        menu.add(viewProfile);
-        menu.add(logout);
 
-        profileBtn.addMouseListener(new MouseAdapter() {
+        dropdownMenu.add(viewProfileItem);
+        dropdownMenu.add(logoutItem);
+
+        // Show the dropdown when the mouse enters the profile button area
+        profileButton.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseEntered(MouseEvent e) {
-                menu.show(profileBtn,
-                        profileBtn.getWidth() - menu.getPreferredSize().width,
-                        profileBtn.getHeight());
-            }
-        });
-        menu.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseExited(MouseEvent e) {
-                Point p = e.getPoint();
-                if (!menu.getBounds().contains(p)) menu.setVisible(false);
+                dropdownMenu.show(profileButton,
+                        profileButton.getWidth() - dropdownMenu.getPreferredSize().width,
+                        profileButton.getHeight());
             }
         });
 
-        profileArea.add(profileBtn);
+        // Hide the dropdown when the mouse leaves the menu
+        dropdownMenu.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseExited(MouseEvent e) {
+                Point mousePos = e.getPoint();
+                if (!dropdownMenu.getBounds().contains(mousePos)) {
+                    dropdownMenu.setVisible(false);
+                }
+            }
+        });
+
+        profileArea.add(profileButton);
         return profileArea;
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     // SIDEBAR
-    // ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
+
+    /** Builds the left sidebar with the logo and navigation buttons. */
     private JPanel buildSidebar() {
         JPanel sidebar = new JPanel();
         sidebar.setLayout(new BoxLayout(sidebar, BoxLayout.Y_AXIS));
         sidebar.setBackground(UIConstants.SIDEBAR_BG);
         sidebar.setPreferredSize(new Dimension(UIConstants.SIDEBAR_WIDTH, 0));
 
-        JPanel sidebarHeader = new JPanel();
-        sidebarHeader.setLayout(new BoxLayout(sidebarHeader, BoxLayout.Y_AXIS));
-        sidebarHeader.setBackground(UIConstants.SIDEBAR_BG);
-        sidebarHeader.setBorder(new EmptyBorder(25, 20, 25, 20));
-        sidebarHeader.setMaximumSize(new Dimension(UIConstants.SIDEBAR_WIDTH, 100));
+        // ── Logo area at the top ──────────────────────────────────
+        JPanel logoArea = new JPanel();
+        logoArea.setLayout(new BoxLayout(logoArea, BoxLayout.Y_AXIS));
+        logoArea.setBackground(UIConstants.SIDEBAR_BG);
+        logoArea.setBorder(new EmptyBorder(25, 20, 25, 20));
+        logoArea.setMaximumSize(new Dimension(UIConstants.SIDEBAR_WIDTH, 100));
 
-        ImageIcon originalIcon = new ImageIcon(getClass().getResource("/Image/apu-logo.png"));
-        Image scaledImage = originalIcon.getImage().getScaledInstance(40, 40, Image.SCALE_SMOOTH);
-        JLabel logoLabel = new JLabel(new ImageIcon(scaledImage));
+        ImageIcon logoIcon = new ImageIcon(getClass().getResource("/Image/apu-logo.png"));
+        Image scaledLogo = logoIcon.getImage().getScaledInstance(40, 40, Image.SCALE_SMOOTH);
+        JLabel logoLabel = new JLabel(new ImageIcon(scaledLogo));
         logoLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel brandLabel = new JLabel("APU ASC");
-        brandLabel.setFont(UIConstants.FONT_SIDEBAR);
-        brandLabel.setForeground(Color.WHITE);
-        brandLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        brandLabel.setBorder(new EmptyBorder(8, 0, 0, 0));
+        JLabel brandName = new JLabel("APU ASC");
+        brandName.setFont(UIConstants.FONT_SIDEBAR);
+        brandName.setForeground(Color.WHITE);
+        brandName.setAlignmentX(Component.LEFT_ALIGNMENT);
+        brandName.setBorder(new EmptyBorder(8, 0, 0, 0));
 
-        sidebarHeader.add(logoLabel);
-        sidebarHeader.add(brandLabel);
-        sidebar.add(sidebarHeader);
+        logoArea.add(logoLabel);
+        logoArea.add(brandName);
+        sidebar.add(logoArea);
 
+        // Divider line
         JSeparator divider = new JSeparator();
         divider.setForeground(UIConstants.SIDEBAR_DIVIDER);
         divider.setBackground(UIConstants.SIDEBAR_BG);
@@ -1080,48 +1507,68 @@ public class CustomerDashboard extends JPanel {
         sidebar.add(divider);
         sidebar.add(Box.createVerticalStrut(10));
 
-        JLabel navLabel = new JLabel("MENU");
-        navLabel.setFont(UIConstants.FONT_LABEL);
-        navLabel.setForeground(UIConstants.TEXT_NAV_LABEL);
-        navLabel.setBorder(new EmptyBorder(10, 24, 10, 20));
-        navLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        navLabel.setMaximumSize(new Dimension(UIConstants.SIDEBAR_WIDTH, 35));
-        sidebar.add(navLabel);
+        // "MENU" label
+        JLabel menuLabel = new JLabel("MENU");
+        menuLabel.setFont(UIConstants.FONT_LABEL);
+        menuLabel.setForeground(UIConstants.TEXT_NAV_LABEL);
+        menuLabel.setBorder(new EmptyBorder(10, 24, 10, 20));
+        menuLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        menuLabel.setMaximumSize(new Dimension(UIConstants.SIDEBAR_WIDTH, 35));
+        sidebar.add(menuLabel);
 
+        // ── Navigation buttons ────────────────────────────────────
         JButton[] navButtons = new JButton[NAV_ITEMS.length];
+
         for (int i = 0; i < NAV_ITEMS.length; i++) {
-            final String navName = NAV_ITEMS[i];
-            String btnText = navName.equals("Staff Review")
-                    ? "<html><font size='5'>\u2605</font>&nbsp;&nbsp;&nbsp;" + navName + "</html>"
-                    : NAV_ICONS[i] + "   " + navName;
-            navButtons[i] = createNavButton(btnText, navName.equals(activeNav));
+            final String pageName = NAV_ITEMS[i];
+
+            // Staff Review uses HTML to make the star icon bigger
+            String buttonText = pageName.equals("Staff Review")
+                    ? "<html><font size='5'>\u2605</font>&nbsp;&nbsp;&nbsp;" + pageName + "</html>"
+                    : NAV_ICONS[i] + "   " + pageName;
+
+            navButtons[i] = createNavButton(buttonText, pageName.equals(activeNav));
+
             navButtons[i].addActionListener(e -> {
-                activeNav = navName;
-                for (int j = 0; j < navButtons.length; j++)
-                    updateNavButtonStyle(navButtons[j], NAV_ITEMS[j].equals(activeNav));
-                headerTitle.setText(navName);
-                contentLayout.show(contentPanel, navName);
+                activeNav = pageName; // update which page is active
+
+                // Update the style of all nav buttons
+                for (int j = 0; j < navButtons.length; j++) {
+                    boolean isActive = NAV_ITEMS[j].equals(activeNav);
+                    updateNavButtonStyle(navButtons[j], isActive);
+                }
+
+                // Switch to the selected page
+                headerTitle.setText(pageName);
+                contentLayout.show(contentPanel, pageName);
             });
+
             sidebar.add(navButtons[i]);
             sidebar.add(Box.createVerticalStrut(2));
         }
-        sidebar.add(Box.createVerticalGlue());
+
+        sidebar.add(Box.createVerticalGlue()); // push nav buttons to the top
         return sidebar;
     }
 
+    /** Creates a styled sidebar navigation button. */
     private JButton createNavButton(String text, boolean isActive) {
         JButton btn = new JButton(text) {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
                 if (getClientProperty("active") == Boolean.TRUE) {
+                    // Active page: draw a rounded highlight
                     g2.setColor(UIConstants.SIDEBAR_ACTIVE);
                     g2.fillRoundRect(4, 0, getWidth() - 8, getHeight(), 8, 8);
                 } else if (getModel().isRollover()) {
+                    // Hover: draw a lighter rounded highlight
                     g2.setColor(UIConstants.SIDEBAR_HOVER);
                     g2.fillRoundRect(4, 0, getWidth() - 8, getHeight(), 8, 8);
                 }
+
                 g2.dispose();
                 super.paintComponent(g);
             }
@@ -1142,6 +1589,7 @@ public class CustomerDashboard extends JPanel {
         return btn;
     }
 
+    /** Updates a nav button's appearance based on whether it is the active page. */
     private void updateNavButtonStyle(JButton btn, boolean isActive) {
         btn.putClientProperty("active", isActive);
         btn.setForeground(isActive ? Color.WHITE : UIConstants.TEXT_SIDEBAR);
@@ -1149,16 +1597,25 @@ public class CustomerDashboard extends JPanel {
         btn.repaint();
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // PLACEHOLDER PAGES
-    // ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
+    // PLACEHOLDER PAGES (for nav items not yet built)
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Builds a placeholder page shown for sections that are not yet implemented.
+     * Shows a large icon, a title, and a description in the centre.
+     */
     private JPanel buildPlaceholder(String title, String description, String icon, int iconSize) {
         JPanel page = new JPanel(new BorderLayout());
         page.setBackground(UIConstants.BG_CONTENT);
-        JPanel center = new JPanel(new GridBagLayout());
-        center.setBackground(UIConstants.BG_CONTENT);
+
+        // Centre the card in the middle of the page
+        JPanel centreWrapper = new JPanel(new GridBagLayout());
+        centreWrapper.setBackground(UIConstants.BG_CONTENT);
+
         JPanel card = new JPanel() {
-            @Override protected void paintComponent(Graphics g) {
+            @Override
+            protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setColor(UIConstants.BG_CARD);
@@ -1169,34 +1626,41 @@ public class CustomerDashboard extends JPanel {
         card.setOpaque(false);
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(new EmptyBorder(50, 60, 50, 60));
+
         JLabel iconLabel = new JLabel(icon);
         iconLabel.setFont(new Font("SansSerif", Font.PLAIN, iconSize));
         iconLabel.setForeground(UIConstants.TEXT_SIDEBAR);
         iconLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         card.add(iconLabel);
         card.add(Box.createVerticalStrut(16));
-        JLabel titleLbl = new JLabel(title);
-        titleLbl.setFont(new Font("SansSerif", Font.BOLD, 20));
-        titleLbl.setForeground(UIConstants.TEXT_DARK);
-        titleLbl.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(titleLbl);
+
+        JLabel titleLabel = new JLabel(title);
+        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 20));
+        titleLabel.setForeground(UIConstants.TEXT_DARK);
+        titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        card.add(titleLabel);
         card.add(Box.createVerticalStrut(8));
-        JLabel descLbl = new JLabel(description);
-        descLbl.setFont(UIConstants.FONT_BODY);
-        descLbl.setForeground(UIConstants.TEXT_MUTED);
-        descLbl.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(descLbl);
-        center.add(card);
-        page.add(center, BorderLayout.CENTER);
+
+        JLabel descLabel = new JLabel(description);
+        descLabel.setFont(UIConstants.FONT_BODY);
+        descLabel.setForeground(UIConstants.TEXT_MUTED);
+        descLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        card.add(descLabel);
+
+        centreWrapper.add(card);
+        page.add(centreWrapper, BorderLayout.CENTER);
         return page;
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // SHARED UI HELPERS
-    // ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
+    // SHARED UI HELPER METHODS
+    // ═══════════════════════════════════════════════════════════════
+
+    /** Creates a white rounded card panel used as a container. */
     private JPanel createCard() {
         JPanel card = new JPanel() {
-            @Override protected void paintComponent(Graphics g) {
+            @Override
+            protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setColor(UIConstants.BG_CARD);
@@ -1208,33 +1672,85 @@ public class CustomerDashboard extends JPanel {
         return card;
     }
 
+    /** Creates a thin horizontal separator line. */
     private JSeparator makeSeparator() {
-        JSeparator sep = new JSeparator();
-        sep.setForeground(UIConstants.BORDER_DEFAULT);
-        sep.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1));
-        return sep;
+        JSeparator separator = new JSeparator();
+        separator.setForeground(UIConstants.BORDER_DEFAULT);
+        separator.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1));
+        return separator;
     }
 
-    private JButton createActionButton(String text, Color bg, Color fg) {
+    /**
+     * Creates a small compact text field used inside vehicle rows.
+     * Pre-filled with the given value.
+     */
+    private JTextField makeCompactField(String value) {
+        JTextField field = new JTextField(value);
+        field.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        field.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(UIConstants.PRIMARY, 1),
+                new EmptyBorder(2, 4, 2, 4)));
+        return field;
+    }
+
+    /**
+     * Creates a panel with a small label above a text field.
+     * Used inside vehicle rows for each editable field.
+     */
+    private JPanel makeLabelledField(String label, JTextField field) {
+        JPanel panel = new JPanel(new BorderLayout(0, 2));
+        panel.setOpaque(false);
+
+        JLabel labelComponent = new JLabel(label);
+        labelComponent.setFont(new Font("SansSerif", Font.BOLD, 10));
+        labelComponent.setForeground(UIConstants.TEXT_MUTED);
+
+        panel.add(labelComponent, BorderLayout.NORTH);
+        panel.add(field, BorderLayout.CENTER);
+        return panel;
+    }
+
+    /** Creates a centred label shown when there are no items to display. */
+    private JLabel makeEmptyLabel(String message) {
+        JLabel label = new JLabel(message);
+        label.setFont(UIConstants.FONT_BODY);
+        label.setForeground(UIConstants.TEXT_SECONDARY);
+        label.setAlignmentX(Component.CENTER_ALIGNMENT);
+        label.setHorizontalAlignment(SwingConstants.CENTER);
+        return label;
+    }
+
+    /**
+     * Creates a coloured rounded button used for actions like Edit, Save, Remove.
+     * Changes to a darker shade when the mouse hovers over it.
+     */
+    private JButton createActionButton(String text, Color backgroundColor, Color textColor) {
         JButton btn = new JButton(text) {
-            private boolean hover = false;
+            private boolean isHovered = false;
+
             {
+                // Track hover state for the darker colour effect
                 addMouseListener(new MouseAdapter() {
-                    public void mouseEntered(MouseEvent e) { hover = true;  repaint(); }
-                    public void mouseExited (MouseEvent e) { hover = false; repaint(); }
+                    public void mouseEntered(MouseEvent e) { isHovered = true;  repaint(); }
+                    public void mouseExited (MouseEvent e) { isHovered = false; repaint(); }
                 });
             }
-            @Override protected void paintComponent(Graphics g) {
+
+            @Override
+            protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(hover ? bg.darker() : bg);
+
+                // Use a darker shade when hovered
+                Color paintColor = isHovered ? backgroundColor.darker() : backgroundColor;
+                g2.setColor(paintColor);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
                 g2.dispose();
                 super.paintComponent(g);
             }
         };
         btn.setFont(UIConstants.FONT_SMALL_BOLD);
-        btn.setForeground(fg);
+        btn.setForeground(textColor);
         btn.setContentAreaFilled(false);
         btn.setBorderPainted(false);
         btn.setFocusPainted(false);
@@ -1243,6 +1759,7 @@ public class CustomerDashboard extends JPanel {
         return btn;
     }
 
+    /** Creates a styled dropdown menu item. */
     private JMenuItem createMenuItem(String text) {
         JMenuItem item = new JMenuItem(text);
         item.setFont(UIConstants.FONT_SMALL);
