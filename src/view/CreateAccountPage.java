@@ -75,7 +75,7 @@ public class CreateAccountPage extends JPanel {
         card.add(UIFactory.createFieldLabel("Password"));
         card.add(Box.createVerticalStrut(6));
         JPasswordField passwordField = UIFactory.createPasswordField();
-        card.add(passwordField);
+        card.add(UIFactory.createPasswordFieldPanel(passwordField));
         card.add(Box.createVerticalStrut(28));
 
         // Register button

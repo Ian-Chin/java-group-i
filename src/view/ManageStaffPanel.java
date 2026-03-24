@@ -215,7 +215,7 @@ public class ManageStaffPanel extends JPanel {
             form.add(UIFactory.createFieldLabel("Password"));
             form.add(Box.createVerticalStrut(6));
             passwordField = UIFactory.createPasswordField();
-            form.add(passwordField);
+            form.add(UIFactory.createPasswordFieldPanel(passwordField));
             form.add(Box.createVerticalStrut(14));
         }
 

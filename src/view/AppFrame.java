@@ -33,6 +33,7 @@ public class AppFrame extends JFrame {
         mainPanel.add(new LoginPage(this), PageName.LOGIN.name());
         mainPanel.add(new AdminDashboard(this), PageName.DASHBOARD.name());
         mainPanel.add(new CustomerDashboard(this), PageName.CUSTOMER_DASHBOARD.name());
+        mainPanel.add(new CounterStaffDashboard(this), PageName.COUNTERSTAFF_DASHBOARD.name());
 
         add(mainPanel);
         showPage(PageName.ONBOARDING);
@@ -57,6 +58,14 @@ public class AppFrame extends JFrame {
     	 for (Component c : mainPanel.getComponents()) {
     		 if (c instanceof CustomerDashboard) {
     			 ((CustomerDashboard) c).refreshUser();
+                 break;
+             }
+         }
+     }
+     if (page == PageName.COUNTERSTAFF_DASHBOARD) {
+         for (Component c : mainPanel.getComponents()) {
+             if (c instanceof CounterStaffDashboard) {
+                 ((CounterStaffDashboard) c).refreshUser();
                  break;
              }
          }

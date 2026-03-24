@@ -69,7 +69,7 @@ public class LoginPage extends JPanel {
         card.add(UIFactory.createFieldLabel("Password"));
         card.add(Box.createVerticalStrut(6));
         JPasswordField passwordField = UIFactory.createPasswordField();
-        card.add(passwordField);
+        card.add(UIFactory.createPasswordFieldPanel(passwordField));
         card.add(Box.createVerticalStrut(28));
 
         // Login button
@@ -122,6 +122,9 @@ public class LoginPage extends JPanel {
             // Redirect based on role
             if(user.getRole().equals("customer")) {
             	app.showPage(PageName.CUSTOMER_DASHBOARD);
+            }
+            else if(user.getRole().equals("staff")) {
+            	app.showPage(PageName.COUNTERSTAFF_DASHBOARD);
             }
             else {
             	app.showPage(PageName.DASHBOARD);

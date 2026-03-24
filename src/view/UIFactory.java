@@ -204,6 +204,64 @@ public final class UIFactory {
         return field;
     }
 
+    // ─── Password field wrapped with show/hide eye toggle ──────
+
+    public static JPanel createPasswordFieldPanel(JPasswordField field) {
+        JPanel panel = new JPanel(new BorderLayout()) {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                boolean focused = field.hasFocus();
+                Color borderColor = focused ? UIConstants.PRIMARY : UIConstants.BORDER_DEFAULT;
+                int thickness = focused ? 2 : 1;
+                g2.setColor(Color.WHITE);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
+                g2.setColor(borderColor);
+                g2.setStroke(new BasicStroke(thickness));
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
+                g2.dispose();
+            }
+        };
+        panel.setOpaque(false);
+        panel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        panel.setMaximumSize(UIConstants.FIELD_SIZE);
+        panel.setPreferredSize(UIConstants.FIELD_SIZE);
+
+        // Strip the border from the field itself — the panel draws it
+        field.setBorder(new EmptyBorder(8, 14, 8, 0));
+        field.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
+
+        // Eye toggle label
+        JLabel eye = new JLabel("\u25CE");
+        eye.setFont(new Font("SansSerif", Font.PLAIN, 18));
+        eye.setForeground(UIConstants.TEXT_MUTED);
+        eye.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        eye.setToolTipText("Show / hide password");
+        eye.setBorder(new EmptyBorder(0, 6, 0, 12));
+        eye.setPreferredSize(new Dimension(36, 44));
+        eye.setHorizontalAlignment(SwingConstants.CENTER);
+
+        final boolean[] visible = {false};
+        eye.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) {
+                visible[0] = !visible[0];
+                field.setEchoChar(visible[0] ? (char) 0 : '\u2022');
+                eye.setText(visible[0] ? "\u25C9" : "\u25CE");
+                eye.setForeground(visible[0] ? UIConstants.PRIMARY : UIConstants.TEXT_MUTED);
+            }
+        });
+
+        // Repaint panel border on focus change
+        field.addFocusListener(new FocusAdapter() {
+            @Override public void focusGained(FocusEvent e) { panel.repaint(); }
+            @Override public void focusLost(FocusEvent e)   { panel.repaint(); }
+        });
+
+        panel.add(field, BorderLayout.CENTER);
+        panel.add(eye, BorderLayout.EAST);
+        return panel;
+    }
+
     // ─── Clickable link label ───────────────────────────────────
 
     public static JLabel createLink(String text) {
