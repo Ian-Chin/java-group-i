@@ -37,6 +37,8 @@ public class AppointmentPanel extends JPanel {
     private DefaultTableModel tableModel;
     private JTable table;
     private JLabel countLabel;
+    private JTextField searchField;
+    private JComboBox<String> filterCombo;
 
     private static final String[] TABLE_COLUMNS = {"ID", "Customer", "Technician", "Service", "Date & Time", "Duration", "Status", ""};
 
@@ -268,15 +270,52 @@ public class AppointmentPanel extends JPanel {
         listTitle.setFont(new Font("SansSerif", Font.BOLD, 18));
         listTitle.setForeground(UIConstants.TEXT_PRIMARY);
 
-        JButton refreshBtn = outlineBtn("\u21BB  Refresh");
-        refreshBtn.addActionListener(e -> {
-            refreshTable();
-            loadCustomers();
-            loadTechnicians();
+        // Search bar and filter
+        JPanel controlsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        controlsPanel.setOpaque(false);
+
+        searchField = new JTextField(15) {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(Color.WHITE);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+            @Override protected void paintBorder(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(UIConstants.BORDER_DEFAULT);
+                g2.setStroke(new BasicStroke(1f));
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
+                g2.dispose();
+            }
+        };
+        searchField.setFont(UIConstants.FONT_BODY);
+        searchField.setForeground(UIConstants.TEXT_DARK);
+        searchField.setOpaque(false);
+        searchField.setBorder(new EmptyBorder(6, 10, 6, 10));
+        searchField.setPreferredSize(new Dimension(200, 32));
+        searchField.setToolTipText("Search appointments...");
+        searchField.addKeyListener(new java.awt.event.KeyAdapter() {
+            @Override public void keyReleased(java.awt.event.KeyEvent e) {
+                refreshTable();
+            }
         });
 
+        filterCombo = new JComboBox<>(new String[]{"All Status", "Pending", "In Progress", "Completed"});
+        filterCombo.setFont(UIConstants.FONT_SMALL_BOLD);
+        filterCombo.setBackground(Color.WHITE);
+        filterCombo.setPreferredSize(new Dimension(120, 32));
+        filterCombo.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        filterCombo.addActionListener(e -> refreshTable());
+
+        controlsPanel.add(searchField);
+        controlsPanel.add(filterCombo);
+
         headerBar.add(listTitle, BorderLayout.WEST);
-        headerBar.add(refreshBtn, BorderLayout.EAST);
+        headerBar.add(controlsPanel, BorderLayout.EAST);
         wrapper.add(headerBar, BorderLayout.NORTH);
 
         // Table card
@@ -495,9 +534,31 @@ public class AppointmentPanel extends JPanel {
     private void refreshTable() {
         tableModel.setRowCount(0);
         List<Appointment> all = appointmentService.getAll();
+
+        String searchText = (searchField != null) ? searchField.getText().trim().toLowerCase() : "";
+        String statusFilter = (filterCombo != null && filterCombo.getSelectedItem() != null)
+                ? filterCombo.getSelectedItem().toString() : "All Status";
+
+        int count = 0;
         for (Appointment a : all) {
+            // Status filter
+            if (!"All Status".equals(statusFilter) && !a.getStatus().equalsIgnoreCase(statusFilter)) {
+                continue;
+            }
+
             String custName = resolveName(a.getCustomerEmail());
             String techName = resolveName(a.getTechnicianEmail());
+
+            // Search filter — matches against ID, customer, technician, service, date/time
+            if (!searchText.isEmpty()) {
+                boolean match = a.getId().toLowerCase().contains(searchText)
+                        || custName.toLowerCase().contains(searchText)
+                        || techName.toLowerCase().contains(searchText)
+                        || a.getServiceType().toLowerCase().contains(searchText)
+                        || a.getDateTime().toLowerCase().contains(searchText);
+                if (!match) continue;
+            }
+
             tableModel.addRow(new Object[]{
                     a.getId(),
                     custName,
@@ -508,8 +569,9 @@ public class AppointmentPanel extends JPanel {
                     a.getStatus(),
                     ""
             });
+            count++;
         }
-        countLabel.setText(all.size() + " appointment" + (all.size() != 1 ? "s" : ""));
+        countLabel.setText(count + " appointment" + (count != 1 ? "s" : ""));
     }
 
     private String resolveName(String idOrEmail) {

@@ -20,7 +20,7 @@ public class CreateAccountPage extends JPanel {
 
         // Back button at top-left
         JPanel topBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 20, 15));
-        topBar.setBackground(UIConstants.BG_PAGE);
+        topBar.setOpaque(false);
         JButton backBtn = UIFactory.createBackButton();
         backBtn.addActionListener(e -> app.showPage(PageName.ONBOARDING));
         topBar.add(backBtn);
@@ -28,18 +28,7 @@ public class CreateAccountPage extends JPanel {
 
         // Main card
         JPanel card = UIFactory.createCard();
-        card.setBorder(BorderFactory.createCompoundBorder(
-                new DropShadowBorder(),
-                new EmptyBorder(40, 50, 40, 50)
-        ));
-
-        // Logo
-        ImageIcon originalIcon = new ImageIcon(getClass().getResource("/Image/apu-logo.png"));
-        Image scaledImage = originalIcon.getImage().getScaledInstance(80, 80, Image.SCALE_SMOOTH);
-        JLabel logoLabel = new JLabel(new ImageIcon(scaledImage));
-        logoLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(logoLabel);
-        card.add(Box.createVerticalStrut(20));
+        card.setBorder(new EmptyBorder(20, 50, 40, 50));
 
         // Title
         JLabel titleLabel = new JLabel("Create Account");
@@ -94,11 +83,17 @@ public class CreateAccountPage extends JPanel {
         });
         card.add(loginLink);
 
-        // Wrapper to center the card
+        // Wrapper to center the card with pop-out logo
         JPanel wrapper = new JPanel(new GridBagLayout());
-        wrapper.setBackground(UIConstants.BG_PAGE);
-        wrapper.add(card);
+        wrapper.setOpaque(false);
+        wrapper.add(UIFactory.createCardWithLogo(card, getClass()));
         add(wrapper, BorderLayout.CENTER);
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        UIFactory.paintPageGradientBackground(g, getWidth(), getHeight());
     }
 
     private void handleRegister(JTextField nameField, JTextField emailField, JPasswordField passwordField) {
@@ -106,31 +101,26 @@ public class CreateAccountPage extends JPanel {
         String email = UIFactory.getFieldValue(emailField, "Enter your email");
         String password = new String(passwordField.getPassword()).trim();
 
-        // Validate name
         if (!name.matches("[a-zA-Z ]{2,50}")) {
             showError("Name must be 2-50 characters and contain only letters.");
             return;
         }
 
-        // Validate email
         if (!email.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
             showError("Please enter a valid email address.");
             return;
         }
 
-        // Validate password
         if (password.length() < 8 || !password.matches(".*[a-zA-Z].*") || !password.matches(".*\\d.*")) {
             showError("Password must be at least 8 characters with letters and numbers.");
             return;
         }
 
-        // Check duplicate email
         if (accountService.emailExists(email)) {
             showError("An account with this email already exists.");
             return;
         }
 
-        // Register
         User newUser = new User(name, email, password, "customer");
         if (accountService.register(newUser)) {
             JOptionPane.showMessageDialog(app, "Account created successfully!", "Success",

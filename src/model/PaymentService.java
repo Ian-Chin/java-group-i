@@ -24,6 +24,30 @@ public class PaymentService {
     private static final int EXPECTED_COLUMNS = 7;
 
     /**
+     * Returns all payment records as a list of String arrays.
+     * Each array: [paymentID, userID, appointmentID, amount, paymentDate, method, status]
+     */
+    public List<String[]> getAllPayments() {
+        List<String[]> list = new ArrayList<>();
+        File file = new File(FILE_PATH);
+        if (!file.exists()) return list;
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank() || line.trim().startsWith("#")) continue;
+                String[] columns = line.split(",", EXPECTED_COLUMNS);
+                if (columns.length == EXPECTED_COLUMNS) {
+                    list.add(columns);
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
+    /**
      * Returns a Set of appointment IDs that have already been Paid.
      * Used to filter out already-paid appointments from the Pending Payment list.
      *

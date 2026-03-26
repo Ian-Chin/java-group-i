@@ -11,7 +11,7 @@ public class LoginPage extends JPanel {
 
     private final AppFrame app;
     private final AccountService accountService;
-    private JButton loginBtn; // keylistener: enter/login btn
+    private JButton loginBtn;
 
     public LoginPage(AppFrame app) {
         this.app = app;
@@ -21,7 +21,7 @@ public class LoginPage extends JPanel {
 
         // Back button at top-left
         JPanel topBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 20, 15));
-        topBar.setBackground(UIConstants.BG_PAGE);
+        topBar.setOpaque(false);
         JButton backBtn = UIFactory.createBackButton();
         backBtn.addActionListener(e -> app.showPage(PageName.ONBOARDING));
         topBar.add(backBtn);
@@ -29,18 +29,7 @@ public class LoginPage extends JPanel {
 
         // Main card
         JPanel card = UIFactory.createCard();
-        card.setBorder(BorderFactory.createCompoundBorder(
-                new DropShadowBorder(),
-                new EmptyBorder(40, 50, 40, 50)
-        ));
-
-        // Logo
-        ImageIcon originalIcon = new ImageIcon(getClass().getResource("/Image/apu-logo.png"));
-        Image scaledImage = originalIcon.getImage().getScaledInstance(80, 80, Image.SCALE_SMOOTH);
-        JLabel logoLabel = new JLabel(new ImageIcon(scaledImage));
-        logoLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(logoLabel);
-        card.add(Box.createVerticalStrut(20));
+        card.setBorder(new EmptyBorder(20, 50, 40, 50));
 
         // Title
         JLabel titleLabel = new JLabel("Login");
@@ -88,17 +77,24 @@ public class LoginPage extends JPanel {
         });
         card.add(registerLink);
 
-        // Wrapper to center the card
+        // Wrapper to center the card with pop-out logo
         JPanel wrapper = new JPanel(new GridBagLayout());
-        wrapper.setBackground(UIConstants.BG_PAGE);
-        wrapper.add(card);
+        wrapper.setOpaque(false);
+        wrapper.add(UIFactory.createCardWithLogo(card, getClass()));
         add(wrapper, BorderLayout.CENTER);
     }
-	    @Override
-	    public void addNotify() {
-	        super.addNotify();
-	        SwingUtilities.getRootPane(loginBtn).setDefaultButton(loginBtn);
-	    }
+
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        SwingUtilities.getRootPane(loginBtn).setDefaultButton(loginBtn);
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        UIFactory.paintPageGradientBackground(g, getWidth(), getHeight());
+    }
 
     private void handleLogin(JTextField emailField, JPasswordField passwordField) {
         String email = UIFactory.getFieldValue(emailField, "Enter your email");
@@ -112,22 +108,18 @@ public class LoginPage extends JPanel {
 
         User user = accountService.authenticate(email, password);
         if (user != null) {
-            // Clear fields and redirect to dashboard
             emailField.setText("Enter your email");
             emailField.setForeground(Color.GRAY);
             passwordField.setText("");
             app.setLoggedInUser(user.getName());
             app.setLoggedInUserObj(user);
-            
-            // Redirect based on role
-            if(user.getRole().equals("customer")) {
-            	app.showPage(PageName.CUSTOMER_DASHBOARD);
-            }
-            else if(user.getRole().equals("staff")) {
-            	app.showPage(PageName.COUNTERSTAFF_DASHBOARD);
-            }
-            else {
-            	app.showPage(PageName.DASHBOARD);
+
+            if (user.getRole().equals("customer")) {
+                app.showPage(PageName.CUSTOMER_DASHBOARD);
+            } else if (user.getRole().equals("staff")) {
+                app.showPage(PageName.COUNTERSTAFF_DASHBOARD);
+            } else {
+                app.showPage(PageName.DASHBOARD);
             }
         } else {
             JOptionPane.showMessageDialog(app, "Invalid email or password.",

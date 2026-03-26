@@ -3,6 +3,7 @@ package view;
 import model.AccountService;
 import model.AppointmentService;
 import model.AppointmentService.Appointment;
+import model.PaymentService;
 import model.User;
 
 import javax.swing.*;
@@ -322,27 +323,645 @@ public class CounterStaffDashboard extends JPanel {
     // ─── Dashboard content ───────────────────────────────────────
 
     private JPanel buildDashboardContent() {
-        JPanel page = new JPanel(new BorderLayout());
+        JPanel page = new JPanel();
+        page.setLayout(new BoxLayout(page, BoxLayout.Y_AXIS));
         page.setBackground(UIConstants.BG_CONTENT);
-        page.setBorder(new EmptyBorder(40, 40, 40, 40));
+        page.setBorder(new EmptyBorder(30, 36, 30, 36));
+
+        // Welcome header
+        JPanel headerSection = new JPanel();
+        headerSection.setLayout(new BoxLayout(headerSection, BoxLayout.Y_AXIS));
+        headerSection.setBackground(UIConstants.BG_CONTENT);
+        headerSection.setAlignmentX(Component.LEFT_ALIGNMENT);
+        headerSection.setMaximumSize(new Dimension(Integer.MAX_VALUE, 70));
 
         welcomeLabel = new JLabel("Welcome back, Staff");
         welcomeLabel.setFont(UIConstants.FONT_HEADING_2);
         welcomeLabel.setForeground(UIConstants.TEXT_PRIMARY);
+        welcomeLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel sub = new JLabel("Use the sidebar to manage customers, appointments, and payments.");
+        JLabel sub = new JLabel("Here\u2019s an overview of today\u2019s activity.");
         sub.setFont(UIConstants.FONT_BODY);
         sub.setForeground(UIConstants.TEXT_MUTED);
-        sub.setBorder(new EmptyBorder(8, 0, 0, 0));
+        sub.setAlignmentX(Component.LEFT_ALIGNMENT);
+        sub.setBorder(new EmptyBorder(4, 0, 0, 0));
 
-        JPanel top = new JPanel();
-        top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
-        top.setBackground(UIConstants.BG_CONTENT);
-        top.add(welcomeLabel);
-        top.add(sub);
+        headerSection.add(welcomeLabel);
+        headerSection.add(sub);
+        page.add(headerSection);
+        page.add(Box.createVerticalStrut(24));
 
-        page.add(top, BorderLayout.NORTH);
+        // Gather data
+        AppointmentService apptService = new AppointmentService();
+        PaymentService payService = new PaymentService();
+        AccountService acctService = app.getAccountService();
+
+        List<Appointment> allAppts = apptService.getAll();
+        List<String[]> allPayments = payService.getAllPayments();
+        String today = LocalDate.now().toString();
+
+        int totalAppts = allAppts.size();
+        int todayAppts = 0;
+        int pendingAppts = 0;
+        int completedAppts = 0;
+        int inProgressAppts = 0;
+        int totalServiceHours = 0;
+
+        // Collect upcoming appointments (future date, not completed)
+        List<Appointment> upcomingList = new ArrayList<>();
+
+        for (Appointment a : allAppts) {
+            String dt = a.getDateTime();
+            String apptDate = dt.contains(" ") ? dt.split(" ")[0] : dt;
+            if (apptDate.equals(today)) todayAppts++;
+            totalServiceHours += a.getDurationHours();
+            switch (a.getStatus()) {
+                case "Pending":     pendingAppts++; break;
+                case "In Progress": inProgressAppts++; break;
+                case "Completed":   completedAppts++; break;
+            }
+            // Upcoming = date >= today and not completed
+            if (apptDate.compareTo(today) >= 0 && !"Completed".equals(a.getStatus())) {
+                upcomingList.add(a);
+            }
+        }
+
+        // Sort upcoming by date
+        upcomingList.sort((a1, a2) -> a1.getDateTime().compareTo(a2.getDateTime()));
+
+        int totalCustomers = acctService.getUsersByRole("customer").size();
+        int totalTechnicians = acctService.getUsersByRole("technician").size();
+
+        // ── TOP ROW: 4 small KPI cards ──────────────────────────────
+        JPanel topRow = new JPanel(new GridLayout(1, 4, 16, 0));
+        topRow.setOpaque(false);
+        topRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        topRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 110));
+
+        topRow.add(buildKpiCard("Total Appointments", String.valueOf(totalAppts),
+                "\u2637", new Color(80, 110, 230), new Color(235, 240, 255)));
+        topRow.add(buildKpiCard("Today's Appointments", String.valueOf(todayAppts),
+                "\u2339", new Color(40, 167, 69), new Color(220, 245, 225)));
+        topRow.add(buildKpiCard("Pending", String.valueOf(pendingAppts),
+                "\u231B", new Color(255, 165, 0), new Color(255, 243, 220)));
+        topRow.add(buildKpiCard("Completed", String.valueOf(completedAppts),
+                "\u2714", new Color(40, 167, 69), new Color(220, 245, 225)));
+
+        page.add(topRow);
+        page.add(Box.createVerticalStrut(16));
+
+        // ── MIDDLE ROW: 2 big cards ─────────────────────────────────
+        JPanel midRow = new JPanel(new GridLayout(1, 2, 16, 0));
+        midRow.setOpaque(false);
+        midRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        midRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 280));
+
+        midRow.add(buildUpcomingAppointmentsCard(upcomingList, acctService));
+        midRow.add(buildStatusBreakdownCard(pendingAppts, inProgressAppts, completedAppts, totalAppts));
+
+        page.add(midRow);
+        page.add(Box.createVerticalStrut(16));
+
+        // ── BOTTOM ROW: 2 big cards ─────────────────────────────────
+        JPanel bottomRow = new JPanel(new GridLayout(1, 2, 16, 0));
+        bottomRow.setOpaque(false);
+        bottomRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        bottomRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 280));
+
+        bottomRow.add(buildServiceOverviewCard(totalServiceHours, totalAppts, totalCustomers, totalTechnicians));
+        bottomRow.add(buildPaymentSummaryCard(allPayments));
+
+        page.add(bottomRow);
+        page.add(Box.createVerticalGlue());
+
         return page;
+    }
+
+    // ─── KPI card (matches admin report style) ────────────────────
+
+    private JPanel buildKpiCard(String title, String value, String icon, Color accentColor, Color iconBg) {
+        JPanel card = new JPanel() {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(UIConstants.BG_CARD);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
+                // Left accent stripe
+                g2.setColor(accentColor);
+                g2.fillRoundRect(0, 0, 6, getHeight(), 4, 4);
+                g2.dispose();
+            }
+        };
+        card.setOpaque(false);
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setBorder(new EmptyBorder(20, 22, 20, 16));
+
+        JLabel iconLabel = new JLabel(icon);
+        iconLabel.setFont(new Font("SansSerif", Font.PLAIN, 26));
+        iconLabel.setForeground(accentColor);
+        iconLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel valueLabel = new JLabel(value);
+        valueLabel.setFont(new Font("SansSerif", Font.BOLD, 28));
+        valueLabel.setForeground(UIConstants.TEXT_PRIMARY);
+        valueLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel titleLabel = new JLabel(title);
+        titleLabel.setFont(UIConstants.FONT_SMALL);
+        titleLabel.setForeground(UIConstants.TEXT_MUTED);
+        titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        card.add(iconLabel);
+        card.add(Box.createVerticalStrut(8));
+        card.add(valueLabel);
+        card.add(Box.createVerticalStrut(4));
+        card.add(titleLabel);
+        return card;
+    }
+
+    // ─── Upcoming Appointments card ─────────────────────────────────
+
+    private JPanel buildUpcomingAppointmentsCard(List<Appointment> upcoming, AccountService acctService) {
+        JPanel card = new JPanel(new BorderLayout()) {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(Color.WHITE);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
+                g2.setColor(UIConstants.BORDER_DEFAULT);
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
+                g2.dispose();
+            }
+        };
+        card.setOpaque(false);
+        card.setBorder(new EmptyBorder(20, 22, 20, 22));
+
+        // Header
+        JPanel header = new JPanel(new BorderLayout());
+        header.setOpaque(false);
+        header.setBorder(new EmptyBorder(0, 0, 12, 0));
+
+        JLabel title = new JLabel("Upcoming Appointments");
+        title.setFont(new Font("SansSerif", Font.BOLD, 16));
+        title.setForeground(UIConstants.TEXT_PRIMARY);
+
+        JLabel badge = new JLabel(String.valueOf(upcoming.size()));
+        badge.setFont(new Font("SansSerif", Font.BOLD, 12));
+        badge.setForeground(new Color(80, 110, 230));
+        badge.setHorizontalAlignment(SwingConstants.CENTER);
+        badge.setPreferredSize(new Dimension(28, 22));
+        badge.setOpaque(false);
+        JPanel badgeWrapper = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0)) {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(235, 240, 255));
+                g2.fillRoundRect(0, 2, 28, 22, 8, 8);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        badgeWrapper.setOpaque(false);
+        badgeWrapper.setPreferredSize(new Dimension(28, 24));
+        badgeWrapper.add(badge);
+
+        header.add(title, BorderLayout.WEST);
+        header.add(badgeWrapper, BorderLayout.EAST);
+        card.add(header, BorderLayout.NORTH);
+
+        // List of upcoming appointments
+        JPanel listPanel = new JPanel();
+        listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
+        listPanel.setOpaque(false);
+
+        int maxShow = Math.min(upcoming.size(), 4);
+        if (maxShow == 0) {
+            JLabel empty = new JLabel("No upcoming appointments");
+            empty.setFont(UIConstants.FONT_BODY);
+            empty.setForeground(UIConstants.TEXT_MUTED);
+            empty.setAlignmentX(Component.LEFT_ALIGNMENT);
+            empty.setBorder(new EmptyBorder(10, 0, 0, 0));
+            listPanel.add(empty);
+        } else {
+            for (int i = 0; i < maxShow; i++) {
+                Appointment a = upcoming.get(i);
+                String custName = resolveUserName(acctService, a.getCustomerEmail());
+                String techName = resolveUserName(acctService, a.getTechnicianEmail());
+                String dt = a.getDateTime();
+                String date = dt.contains(" ") ? dt.split(" ")[0] : dt;
+                String time = dt.contains(" ") ? dt.split(" ")[1] : "";
+
+                Color statusColor;
+                switch (a.getStatus()) {
+                    case "In Progress": statusColor = new Color(255, 165, 0); break;
+                    default:            statusColor = new Color(108, 117, 125); break;
+                }
+
+                JPanel row = new JPanel(new BorderLayout(10, 0)) {
+                    @Override protected void paintComponent(Graphics g) {
+                        Graphics2D g2 = (Graphics2D) g.create();
+                        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                        g2.setColor(new Color(248, 249, 252));
+                        g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
+                        g2.dispose();
+                    }
+                };
+                row.setOpaque(false);
+                row.setBorder(new EmptyBorder(8, 12, 8, 12));
+                row.setAlignmentX(Component.LEFT_ALIGNMENT);
+                row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 50));
+
+                // Left color bar
+                final Color barCol = statusColor;
+                JPanel bar = new JPanel() {
+                    @Override protected void paintComponent(Graphics g) {
+                        Graphics2D g2 = (Graphics2D) g.create();
+                        g2.setColor(barCol);
+                        g2.fillRoundRect(0, 0, getWidth(), getHeight(), 4, 4);
+                        g2.dispose();
+                    }
+                };
+                bar.setOpaque(false);
+                bar.setPreferredSize(new Dimension(4, 0));
+                row.add(bar, BorderLayout.WEST);
+
+                // Center info
+                JPanel info = new JPanel();
+                info.setLayout(new BoxLayout(info, BoxLayout.Y_AXIS));
+                info.setOpaque(false);
+
+                JLabel nameLine = new JLabel(custName + "  \u2022  " + a.getServiceType());
+                nameLine.setFont(UIConstants.FONT_SMALL_BOLD);
+                nameLine.setForeground(UIConstants.TEXT_DARK);
+                nameLine.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+                JLabel detailLine = new JLabel(date + " at " + time + "  |  Tech: " + techName);
+                detailLine.setFont(new Font("SansSerif", Font.PLAIN, 11));
+                detailLine.setForeground(UIConstants.TEXT_MUTED);
+                detailLine.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+                info.add(nameLine);
+                info.add(Box.createVerticalStrut(2));
+                info.add(detailLine);
+                row.add(info, BorderLayout.CENTER);
+
+                // Right status
+                JLabel statusLbl = new JLabel(a.getStatus());
+                statusLbl.setFont(new Font("SansSerif", Font.BOLD, 10));
+                statusLbl.setForeground(statusColor);
+                statusLbl.setHorizontalAlignment(SwingConstants.RIGHT);
+                statusLbl.setPreferredSize(new Dimension(70, 20));
+                row.add(statusLbl, BorderLayout.EAST);
+
+                listPanel.add(row);
+                if (i < maxShow - 1) listPanel.add(Box.createVerticalStrut(6));
+            }
+        }
+
+        JScrollPane scroll = new JScrollPane(listPanel,
+                JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+                JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scroll.setBorder(null);
+        scroll.setOpaque(false);
+        scroll.getViewport().setOpaque(false);
+        scroll.getVerticalScrollBar().setUnitIncrement(10);
+        card.add(scroll, BorderLayout.CENTER);
+
+        return card;
+    }
+
+    // ─── Appointment Status Breakdown card ───────────────────────────
+
+    private JPanel buildStatusBreakdownCard(int pending, int inProgress, int completed, int total) {
+        JPanel card = new JPanel() {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(Color.WHITE);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
+                g2.setColor(UIConstants.BORDER_DEFAULT);
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
+                g2.dispose();
+            }
+        };
+        card.setOpaque(false);
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setBorder(new EmptyBorder(20, 22, 20, 22));
+
+        JLabel title = new JLabel("Appointment Status");
+        title.setFont(new Font("SansSerif", Font.BOLD, 16));
+        title.setForeground(UIConstants.TEXT_PRIMARY);
+        title.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.add(title);
+        card.add(Box.createVerticalStrut(4));
+
+        JLabel subtitle = new JLabel("Breakdown by current status");
+        subtitle.setFont(UIConstants.FONT_SMALL);
+        subtitle.setForeground(UIConstants.TEXT_MUTED);
+        subtitle.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.add(subtitle);
+        card.add(Box.createVerticalStrut(20));
+
+        card.add(buildStatusBar("Pending", pending, total, new Color(108, 117, 125), new Color(235, 235, 240)));
+        card.add(Box.createVerticalStrut(14));
+        card.add(buildStatusBar("In Progress", inProgress, total, new Color(255, 165, 0), new Color(255, 243, 220)));
+        card.add(Box.createVerticalStrut(14));
+        card.add(buildStatusBar("Completed", completed, total, new Color(40, 167, 69), new Color(220, 245, 225)));
+
+        card.add(Box.createVerticalGlue());
+        return card;
+    }
+
+    private JPanel buildStatusBar(String label, int count, int total, Color barColor, Color bgColor) {
+        JPanel row = new JPanel();
+        row.setLayout(new BoxLayout(row, BoxLayout.Y_AXIS));
+        row.setOpaque(false);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
+
+        JPanel labelRow = new JPanel(new BorderLayout());
+        labelRow.setOpaque(false);
+        labelRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        labelRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 18));
+
+        JLabel nameLabel = new JLabel(label);
+        nameLabel.setFont(UIConstants.FONT_SMALL_BOLD);
+        nameLabel.setForeground(UIConstants.TEXT_DARK);
+
+        int pct = total > 0 ? Math.round((float) count / total * 100) : 0;
+        JLabel countLabel = new JLabel(count + " (" + pct + "%)");
+        countLabel.setFont(UIConstants.FONT_SMALL_BOLD);
+        countLabel.setForeground(barColor);
+
+        labelRow.add(nameLabel, BorderLayout.WEST);
+        labelRow.add(countLabel, BorderLayout.EAST);
+        row.add(labelRow);
+        row.add(Box.createVerticalStrut(5));
+
+        final float fraction = total > 0 ? (float) count / total : 0f;
+        JPanel bar = new JPanel() {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(bgColor);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 6, 6);
+                int fillWidth = Math.max(0, (int) (getWidth() * fraction));
+                if (fillWidth > 0) {
+                    g2.setColor(barColor);
+                    g2.fillRoundRect(0, 0, fillWidth, getHeight(), 6, 6);
+                }
+                g2.dispose();
+            }
+        };
+        bar.setOpaque(false);
+        bar.setAlignmentX(Component.LEFT_ALIGNMENT);
+        bar.setPreferredSize(new Dimension(Integer.MAX_VALUE, 8));
+        bar.setMaximumSize(new Dimension(Integer.MAX_VALUE, 8));
+        row.add(bar);
+
+        return row;
+    }
+
+    // ─── Service Overview card (bottom left) ────────────────────────
+
+    private JPanel buildServiceOverviewCard(int totalHours, int totalAppts, int totalCustomers, int totalTechnicians) {
+        JPanel card = new JPanel() {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(Color.WHITE);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
+                g2.setColor(UIConstants.BORDER_DEFAULT);
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
+                g2.dispose();
+            }
+        };
+        card.setOpaque(false);
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setBorder(new EmptyBorder(20, 22, 20, 22));
+
+        JLabel title = new JLabel("Service Overview");
+        title.setFont(new Font("SansSerif", Font.BOLD, 16));
+        title.setForeground(UIConstants.TEXT_PRIMARY);
+        title.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.add(title);
+        card.add(Box.createVerticalStrut(4));
+
+        JLabel subtitle = new JLabel("Staff and service statistics");
+        subtitle.setFont(UIConstants.FONT_SMALL);
+        subtitle.setForeground(UIConstants.TEXT_MUTED);
+        subtitle.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.add(subtitle);
+        card.add(Box.createVerticalStrut(20));
+
+        // 2x2 stat grid
+        JPanel grid = new JPanel(new GridLayout(2, 2, 12, 12));
+        grid.setOpaque(false);
+        grid.setAlignmentX(Component.LEFT_ALIGNMENT);
+        grid.setMaximumSize(new Dimension(Integer.MAX_VALUE, 150));
+
+        grid.add(buildStatTile("Total Hours", totalHours + "h", "\u23F1", new Color(80, 110, 230), new Color(235, 240, 255)));
+        grid.add(buildStatTile("Customers", String.valueOf(totalCustomers), "\u2663", new Color(160, 80, 230), new Color(240, 230, 255)));
+        grid.add(buildStatTile("Technicians", String.valueOf(totalTechnicians), "\u2692", new Color(40, 167, 69), new Color(220, 245, 225)));
+        double avg = totalAppts > 0 ? (double) totalHours / totalAppts : 0;
+        grid.add(buildStatTile("Avg Duration", String.format("%.1fh", avg), "\u2338", new Color(255, 165, 0), new Color(255, 243, 220)));
+
+        card.add(grid);
+        card.add(Box.createVerticalGlue());
+
+        return card;
+    }
+
+    private JPanel buildStatTile(String label, String value, String icon, Color accentColor, Color bgColor) {
+        JPanel tile = new JPanel() {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(bgColor);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
+                g2.dispose();
+            }
+        };
+        tile.setOpaque(false);
+        tile.setLayout(new BoxLayout(tile, BoxLayout.Y_AXIS));
+        tile.setBorder(new EmptyBorder(12, 14, 12, 14));
+
+        // Icon box
+        JLabel iconLabel = new JLabel(icon) {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(accentColor.getRed(), accentColor.getGreen(), accentColor.getBlue(), 30));
+                g2.fillRoundRect(0, 0, 28, 28, 6, 6);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        iconLabel.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        iconLabel.setForeground(accentColor);
+        iconLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        iconLabel.setVerticalAlignment(SwingConstants.CENTER);
+        iconLabel.setPreferredSize(new Dimension(28, 28));
+        iconLabel.setMaximumSize(new Dimension(28, 28));
+        iconLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        tile.add(iconLabel);
+        tile.add(Box.createVerticalStrut(8));
+
+        JLabel valLabel = new JLabel(value);
+        valLabel.setFont(new Font("SansSerif", Font.BOLD, 20));
+        valLabel.setForeground(UIConstants.TEXT_PRIMARY);
+        valLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        tile.add(valLabel);
+        tile.add(Box.createVerticalStrut(2));
+
+        JLabel nameLabel = new JLabel(label);
+        nameLabel.setFont(UIConstants.FONT_SMALL);
+        nameLabel.setForeground(UIConstants.TEXT_MUTED);
+        nameLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        tile.add(nameLabel);
+
+        return tile;
+    }
+
+    // ─── Payment Summary card (bottom right) ────────────────────────
+
+    private JPanel buildPaymentSummaryCard(List<String[]> allPayments) {
+        int paidCount = 0;
+        int unpaidCount = 0;
+        double totalPaid = 0;
+        double totalUnpaid = 0;
+
+        for (String[] p : allPayments) {
+            String status = p[6].trim();
+            double amount = 0;
+            try { amount = Double.parseDouble(p[3].trim()); } catch (NumberFormatException ignored) {}
+            if ("Paid".equalsIgnoreCase(status)) {
+                paidCount++;
+                totalPaid += amount;
+            } else {
+                unpaidCount++;
+                totalUnpaid += amount;
+            }
+        }
+
+        JPanel card = new JPanel() {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(Color.WHITE);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
+                g2.setColor(UIConstants.BORDER_DEFAULT);
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
+                g2.dispose();
+            }
+        };
+        card.setOpaque(false);
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setBorder(new EmptyBorder(20, 22, 20, 22));
+
+        JLabel title = new JLabel("Payment Summary");
+        title.setFont(new Font("SansSerif", Font.BOLD, 16));
+        title.setForeground(UIConstants.TEXT_PRIMARY);
+        title.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.add(title);
+        card.add(Box.createVerticalStrut(4));
+
+        JLabel subtitle = new JLabel("Collection status overview");
+        subtitle.setFont(UIConstants.FONT_SMALL);
+        subtitle.setForeground(UIConstants.TEXT_MUTED);
+        subtitle.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.add(subtitle);
+        card.add(Box.createVerticalStrut(20));
+
+        // Total collected
+        JLabel totalLabel = new JLabel(String.format("RM %.2f", totalPaid));
+        totalLabel.setFont(new Font("SansSerif", Font.BOLD, 28));
+        totalLabel.setForeground(new Color(40, 167, 69));
+        totalLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.add(totalLabel);
+        card.add(Box.createVerticalStrut(2));
+
+        JLabel totalNote = new JLabel("Total collected from " + paidCount + " payment" + (paidCount != 1 ? "s" : ""));
+        totalNote.setFont(UIConstants.FONT_SMALL);
+        totalNote.setForeground(UIConstants.TEXT_MUTED);
+        totalNote.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.add(totalNote);
+        card.add(Box.createVerticalStrut(18));
+
+        // Separator
+        JSeparator sep = new JSeparator();
+        sep.setForeground(new Color(235, 235, 240));
+        sep.setAlignmentX(Component.LEFT_ALIGNMENT);
+        sep.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1));
+        card.add(sep);
+        card.add(Box.createVerticalStrut(14));
+
+        // Paid vs Unpaid row
+        JPanel statsRow = new JPanel(new GridLayout(1, 2, 12, 0));
+        statsRow.setOpaque(false);
+        statsRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        statsRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
+
+        // Paid tile
+        JPanel paidTile = new JPanel() {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(220, 245, 225));
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
+                g2.dispose();
+            }
+        };
+        paidTile.setOpaque(false);
+        paidTile.setLayout(new BoxLayout(paidTile, BoxLayout.Y_AXIS));
+        paidTile.setBorder(new EmptyBorder(10, 14, 10, 14));
+
+        JLabel paidVal = new JLabel(String.valueOf(paidCount) + " Paid");
+        paidVal.setFont(new Font("SansSerif", Font.BOLD, 16));
+        paidVal.setForeground(new Color(40, 167, 69));
+        paidVal.setAlignmentX(Component.LEFT_ALIGNMENT);
+        paidTile.add(paidVal);
+
+        JLabel paidAmt = new JLabel(String.format("RM %.2f", totalPaid));
+        paidAmt.setFont(UIConstants.FONT_SMALL);
+        paidAmt.setForeground(new Color(40, 167, 69));
+        paidAmt.setAlignmentX(Component.LEFT_ALIGNMENT);
+        paidTile.add(paidAmt);
+
+        statsRow.add(paidTile);
+
+        // Unpaid tile
+        JPanel unpaidTile = new JPanel() {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(255, 243, 220));
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
+                g2.dispose();
+            }
+        };
+        unpaidTile.setOpaque(false);
+        unpaidTile.setLayout(new BoxLayout(unpaidTile, BoxLayout.Y_AXIS));
+        unpaidTile.setBorder(new EmptyBorder(10, 14, 10, 14));
+
+        JLabel unpaidVal = new JLabel(String.valueOf(unpaidCount) + " Unpaid");
+        unpaidVal.setFont(new Font("SansSerif", Font.BOLD, 16));
+        unpaidVal.setForeground(new Color(255, 165, 0));
+        unpaidVal.setAlignmentX(Component.LEFT_ALIGNMENT);
+        unpaidTile.add(unpaidVal);
+
+        JLabel unpaidAmt = new JLabel(String.format("RM %.2f", totalUnpaid));
+        unpaidAmt.setFont(UIConstants.FONT_SMALL);
+        unpaidAmt.setForeground(new Color(255, 165, 0));
+        unpaidAmt.setAlignmentX(Component.LEFT_ALIGNMENT);
+        unpaidTile.add(unpaidAmt);
+
+        statsRow.add(unpaidTile);
+
+        card.add(statsRow);
+        card.add(Box.createVerticalGlue());
+
+        return card;
     }
 
     // ─── Calendar content ─────────────────────────────────────────
@@ -517,6 +1136,10 @@ public class CounterStaffDashboard extends JPanel {
                             g2.setColor(new Color(235, 240, 255));
                             g2.fillRoundRect(2, 2, getWidth() - 4, getHeight() - 4, 10, 10);
                         }
+                        // Border for all date cells
+                        g2.setColor(isSel ? UIConstants.PRIMARY : new Color(220, 222, 230));
+                        g2.setStroke(new BasicStroke(1f));
+                        g2.drawRoundRect(2, 2, getWidth() - 5, getHeight() - 5, 10, 10);
                         g2.dispose();
                     }
                 };

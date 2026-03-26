@@ -12,18 +12,7 @@ public class OnboardingPage extends JPanel {
 
         // Main card
         JPanel card = UIFactory.createCard();
-        card.setBorder(BorderFactory.createCompoundBorder(
-                new DropShadowBorder(),
-                new EmptyBorder(50, 60, 50, 60)
-        ));
-
-        // Logo
-        ImageIcon originalIcon = new ImageIcon(getClass().getResource("/Image/apu-logo.png"));
-        Image scaledImage = originalIcon.getImage().getScaledInstance(120, 120, Image.SCALE_SMOOTH);
-        JLabel logoLabel = new JLabel(new ImageIcon(scaledImage));
-        logoLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(logoLabel);
-        card.add(Box.createVerticalStrut(30));
+        card.setBorder(new EmptyBorder(20, 60, 50, 60));
 
         // Title
         JLabel titleLabel = new JLabel("Welcome to APU ASC!");
@@ -39,7 +28,23 @@ public class OnboardingPage extends JPanel {
         subtitleLabel.setFont(UIConstants.FONT_BODY);
         subtitleLabel.setForeground(UIConstants.TEXT_SECONDARY);
         card.add(subtitleLabel);
-        card.add(Box.createVerticalStrut(40));
+        card.add(Box.createVerticalStrut(16));
+
+        // Features bullet points
+        JLabel featuresLabel = new JLabel(
+                "<html><div style='text-align:center;'>"
+                + "\u2022 Book and manage appointments<br>"
+                + "\u2022 Track service history and status<br>"
+                + "\u2022 Secure payment collection<br>"
+                + "\u2022 Customer and vehicle management"
+                + "</div></html>"
+        );
+        featuresLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        featuresLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        featuresLabel.setFont(UIConstants.FONT_SMALL);
+        featuresLabel.setForeground(UIConstants.TEXT_MUTED);
+        card.add(featuresLabel);
+        card.add(Box.createVerticalStrut(30));
 
         // "Create an Account" button
         JButton createBtn = UIFactory.createPrimaryButton("Create an Account");
@@ -52,6 +57,13 @@ public class OnboardingPage extends JPanel {
         loginBtn.addActionListener(e -> app.showPage(PageName.LOGIN));
         card.add(loginBtn);
 
-        add(card);
+        // Wrap card with pop-out logo
+        add(UIFactory.createCardWithLogo(card, getClass()));
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        UIFactory.paintPageGradientBackground(g, getWidth(), getHeight());
     }
 }
