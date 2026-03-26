@@ -5,3 +5,9 @@ bbb,bo@gmail.com,Bowie1234,customer,0
 test,t@gmail.com,123456789ss,customer,0
 Zhi Lin,lin@gmail.com,lin12345,customer,3
 Didi,didi@gmail.com,didi0000,customer,0
+Alex Wong,alex@apu.asc.com,Tech1234,technician,1
+Sarah Lee,sarah@apu.asc.com,Tech1234,technician,2
+Mike Tan,mike@apu.asc.com,Tech1234,technician,4
+James Lim,james@apu.asc.com,Tech1234,technician,5
+Amy Chen,amy@gmail.com,Cust1234,customer,6
+Ryan Ng,ryan@gmail.com,Cust1234,customer,3
