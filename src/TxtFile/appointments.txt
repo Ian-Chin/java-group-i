@@ -1,7 +1,7 @@
-# Appointment ID, User ID, Type, Status, Date, Time, Duration (Hours)
+# Appointment ID, User ID (Customer), User ID (Technician), Type, Status, Date, Time, Duration (Hours)
 
-AP1,C1,Normal Service,Completed,2025-03-05 09:00,1
-AP2,C2,Major Service,Completed,2025-03-15 11:00,3
-AP3,C3,Normal Service,Completed,2025-03-20 10:00,1
-AP4,C3,Major Service,In Progress,2025-03-26 13:00,3
-AP5,C3,Normal Service,Pending,2025-04-20 10:00,1
+AP1,C1,T1,Normal Service,Completed,2025-03-05 09:00,1
+AP2,C2,T2,Major Service,Completed,2025-03-15 11:00,3
+AP3,C3,T3,Normal Service,Completed,2025-03-20 10:00,1
+AP4,C3,T3,Major Service,In Progress,2025-03-26 13:00,3
+AP5,C3,T1,Normal Service,Pending,2025-04-20 10:00,1
