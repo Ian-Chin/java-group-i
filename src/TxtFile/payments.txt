@@ -1,5 +1,3 @@
-# Payment ID, User ID (Customer), User ID (Staff), Appoinment ID, Amount, Payment Date, Method, Status
-
 PY1,C1,S1,AP1,320.00,2025-03-05,Cash,Paid
 PY2,C2,S1,AP2,150.00,2025-03-15,Card,Paid
 PY3,C3,S2,AP3,80.00,2025-03-20,Online,Paid

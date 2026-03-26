@@ -484,10 +484,12 @@ public class CounterStaffDashboard extends JPanel {
             monthLabel.setText(currentMonth[0].getMonth().getDisplayName(TextStyle.FULL, Locale.ENGLISH) + " " + currentMonth[0].getYear());
             calGrid.removeAll();
 
-            Set<String> apptDates = new HashSet<>();
+            // Collect appointment statuses per date
+            Map<String, List<String>> apptsByDate = new HashMap<>();
             for (Appointment a : apptService.getAll()) {
                 String dt = a.getDateTime();
-                if (dt.contains(" ")) apptDates.add(dt.split(" ")[0]);
+                String apptDate = dt.contains(" ") ? dt.split(" ")[0] : dt;
+                apptsByDate.computeIfAbsent(apptDate, k -> new ArrayList<>()).add(a.getStatus());
             }
 
             LocalDate first = currentMonth[0].atDay(1);
@@ -499,12 +501,12 @@ public class CounterStaffDashboard extends JPanel {
 
             for (int d = 1; d <= daysInMonth; d++) {
                 LocalDate date = currentMonth[0].atDay(d);
-                boolean hasAppt = apptDates.contains(date.toString());
+                List<String> statuses = apptsByDate.getOrDefault(date.toString(), Collections.emptyList());
                 boolean isToday = date.equals(today);
                 boolean isSel = date.equals(selectedDate[0]);
                 final int day = d;
 
-                JLabel cell = new JLabel(String.valueOf(d), SwingConstants.CENTER) {
+                JPanel cell = new JPanel(new BorderLayout(0, 1)) {
                     @Override protected void paintComponent(Graphics g) {
                         Graphics2D g2 = (Graphics2D) g.create();
                         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -516,19 +518,61 @@ public class CounterStaffDashboard extends JPanel {
                             g2.fillRoundRect(2, 2, getWidth() - 4, getHeight() - 4, 10, 10);
                         }
                         g2.dispose();
-                        super.paintComponent(g);
-                        if (hasAppt && !isSel) {
-                            Graphics2D g3 = (Graphics2D) g.create();
-                            g3.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                            g3.setColor(UIConstants.PRIMARY);
-                            g3.fillOval(getWidth() / 2 - 3, getHeight() - 9, 6, 6);
-                            g3.dispose();
-                        }
                     }
                 };
-                cell.setFont(new Font("SansSerif", isToday || isSel ? Font.BOLD : Font.PLAIN, 14));
-                cell.setForeground(isSel ? Color.WHITE : (isToday ? UIConstants.PRIMARY : UIConstants.TEXT_DARK));
-                cell.setPreferredSize(new Dimension(44, 44));
+                cell.setOpaque(false);
+                cell.setPreferredSize(new Dimension(44, 56));
+
+                JLabel dayLabel = new JLabel(String.valueOf(d), SwingConstants.CENTER);
+                dayLabel.setFont(new Font("SansSerif", isToday || isSel ? Font.BOLD : Font.PLAIN, 14));
+                dayLabel.setForeground(isSel ? Color.WHITE : (isToday ? UIConstants.PRIMARY : UIConstants.TEXT_DARK));
+                cell.add(dayLabel, BorderLayout.CENTER);
+
+                // Status-colored bars at the bottom, one per appointment
+                if (!statuses.isEmpty()) {
+                    JPanel barsPanel = new JPanel();
+                    barsPanel.setLayout(new BoxLayout(barsPanel, BoxLayout.Y_AXIS));
+                    barsPanel.setOpaque(false);
+                    barsPanel.setBorder(new EmptyBorder(0, 6, 3, 6));
+
+                    int maxBars = Math.min(statuses.size(), 3);
+                    for (int si = 0; si < maxBars; si++) {
+                        String status = statuses.get(si);
+                        Color barColor;
+                        switch (status) {
+                            case "Completed":   barColor = new Color(40, 167, 69); break;
+                            case "In Progress": barColor = new Color(255, 165, 0); break;
+                            case "Pending":     barColor = new Color(108, 117, 125); break;
+                            default:            barColor = new Color(108, 117, 125); break;
+                        }
+                        final Color fc = isSel ? new Color(255, 255, 255, 200) : barColor;
+                        JPanel bar = new JPanel() {
+                            @Override protected void paintComponent(Graphics g) {
+                                Graphics2D g2 = (Graphics2D) g.create();
+                                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                                g2.setColor(fc);
+                                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 4, 4);
+                                g2.dispose();
+                            }
+                        };
+                        bar.setOpaque(false);
+                        bar.setPreferredSize(new Dimension(Integer.MAX_VALUE, 4));
+                        bar.setMaximumSize(new Dimension(Integer.MAX_VALUE, 4));
+                        bar.setAlignmentX(Component.LEFT_ALIGNMENT);
+                        barsPanel.add(bar);
+                        if (si < maxBars - 1) barsPanel.add(Box.createVerticalStrut(1));
+                    }
+                    // Show "+N" if more than 3
+                    if (statuses.size() > 3) {
+                        JLabel more = new JLabel("+" + (statuses.size() - 3), SwingConstants.CENTER);
+                        more.setFont(new Font("SansSerif", Font.BOLD, 8));
+                        more.setForeground(isSel ? Color.WHITE : UIConstants.TEXT_MUTED);
+                        more.setAlignmentX(Component.LEFT_ALIGNMENT);
+                        barsPanel.add(more);
+                    }
+                    cell.add(barsPanel, BorderLayout.SOUTH);
+                }
+
                 cell.setCursor(new Cursor(Cursor.HAND_CURSOR));
                 cell.addMouseListener(new MouseAdapter() {
                     @Override public void mouseClicked(MouseEvent e) {
@@ -669,11 +713,12 @@ public class CounterStaffDashboard extends JPanel {
         return btn;
     }
 
-    private String resolveUserName(AccountService svc, String email) {
+    private String resolveUserName(AccountService svc, String idOrEmail) {
         for (User u : svc.getAllUsers()) {
-            if (u.getEmail().equalsIgnoreCase(email)) return u.getName();
+            if (u.getEmail().equalsIgnoreCase(idOrEmail)) return u.getName();
+            if (u.getUserId() != null && u.getUserId().equalsIgnoreCase(idOrEmail)) return u.getName();
         }
-        return email;
+        return idOrEmail;
     }
 
     // ─── Profile content ─────────────────────────────────────────

@@ -512,12 +512,13 @@ public class AppointmentPanel extends JPanel {
         countLabel.setText(all.size() + " appointment" + (all.size() != 1 ? "s" : ""));
     }
 
-    private String resolveName(String email) {
+    private String resolveName(String idOrEmail) {
         List<User> all = accountService.getAllUsers();
         for (User u : all) {
-            if (u.getEmail().equalsIgnoreCase(email)) return u.getName();
+            if (u.getEmail().equalsIgnoreCase(idOrEmail)) return u.getName();
+            if (u.getUserId() != null && u.getUserId().equalsIgnoreCase(idOrEmail)) return u.getName();
         }
-        return email;
+        return idOrEmail;
     }
 
     // ─── Create handler ──────────────────────────────────────────
