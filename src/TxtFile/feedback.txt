@@ -1,0 +1,5 @@
+# Feedback ID, User ID (Customer), Appointment ID, Condition, Feedback, Date
+
+FB1,C1,AP1,Good,Full service completed - engine oil changed and filters replaced,Check coolant level in 2 months,2025-03-05
+FB2,C2,AP2,Good,Brake pads inspected and replaced on front wheels,Rear brake pads to be replaced next visit,2025-03-15
+FB3,C3,AP3,Excellent,Oil change completed successfully - engine running smoothly,Replace air filter at next service,2025-03-20

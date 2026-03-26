@@ -1,0 +1,7 @@
+# Appointment ID, User ID, Type, Status, Date, Time, Duration
+
+AP1,C1,Full Service,Completed,2025-03-05 09:00,2 hrs
+AP2,C2,Brake,Completed,2025-03-15 11:00,1 hr
+AP3,C3,Oil,Completed,2025-03-20 10:00,45 min
+AP4,C3,Tyre,In Progress,2025-03-26 13:00,30 min
+AP5,C3,Battery,Pending,2025-04-20 10:00,2 hrs

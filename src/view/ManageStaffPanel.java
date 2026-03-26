@@ -289,7 +289,8 @@ public class ManageStaffPanel extends JPanel {
             error("Email already taken."); return;
         }
 
-        User updated = new User(name, email, original.getPassword(), role, original.getProfilePicture());
+        // CORRECT — uses the role the admin selected in the dropdown
+        User updated = new User(original.getUserId(), name, email, original.getPassword(), role, original.getProfilePicture());
         accountService.updateUser(original.getEmail(), updated);
         dialog.dispose();
         refreshTable((String) roleFilter.getSelectedItem());

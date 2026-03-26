@@ -494,7 +494,7 @@ public class CounterStaffDashboard extends JPanel {
             JOptionPane.showMessageDialog(app, "An account with this email already exists.", "Error", JOptionPane.ERROR_MESSAGE); return;
         }
 
-        User updated = new User(newName, newEmail, user.getPassword(), user.getRole(), selectedAvatarIndex);
+        User updated = new User(user.getUserId(), newName, newEmail, user.getPassword(), user.getRole(), selectedAvatarIndex);
         if (svc.updateUser(user.getEmail(), updated)) {
             app.setLoggedInUser(newName);
             app.setLoggedInUserObj(updated);
