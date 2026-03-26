@@ -297,7 +297,7 @@ public class CustomerDashboardController {
         }
 
         // Read this user's vehicles from vehicles.txt
-        List<String[]> allVehicles = vehicleService.getVehiclesByEmail(user.getEmail());
+        List<String[]> allVehicles = vehicleService.getVehiclesByUserId(user.getUserId());
 
         // Only pass the first 3 to the UI
         int limit = Math.min(3, allVehicles.size());
@@ -335,7 +335,7 @@ public class CustomerDashboardController {
 
         // Save the vehicle to vehicles.txt
         boolean saved = vehicleService.addVehicle(
-                user.getEmail(), plate, brand, year, colour);
+                user.getUserId(), plate, brand, year, colour);
 
         if (saved) {
             refreshVehicleList(); // reload so the new vehicle appears
@@ -380,7 +380,7 @@ public class CustomerDashboardController {
 
         // Update the record in place in vehicles.txt
         boolean updated = vehicleService.updateVehicle(
-                user.getEmail(), oldPlate, newPlate, newBrand, newYear, newColour);
+        		user.getUserId(), oldPlate, newPlate, newBrand, newYear, newColour);
 
         if (updated) {
             refreshVehicleList(); // reload to show the updated vehicle
@@ -415,7 +415,7 @@ public class CustomerDashboardController {
         if (choice == JOptionPane.YES_OPTION) {
             User user = view.getLoggedInUserObj();
 
-            if (user != null && vehicleService.deleteVehicle(user.getEmail(), plate)) {
+            if (user != null && vehicleService.deleteVehicle(user.getUserId(), plate)) {
                 refreshVehicleList(); // reload to remove the deleted vehicle from the list
             } else {
                 view.showMessage("Failed to remove vehicle.", "Error",

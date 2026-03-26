@@ -1,0 +1,5 @@
+# Comment ID, User ID (Customer), Appointment ID, Rating, Comment, User ID (Staff), User ID (Technician)
+
+CM1,C1,AP1,4.0,Service was thorough and staff were helpful.,S1,T1
+CM2,C2,AP2,5.0,Excellent work - brakes feel much better now.,S2,T2
+CM3,C3,AP3,4.5,Quick and efficient oil change. Very satisfied.,S1,T3

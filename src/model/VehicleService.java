@@ -7,18 +7,15 @@ import java.util.List;
 /**
  * VehicleService manages all vehicle-related data stored in vehicles.txt.
  *
- * It can:
- *  - Read all vehicles belonging to a customer (getVehiclesByEmail)
- *  - Add a new vehicle (addVehicle)
- *  - Delete a vehicle (deleteVehicle)
- *
  * File format — each line has exactly 6 values separated by commas:
- *   vehicleID , email , plateNumber , brand , year , colour
+ *   vehicleID , userID , plateNumber , brand , year , colour
  *
  * Example lines in vehicles.txt:
- *   V1,bo@gmail.com,WXY1234,Toyota Vios,2021,White
- *   V2,t@gmail.com,ABC5678,Honda City,2019,Silver
- *   V3,lin@gmail.com,LIN110,Mercedes AMG Coupe,2025,White
+ *   V1,C1,WXY1234,Toyota Vios,2021,White
+ *   V2,C2,ABC5678,Honda City,2019,Silver
+ *   V3,C3,LIN110,Mercedes AMG Coupe,2025,White
+ *
+ * NOTE: The second column is now userID (e.g. "C1") instead of email.
  */
 public class VehicleService {
 
@@ -30,7 +27,7 @@ public class VehicleService {
     private static final int EXPECTED_COLUMNS = 6;
 
     /**
-     * Reads vehicles.txt and returns all vehicles that belong to the given email.
+     * Returns all vehicles belonging to the given userID.
      *
      * Each vehicle is returned as a String array with 5 elements:
      *   [0] vehicleID  e.g. "V1"
@@ -39,13 +36,13 @@ public class VehicleService {
      *   [3] year       e.g. "2021"
      *   [4] colour     e.g. "White"
      *
-     * Note: the email (column 1) is not included in the returned array
-     * because the caller already knows the email.
+     * Note: the userID (column 1) is not included in the returned array
+     * because the caller already knows the userID.
      *
-     * @param email  the customer's email address to search for
+     * @param userId  the customer's user ID to search for (e.g. "C3")
      * @return a list of vehicle arrays (empty list if no vehicles found)
      */
-    public List<String[]> getVehiclesByEmail(String email) {
+    public List<String[]> getVehiclesByUserId(String userId) {
         List<String[]> result = new ArrayList<>();
 
         File file = new File(FILE_PATH);
@@ -73,9 +70,9 @@ public class VehicleService {
                     continue;
                 }
 
-                // Column index 1 is the email — check if it matches
-                String emailInFile = columns[1].trim();
-                if (emailInFile.equalsIgnoreCase(email)) {
+                // Column index 1 is now userID — check if it matches
+                String userIdInFile = columns[1].trim();
+                if (userIdInFile.equalsIgnoreCase(userId)) {
                     // Build the 5-element array to return
                     String[] vehicle = new String[]{
                             columns[0].trim(), // vehicleID
@@ -95,22 +92,20 @@ public class VehicleService {
     }
 
     /**
-     * Adds a new vehicle to vehicles.txt.
+     * Adds a new vehicle to vehicles.txt using userID instead of email.
      * A vehicle ID is generated automatically (e.g. V1, V2, V3...).
      *
-     * Throws IllegalArgumentException if any field is blank.
-     *
-     * @param email   the customer's email address
+     * @param userId  the customer's user ID (e.g. "C3")
      * @param plate   the car plate number (e.g. "WXY1234")
      * @param brand   the car brand/model (e.g. "Toyota Vios")
      * @param year    the year of manufacture (e.g. "2021")
      * @param colour  the colour of the car (e.g. "White")
      * @return true if the vehicle was saved successfully
      */
-    public boolean addVehicle(String email, String plate, String brand,
+    public boolean addVehicle(String userId, String plate, String brand,
                               String year, String colour) {
         // Make sure none of the fields are empty
-        if (isAnyBlank(email, plate, brand, year, colour)) {
+        if (isAnyBlank(userId, plate, brand, year, colour)) {
             throw new IllegalArgumentException("All vehicle fields are required.");
         }
 
@@ -126,12 +121,12 @@ public class VehicleService {
             // Append a new line to the file
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(file, true))) {
                 writer.write(newVehicleID + ","
-                        + email.trim()  + ","
-                        + plate.trim()  + ","
-                        + brand.trim()  + ","
-                        + year.trim()   + ","
+                        + userId.trim()  + ","
+                        + plate.trim()   + ","
+                        + brand.trim()   + ","
+                        + year.trim()    + ","
                         + colour.trim());
-                writer.newLine(); // move to the next line
+                writer.newLine();
             }
 
             return true;
@@ -143,19 +138,18 @@ public class VehicleService {
     }
 
     /**
-     * Removes a vehicle from vehicles.txt.
-     * The vehicle is identified by matching both the email AND the plate number.
+     * Removes a vehicle from vehicles.txt, matched by userID + plate number.
      *
      * How it works:
      *  1. Read all lines from the file
-     *  2. Keep every line EXCEPT the one that matches email + plate
+     *  2. Keep every line EXCEPT the one that matches userID + plate
      *  3. Write the remaining lines back to the file
      *
-     * @param email  the customer's email address
-     * @param plate  the car plate number of the vehicle to remove
+     * @param userId  the customer's user ID (e.g. "C3")
+     * @param plate   the car plate number of the vehicle to remove
      * @return true if the vehicle was found and removed, false if not found
      */
-    public boolean deleteVehicle(String email, String plate) {
+    public boolean deleteVehicle(String userId, String plate) {
         File file = new File(FILE_PATH);
 
         // Cannot delete from a file that does not exist
@@ -165,7 +159,7 @@ public class VehicleService {
         boolean vehicleWasFound = false;
         int lineNumber = 0;
 
-        // Step 1: Read all lines, skip the one that matches email + plate
+        // Step 1: Read all lines, skip the one that matches userID + plate
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             String line;
 
@@ -183,11 +177,11 @@ public class VehicleService {
                     continue;
                 }
 
-                String emailInFile = columns[1].trim();
-                String plateInFile = columns[2].trim();
+                String userIdInFile = columns[1].trim();
+                String plateInFile  = columns[2].trim();
 
-                // Check if this is the vehicle to delete
-                boolean isMatchingVehicle = emailInFile.equalsIgnoreCase(email)
+                // Check if this is the vehicle to delete (match userID + plate)
+                boolean isMatchingVehicle = userIdInFile.equalsIgnoreCase(userId)
                         && plateInFile.equalsIgnoreCase(plate);
 
                 if (isMatchingVehicle) {
@@ -221,13 +215,10 @@ public class VehicleService {
 
     /**
      * Updates an existing vehicle record in vehicles.txt IN PLACE.
-     * This means the vehicle stays in the same position in the file —
-     * the order of vehicles does not change after editing.
-     *
-     * The vehicle to update is found by matching both email AND the OLD plate number.
+     * The vehicle is found by matching both userID AND the OLD plate number.
      * Once found, that line is replaced with the new values.
      *
-     * @param email     the customer's email address
+     * @param userId    the customer's user ID (e.g. "C3")
      * @param oldPlate  the original plate number (used to find the record)
      * @param newPlate  the new plate number
      * @param newBrand  the updated brand / model
@@ -235,7 +226,7 @@ public class VehicleService {
      * @param newColour the updated colour
      * @return true if the vehicle was found and updated, false if not found
      */
-    public boolean updateVehicle(String email, String oldPlate,
+    public boolean updateVehicle(String userId, String oldPlate,
                                  String newPlate, String newBrand,
                                  String newYear, String newColour) {
         File file = new File(FILE_PATH);
@@ -261,21 +252,21 @@ public class VehicleService {
                     continue;
                 }
 
-                String emailInFile = columns[1].trim();
-                String plateInFile = columns[2].trim();
+                String userIdInFile = columns[1].trim();
+                String plateInFile  = columns[2].trim();
 
-                // Check if this is the vehicle to update
-                boolean isMatchingVehicle = emailInFile.equalsIgnoreCase(email)
+                // Check if this is the vehicle to update (match userID + old plate)
+                boolean isMatchingVehicle = userIdInFile.equalsIgnoreCase(userId)
                         && plateInFile.equalsIgnoreCase(oldPlate);
 
                 if (isMatchingVehicle) {
                     // Keep the same vehicleID, just replace the other fields
-                    String vehicleID  = columns[0].trim();
-                    String updatedLine = vehicleID        + ","
-                            + email.trim()    + ","
-                            + newPlate.trim() + ","
-                            + newBrand.trim() + ","
-                            + newYear.trim()  + ","
+                    String vehicleID   = columns[0].trim();
+                    String updatedLine = vehicleID         + ","
+                            + userId.trim()    + ","
+                            + newPlate.trim()  + ","
+                            + newBrand.trim()  + ","
+                            + newYear.trim()   + ","
                             + newColour.trim();
                     updatedLines.add(updatedLine);
                     vehicleWasFound = true;
@@ -305,9 +296,9 @@ public class VehicleService {
         return true;
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     // PRIVATE HELPER METHODS
-    // ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
 
     /**
      * Generates the next vehicle ID by finding the highest existing
@@ -335,12 +326,8 @@ public class VehicleService {
                         String vehicleID = columns[0].trim();
 
                         // Check if the ID matches the pattern "V" followed by a number
-                        // e.g. "V1", "V2", "V10" — yes. "ABC" — no.
                         if (vehicleID.matches("V\\d+")) {
-                            // Extract the number part (remove the "V")
                             int number = Integer.parseInt(vehicleID.substring(1));
-
-                            // Track the highest number found
                             if (number > highestNumber) {
                                 highestNumber = number;
                             }
@@ -352,23 +339,19 @@ public class VehicleService {
             }
         }
 
-        // Next ID is one more than the highest found
         return "V" + (highestNumber + 1);
     }
 
     /**
-     * Checks if any of the given String values are null or blank (empty/whitespace).
+     * Checks if any of the given String values are null or blank.
      * Returns true if at least one value is blank, false if all are filled.
-     *
-     * Example: isAnyBlank("lin@gmail.com", "", "Toyota") → true (second value is blank)
-     *          isAnyBlank("lin@gmail.com", "V123", "Toyota") → false (all filled)
      */
     private boolean isAnyBlank(String... values) {
         for (String value : values) {
             if (value == null || value.trim().isEmpty()) {
-                return true; // found a blank value
+                return true;
             }
         }
-        return false; // all values are filled
+        return false;
     }
 }

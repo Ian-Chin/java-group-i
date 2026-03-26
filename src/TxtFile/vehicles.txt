@@ -1,4 +1,5 @@
-V1,bo@gmail.com,WXY1234,Toyota Vios,2021,White
-V2,t@gmail.com,ABC5678,Honda City,2019,Silver
-V3,lin@gmail.com,LIN110,Mercedes AMG Coupe,2025,White
-V4,lin@gmail.com,NEW123,BMW i5,2024,Black
+# vehicle ID, User ID (Customer ID), Car Plate Number, Brand / Model, Year, Color
+V1,C1,WXY1234,Toyota Vios,2021,White
+V2,C2,ABC5678,Honda City,2019,Silver
+V3,C3,LIN110,Mercedes AMG Coupe,2025,White
+V4,C3,NEW123,BMW i5,2024,Black

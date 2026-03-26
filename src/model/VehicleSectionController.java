@@ -5,19 +5,10 @@ import java.util.List;
 /**
  * VehicleSectionController handles all logic for the My Vehicle section.
  *
- * It implements the SectionController interface, which means it provides
- * the four core actions: refreshList, handleAdd, handleEdit, handleDelete.
- *
- * When your teammates build other sections (Service History, Payment History,
- * Feedback), they create a new class that also implements SectionController
- * and fill in their own logic. The structure is exactly the same.
- *
  * Java OOP principles used:
  *  - Inheritance  : implements SectionController interface
- *  - Polymorphism : the four methods have vehicle-specific behaviour but can
- *                   be called through the common SectionController type
+ *  - Polymorphism : the four methods have vehicle-specific behaviour
  *  - Encapsulation: vehicle validation rules and file operations are hidden
- *                   inside this class — the view never touches them directly
  *  - Abstraction  : the dashboard only calls handleAdd(fields) without
  *                   knowing HOW vehicles are validated or saved
  *
@@ -78,19 +69,23 @@ public class VehicleSectionController implements SectionController {
     /**
      * Reads vehicles.txt and tells the UI to rebuild the vehicle list.
      * Only shows the first 3 vehicles (top 3).
+     *
+     * Uses getUserId() instead of getEmail() to look up vehicles,
+     * because vehicles.txt now stores user ID (e.g. "C3") not email.
      */
     @Override
     public void refreshList() {
         User user = view.getLoggedInUser();
 
+        // No user logged in — pass empty list so UI shows "No vehicles registered."
         if (user == null) {
-            // No user logged in — pass empty list so UI shows "No vehicles registered."
             view.rebuildList(new java.util.ArrayList<>());
             return;
         }
 
         // Read all vehicles belonging to this user from vehicles.txt
-        List<String[]> allVehicles = vehicleService.getVehiclesByEmail(user.getEmail());
+        // Using getUserId() (e.g. "C3") instead of getEmail()
+        List<String[]> allVehicles = vehicleService.getVehiclesByUserId(user.getUserId());
 
         // Only show the first 3
         int limit = Math.min(3, allVehicles.size());
@@ -117,17 +112,18 @@ public class VehicleSectionController implements SectionController {
             return false;
         }
 
-        // Step 2: Get the logged-in user's email
+        // Step 2: Get the logged-in user
         User user = view.getLoggedInUser();
         if (user == null) return false;
 
         // Step 3: Save the new vehicle to vehicles.txt
+        // Using getUserId() (e.g. "C3") instead of getEmail()
         boolean saved = vehicleService.addVehicle(
-                user.getEmail(),
-                fields[0], // plate
-                fields[1], // brand
-                fields[2], // year
-                fields[3]  // colour
+                user.getUserId(), // was user.getEmail()
+                fields[0],        // plate
+                fields[1],        // brand
+                fields[2],        // year
+                fields[3]         // colour
         );
 
         if (saved) {
@@ -157,18 +153,19 @@ public class VehicleSectionController implements SectionController {
             return false;
         }
 
-        // Step 2: Get the logged-in user's email
+        // Step 2: Get the logged-in user
         User user = view.getLoggedInUser();
         if (user == null) return false;
 
         // Step 3: Update the record in place — keeps original position in vehicles.txt
+        // Using getUserId() (e.g. "C3") instead of getEmail()
         boolean updated = vehicleService.updateVehicle(
-                user.getEmail(),
-                id,        // old plate (identifies which record to update)
-                fields[0], // new plate
-                fields[1], // new brand
-                fields[2], // new year
-                fields[3]  // new colour
+                user.getUserId(), // was user.getEmail()
+                id,               // old plate (identifies which record to update)
+                fields[0],        // new plate
+                fields[1],        // new brand
+                fields[2],        // new year
+                fields[3]         // new colour
         );
 
         if (updated) {
@@ -199,7 +196,8 @@ public class VehicleSectionController implements SectionController {
         if (choice == javax.swing.JOptionPane.YES_OPTION) {
             User user = view.getLoggedInUser();
 
-            if (user != null && vehicleService.deleteVehicle(user.getEmail(), id)) {
+            // Using getUserId() (e.g. "C3") instead of getEmail()
+            if (user != null && vehicleService.deleteVehicle(user.getUserId(), id)) {
                 refreshList(); // reload to remove the deleted vehicle from the list
             } else {
                 view.showMessage("Failed to remove vehicle.", "Error",

@@ -1,10 +1,13 @@
-Ian Chin,ian@apu.asc.com,admin1234,staff,0
-Bowie,b@gmail.com,Bowie1234,admin,7
-xxx,x@gmail.com,XXX1234,staff,0
-bbb,bo@gmail.com,Bowie1234,customer,0
-test,te@gmail.com,123456789ss,customer,0
-Zhi Lin,lin@gmail.com,lin12345,customer,3
-Didi,didi@gmail.com,didi0000,customer,0
-tech1,t@gmail.com,tech1234,technician,0
-tech2,t2@gmail.com,t123456,technician,0
-tech3,t3@gmail.com,t31234tt,technician,0
+M1,Bowie,b@gmail.com,Bowie1234,admin,7
+S1,Ian Chin,ian@apu.asc.com,admin1234,staff,0
+S2,xxx,x@gmail.com,XXX1234,staff,0
+T1,Alex Wong,alex@apu.asc.com,Tech1234,technician,1
+T2,Sarah Lee,sarah@apu.asc.com,Tech1234,technician,2
+T3,Mike Tan,mike@apu.asc.com,Tech1234,technician,4
+T4,James Lim,james@apu.asc.com,Tech1234,technician,5
+C1,bbb,bo@gmail.com,Bowie1234,customer,0
+C2,test,t@gmail.com,123456789ss,customer,0
+C3,Zhi Lin,lin@gmail.com,lin12345,customer,1
+C4,Didi,didi@gmail.com,didi0000,customer,0
+C5,Amy Chen,amy@gmail.com,Cust1234,customer,6
+C6,Ryan Ng,ryan@gmail.com,Cust1234,customer,3

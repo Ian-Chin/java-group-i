@@ -1,6 +1,8 @@
 package view;
 
 import model.AccountService;
+import model.AppointmentService;
+import model.AppointmentService.Appointment;
 import model.User;
 
 import javax.swing.*;
@@ -8,6 +10,11 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.format.TextStyle;
+import java.util.*;
+import java.util.List;
 
 public class CounterStaffDashboard extends JPanel {
 
@@ -40,10 +47,10 @@ public class CounterStaffDashboard extends JPanel {
     };
 
     private static final String[] NAV_ITEMS = {
-            "Dashboard", "Customer Management", "Appointments", "Payment Collection"
+            "Dashboard", "Customer Management", "Appointments", "Calendar", "Payment Collection"
     };
     private static final String[] NAV_ICONS = {
-            "\u2302", "\u2663", "\u2637", "\u2696"
+            "\u2302", "\u2663", "\u2637", "\u2339", "\u2696"
     };
 
     public CounterStaffDashboard(AppFrame app) {
@@ -62,7 +69,8 @@ public class CounterStaffDashboard extends JPanel {
 
         contentPanel.add(buildDashboardContent(),                        "Dashboard");
         contentPanel.add(new CustomerManagementPanel(app.getAccountService()), "Customer Management");
-        contentPanel.add(buildPlaceholder("Appointments"),        "Appointments");
+        contentPanel.add(new AppointmentPanel(app.getAccountService()), "Appointments");
+        contentPanel.add(buildCalendarContent(),                        "Calendar");
         contentPanel.add(buildPlaceholder("Payment Collection"),  "Payment Collection");
         contentPanel.add(buildProfileContent(),            "Profile");
 
@@ -337,6 +345,337 @@ public class CounterStaffDashboard extends JPanel {
         return page;
     }
 
+    // ─── Calendar content ─────────────────────────────────────────
+
+    private JPanel buildCalendarContent() {
+        JPanel page = new JPanel(new BorderLayout(16, 0));
+        page.setBackground(UIConstants.BG_CONTENT);
+        page.setBorder(new EmptyBorder(30, 36, 30, 36));
+
+        AppointmentService apptService = new AppointmentService();
+        AccountService acctService = app.getAccountService();
+        final YearMonth[] currentMonth = { YearMonth.now() };
+        final LocalDate[] selectedDate = { LocalDate.now() };
+
+        // ── LEFT: Calendar card (big) ────────────────────────────────
+        JPanel calCard = new JPanel(new BorderLayout()) {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(Color.WHITE);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
+                g2.setColor(UIConstants.BORDER_DEFAULT);
+                g2.setStroke(new BasicStroke(1f));
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 16, 16);
+                g2.dispose();
+            }
+        };
+        calCard.setOpaque(false);
+        calCard.setBorder(new EmptyBorder(28, 32, 24, 32));
+
+        // Month navigation header
+        JPanel navRow = new JPanel(new BorderLayout());
+        navRow.setOpaque(false);
+        navRow.setBorder(new EmptyBorder(0, 0, 16, 0));
+
+        JLabel monthLabel = new JLabel("", SwingConstants.CENTER);
+        monthLabel.setFont(new Font("SansSerif", Font.BOLD, 22));
+        monthLabel.setForeground(UIConstants.TEXT_PRIMARY);
+
+        JButton prevBtn = calNavBtn("\u25C0");
+        JButton nextBtn = calNavBtn("\u25B6");
+
+        navRow.add(prevBtn, BorderLayout.WEST);
+        navRow.add(monthLabel, BorderLayout.CENTER);
+        navRow.add(nextBtn, BorderLayout.EAST);
+        calCard.add(navRow, BorderLayout.NORTH);
+
+        // Calendar grid
+        JPanel calBody = new JPanel(new BorderLayout(0, 8));
+        calBody.setOpaque(false);
+
+        JPanel dowRow = new JPanel(new GridLayout(1, 7, 4, 0));
+        dowRow.setOpaque(false);
+        dowRow.setBorder(new EmptyBorder(0, 0, 4, 0));
+        for (String d : new String[]{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"}) {
+            JLabel dl = new JLabel(d, SwingConstants.CENTER);
+            dl.setFont(new Font("SansSerif", Font.BOLD, 13));
+            dl.setForeground(UIConstants.TEXT_MUTED);
+            dowRow.add(dl);
+        }
+        calBody.add(dowRow, BorderLayout.NORTH);
+
+        JPanel calGrid = new JPanel(new GridLayout(0, 7, 4, 4));
+        calGrid.setOpaque(false);
+        calBody.add(calGrid, BorderLayout.CENTER);
+
+        calCard.add(calBody, BorderLayout.CENTER);
+
+        // ── RIGHT: Summary card ──────────────────────────────────────
+        JPanel summaryCard = new JPanel(new BorderLayout()) {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(Color.WHITE);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
+                g2.setColor(UIConstants.BORDER_DEFAULT);
+                g2.setStroke(new BasicStroke(1f));
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 16, 16);
+                g2.dispose();
+            }
+        };
+        summaryCard.setOpaque(false);
+        summaryCard.setBorder(new EmptyBorder(24, 24, 24, 24));
+        summaryCard.setPreferredSize(new Dimension(340, 0));
+        summaryCard.setMinimumSize(new Dimension(340, 0));
+
+        JLabel summaryTitle = new JLabel("Appointments for today");
+        summaryTitle.setFont(new Font("SansSerif", Font.BOLD, 16));
+        summaryTitle.setForeground(UIConstants.TEXT_PRIMARY);
+        summaryTitle.setBorder(new EmptyBorder(0, 0, 14, 0));
+        summaryCard.add(summaryTitle, BorderLayout.NORTH);
+
+        JPanel summaryContent = new JPanel();
+        summaryContent.setLayout(new BoxLayout(summaryContent, BoxLayout.Y_AXIS));
+        summaryContent.setOpaque(false);
+
+        JScrollPane summaryScroll = new JScrollPane(summaryContent,
+                JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+                JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        summaryScroll.setBorder(null);
+        summaryScroll.setOpaque(false);
+        summaryScroll.getViewport().setOpaque(false);
+        summaryScroll.getVerticalScrollBar().setUnitIncrement(12);
+        summaryCard.add(summaryScroll, BorderLayout.CENTER);
+
+        // ── Refresh summary cards ────────────────────────────────────
+        Runnable refreshSummary = () -> {
+            summaryContent.removeAll();
+            List<Appointment> all = apptService.getAll();
+            String dateStr = selectedDate[0].toString();
+            summaryTitle.setText("Appointments for " + dateStr);
+            int count = 0;
+            for (Appointment a : all) {
+                String dt = a.getDateTime();
+                String apptDate = dt.contains(" ") ? dt.split(" ")[0] : dt;
+                if (!apptDate.equals(dateStr)) continue;
+                count++;
+                String time = dt.contains(" ") ? dt.split(" ")[1] : "";
+                String custName = resolveUserName(acctService, a.getCustomerEmail());
+                String techName = resolveUserName(acctService, a.getTechnicianEmail());
+                summaryContent.add(buildAppointmentCard(a.getId(), custName, techName, a.getServiceType(), time, a.getDurationHours(), a.getStatus()));
+                summaryContent.add(Box.createVerticalStrut(8));
+            }
+            if (count == 0) {
+                JLabel empty = new JLabel("No appointments on this date");
+                empty.setFont(UIConstants.FONT_BODY);
+                empty.setForeground(UIConstants.TEXT_MUTED);
+                empty.setAlignmentX(Component.LEFT_ALIGNMENT);
+                empty.setBorder(new EmptyBorder(12, 0, 0, 0));
+                summaryContent.add(empty);
+            }
+            summaryContent.revalidate();
+            summaryContent.repaint();
+        };
+
+        // ── Calendar grid refresh ────────────────────────────────────
+        Runnable[] calRefresh = new Runnable[1];
+        calRefresh[0] = () -> {
+            monthLabel.setText(currentMonth[0].getMonth().getDisplayName(TextStyle.FULL, Locale.ENGLISH) + " " + currentMonth[0].getYear());
+            calGrid.removeAll();
+
+            Set<String> apptDates = new HashSet<>();
+            for (Appointment a : apptService.getAll()) {
+                String dt = a.getDateTime();
+                if (dt.contains(" ")) apptDates.add(dt.split(" ")[0]);
+            }
+
+            LocalDate first = currentMonth[0].atDay(1);
+            int startDow = first.getDayOfWeek().getValue() % 7;
+            int daysInMonth = currentMonth[0].lengthOfMonth();
+            LocalDate today = LocalDate.now();
+
+            for (int i = 0; i < startDow; i++) calGrid.add(new JLabel(""));
+
+            for (int d = 1; d <= daysInMonth; d++) {
+                LocalDate date = currentMonth[0].atDay(d);
+                boolean hasAppt = apptDates.contains(date.toString());
+                boolean isToday = date.equals(today);
+                boolean isSel = date.equals(selectedDate[0]);
+                final int day = d;
+
+                JLabel cell = new JLabel(String.valueOf(d), SwingConstants.CENTER) {
+                    @Override protected void paintComponent(Graphics g) {
+                        Graphics2D g2 = (Graphics2D) g.create();
+                        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                        if (isSel) {
+                            g2.setColor(UIConstants.PRIMARY);
+                            g2.fillRoundRect(2, 2, getWidth() - 4, getHeight() - 4, 10, 10);
+                        } else if (isToday) {
+                            g2.setColor(new Color(235, 240, 255));
+                            g2.fillRoundRect(2, 2, getWidth() - 4, getHeight() - 4, 10, 10);
+                        }
+                        g2.dispose();
+                        super.paintComponent(g);
+                        if (hasAppt && !isSel) {
+                            Graphics2D g3 = (Graphics2D) g.create();
+                            g3.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                            g3.setColor(UIConstants.PRIMARY);
+                            g3.fillOval(getWidth() / 2 - 3, getHeight() - 9, 6, 6);
+                            g3.dispose();
+                        }
+                    }
+                };
+                cell.setFont(new Font("SansSerif", isToday || isSel ? Font.BOLD : Font.PLAIN, 14));
+                cell.setForeground(isSel ? Color.WHITE : (isToday ? UIConstants.PRIMARY : UIConstants.TEXT_DARK));
+                cell.setPreferredSize(new Dimension(44, 44));
+                cell.setCursor(new Cursor(Cursor.HAND_CURSOR));
+                cell.addMouseListener(new MouseAdapter() {
+                    @Override public void mouseClicked(MouseEvent e) {
+                        selectedDate[0] = currentMonth[0].atDay(day);
+                        calRefresh[0].run();
+                        refreshSummary.run();
+                    }
+                });
+                calGrid.add(cell);
+            }
+            calGrid.revalidate();
+            calGrid.repaint();
+        };
+
+        prevBtn.addActionListener(e -> { currentMonth[0] = currentMonth[0].minusMonths(1); calRefresh[0].run(); });
+        nextBtn.addActionListener(e -> { currentMonth[0] = currentMonth[0].plusMonths(1); calRefresh[0].run(); });
+
+        // Initial render
+        calRefresh[0].run();
+        refreshSummary.run();
+
+        // Layout: calendar (big) on left, summaries on right
+        page.add(calCard, BorderLayout.CENTER);
+        page.add(summaryCard, BorderLayout.EAST);
+        return page;
+    }
+
+    private JPanel buildAppointmentCard(String id, String customer, String technician,
+                                         String service, String time, int hours, String status) {
+        JPanel card = new JPanel(new BorderLayout(12, 0)) {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(248, 249, 252));
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
+                g2.setColor(new Color(230, 232, 240));
+                g2.setStroke(new BasicStroke(1f));
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
+                g2.dispose();
+            }
+        };
+        card.setOpaque(false);
+        card.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 80));
+        card.setBorder(new EmptyBorder(12, 16, 12, 16));
+
+        // Left: color bar based on status
+        Color barColor;
+        switch (status) {
+            case "Completed":   barColor = new Color(40, 167, 69); break;
+            case "In Progress": barColor = new Color(255, 165, 0); break;
+            default:            barColor = new Color(108, 117, 125); break;
+        }
+        JPanel bar = new JPanel() {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(barColor);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 6, 6);
+                g2.dispose();
+            }
+        };
+        bar.setOpaque(false);
+        bar.setPreferredSize(new Dimension(4, 0));
+        card.add(bar, BorderLayout.WEST);
+
+        // Center: details
+        JPanel details = new JPanel();
+        details.setLayout(new BoxLayout(details, BoxLayout.Y_AXIS));
+        details.setOpaque(false);
+
+        JLabel topLine = new JLabel(id + "  \u2022  " + service + "  \u2022  " + hours + "h");
+        topLine.setFont(UIConstants.FONT_BODY_BOLD);
+        topLine.setForeground(UIConstants.TEXT_PRIMARY);
+        topLine.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel midLine = new JLabel("Customer: " + customer + "   |   Technician: " + technician);
+        midLine.setFont(UIConstants.FONT_SMALL);
+        midLine.setForeground(UIConstants.TEXT_SECONDARY);
+        midLine.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        details.add(topLine);
+        details.add(Box.createVerticalStrut(4));
+        details.add(midLine);
+        card.add(details, BorderLayout.CENTER);
+
+        // Right: time + status badge
+        JPanel rightSide = new JPanel();
+        rightSide.setLayout(new BoxLayout(rightSide, BoxLayout.Y_AXIS));
+        rightSide.setOpaque(false);
+
+        JLabel timeLabel = new JLabel(time);
+        timeLabel.setFont(UIConstants.FONT_BODY_BOLD);
+        timeLabel.setForeground(UIConstants.TEXT_DARK);
+        timeLabel.setAlignmentX(Component.RIGHT_ALIGNMENT);
+        timeLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+
+        JLabel statusLabel = new JLabel(status) {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                Color bg;
+                switch (status) {
+                    case "Completed":   bg = new Color(220, 245, 225); break;
+                    case "In Progress": bg = new Color(255, 243, 220); break;
+                    default:            bg = new Color(235, 235, 240); break;
+                }
+                g2.setColor(bg);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        statusLabel.setFont(new Font("SansSerif", Font.BOLD, 11));
+        statusLabel.setForeground(barColor);
+        statusLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        statusLabel.setAlignmentX(Component.RIGHT_ALIGNMENT);
+        statusLabel.setPreferredSize(new Dimension(85, 24));
+        statusLabel.setMaximumSize(new Dimension(85, 24));
+
+        rightSide.add(timeLabel);
+        rightSide.add(Box.createVerticalStrut(6));
+        rightSide.add(statusLabel);
+        card.add(rightSide, BorderLayout.EAST);
+
+        return card;
+    }
+
+    private JButton calNavBtn(String text) {
+        JButton btn = new JButton(text);
+        btn.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        btn.setForeground(UIConstants.TEXT_DARK);
+        btn.setPreferredSize(new Dimension(40, 32));
+        btn.setContentAreaFilled(false);
+        btn.setBorderPainted(false);
+        btn.setFocusPainted(false);
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        return btn;
+    }
+
+    private String resolveUserName(AccountService svc, String email) {
+        for (User u : svc.getAllUsers()) {
+            if (u.getEmail().equalsIgnoreCase(email)) return u.getName();
+        }
+        return email;
+    }
+
     // ─── Profile content ─────────────────────────────────────────
 
     private void refreshProfileFields() {
@@ -494,7 +833,7 @@ public class CounterStaffDashboard extends JPanel {
             JOptionPane.showMessageDialog(app, "An account with this email already exists.", "Error", JOptionPane.ERROR_MESSAGE); return;
         }
 
-        User updated = new User(newName, newEmail, user.getPassword(), user.getRole(), selectedAvatarIndex);
+        User updated = new User(user.getUserId(), newName, newEmail, user.getPassword(), user.getRole(), selectedAvatarIndex);
         if (svc.updateUser(user.getEmail(), updated)) {
             app.setLoggedInUser(newName);
             app.setLoggedInUserObj(updated);

@@ -257,8 +257,8 @@ public class CustomerDashboard extends JPanel {
             }
 
             // Load saved profile picture and background image from disk
-            profileImage = profilePicStorage.loadImage(user.getEmail());
-            bannerImage  = backgroundStorage.loadImage(user.getEmail());
+            profileImage = profilePicStorage.loadImage(user.getUserId());
+            bannerImage  = backgroundStorage.loadImage(user.getUserId());
             if (profilePicLabel != null) profilePicLabel.repaint();
             if (profileBanner   != null) profileBanner.repaint();
             if (avatarLabel     != null) avatarLabel.repaint();
@@ -816,7 +816,7 @@ public class CustomerDashboard extends JPanel {
         try {
             BufferedImage image = ImageIO.read(new java.io.File(fd.getDirectory(), fd.getFile()));
             if (image == null) { JOptionPane.showMessageDialog(app, "Could not read the selected image.", "Error", JOptionPane.ERROR_MESSAGE); return; }
-            if (!profilePicStorage.saveImage(user.getEmail(), image)) { JOptionPane.showMessageDialog(app, "Failed to save profile picture.", "Error", JOptionPane.ERROR_MESSAGE); return; }
+            if (!profilePicStorage.saveImage(user.getUserId(), image)) { JOptionPane.showMessageDialog(app, "Failed to save profile picture.", "Error", JOptionPane.ERROR_MESSAGE); return; }
             profileImage = image;
             if (profilePicLabel != null) profilePicLabel.repaint();
             if (avatarLabel     != null) avatarLabel.repaint();
@@ -840,7 +840,7 @@ public class CustomerDashboard extends JPanel {
         try {
             BufferedImage image = ImageIO.read(new java.io.File(fd.getDirectory(), fd.getFile()));
             if (image == null) { JOptionPane.showMessageDialog(app, "Could not read the selected image.", "Error", JOptionPane.ERROR_MESSAGE); return; }
-            if (!backgroundStorage.saveImage(user.getEmail(), image)) { JOptionPane.showMessageDialog(app, "Failed to save background image.", "Error", JOptionPane.ERROR_MESSAGE); return; }
+            if (!backgroundStorage.saveImage(user.getUserId(), image)) { JOptionPane.showMessageDialog(app, "Failed to save background image.", "Error", JOptionPane.ERROR_MESSAGE); return; }
             bannerImage = image;
             if (profileBanner != null) profileBanner.repaint();
         } catch (java.io.IOException ex) {
