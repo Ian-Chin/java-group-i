@@ -2,6 +2,9 @@ Ian Chin,ian@apu.asc.com,admin1234,staff,0
 Bowie,b@gmail.com,Bowie1234,admin,7
 xxx,x@gmail.com,XXX1234,staff,0
 bbb,bo@gmail.com,Bowie1234,customer,0
-test,t@gmail.com,123456789ss,customer,0
+test,te@gmail.com,123456789ss,customer,0
 Zhi Lin,lin@gmail.com,lin12345,customer,3
 Didi,didi@gmail.com,didi0000,customer,0
+tech1,t@gmail.com,tech1234,technician,0
+tech2,t2@gmail.com,t123456,technician,0
+tech3,t3@gmail.com,t31234tt,technician,0
