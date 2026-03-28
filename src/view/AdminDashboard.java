@@ -41,9 +41,6 @@ public class AdminDashboard extends JPanel {
     private JTextField profileNameField;
     private JTextField profileEmailField;
     private JLabel profileRoleLabel;
-    private JLabel profileAvatarDisplay;
-    private int selectedAvatarIndex = 0;
-    private JPanel avatarSelectionPanel;
 
     // ── Profile picture & banner (inherited from CustomerDashboard) ──
     private BufferedImage profileImage = null; // null = show default coloured circle
@@ -56,17 +53,6 @@ public class AdminDashboard extends JPanel {
     // Brand colours for the banner gradient and default avatar
     private static final Color BRAND_BLUE  = new Color(80, 110, 230);
     private static final Color BANNER_BLUE = new Color(100, 130, 240);
-
-    // Built-in avatar colours / icons
-    private static final Color[] AVATAR_COLORS = {
-            new Color(80, 110, 230), new Color(230, 80, 80),  new Color(80, 190, 110),
-            new Color(230, 160, 40), new Color(160, 80, 230), new Color(40, 180, 200),
-            new Color(230, 80, 160), new Color(100, 100, 120),
-    };
-    private static final String[] AVATAR_ICONS = {
-            "\u263A", "\u2605", "\u2665", "\u2666",
-            "\u263C", "\u2708", "\u266B", "\u2618"
-    };
 
     private static final String[] NAV_ITEMS = {
             "Dashboard", "Manage Staff", "Service Price", "View Feedback", "Report"
@@ -92,12 +78,12 @@ public class AdminDashboard extends JPanel {
         AccountService svc = app.getAccountService();
 
         // ── Real panels wired call
+        contentPanel.add(buildProfileContent(),     "Profile");
         contentPanel.add(buildDashboardContent(),   "Dashboard");
         contentPanel.add(new ManageStaffPanel(svc), "Manage Staff");
         contentPanel.add(new ServicePricePanel(),   "Service Price");
         contentPanel.add(new ViewFeedbackPanel(),   "View Feedback");
         contentPanel.add(new ReportPanel(svc),      "Report");
-        contentPanel.add(buildProfileContent(),     "Profile");
 
         rightSide.add(contentPanel, BorderLayout.CENTER);
         add(rightSide, BorderLayout.CENTER);
@@ -115,18 +101,14 @@ public class AdminDashboard extends JPanel {
         if (welcomeLabel != null) welcomeLabel.setText("Welcome back, " + name);
         if (profileLabel  != null) profileLabel.setText(name);
 
-        User user = app.getLoggedInUserObj();
-        if (user != null) selectedAvatarIndex = user.getProfilePicture();
-
         // Reload profile picture and banner from disk whenever the user changes
+        User user = app.getLoggedInUserObj();
         if (user != null) {
             profileImage = profilePicStorage.loadImage(user.getEmail());
             bannerImage  = backgroundStorage.loadImage(user.getEmail());
             if (profileBanner  != null) profileBanner.repaint();
             if (profilePicLabel != null) profilePicLabel.repaint();
         }
-
-        if (avatarLabel != null) { avatarLabel.repaint(); }
     }
 
     // ─── Header ──────────────────────────────────────────────────────
@@ -152,7 +134,7 @@ public class AdminDashboard extends JPanel {
         profileArea.setBackground(UIConstants.BG_HEADER);
 
         // Avatar in header — shows profile picture if one has been set, else coloured circle
-        avatarLabel = new JLabel(AVATAR_ICONS[selectedAvatarIndex]) {
+        JLabel avatarLabel = new JLabel() {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -167,7 +149,7 @@ public class AdminDashboard extends JPanel {
                             cropX, cropY, cropX + crop, cropY + crop, null);
                     g2.setClip(null);
                 } else {
-                    g2.setColor(AVATAR_COLORS[selectedAvatarIndex]);
+                    g2.setColor(BRAND_BLUE);
                     g2.fillOval(0, 0, 38, 38);
                     g2.dispose();
                     super.paintComponent(g);
@@ -365,7 +347,7 @@ public class AdminDashboard extends JPanel {
     // ─── Profile content ──────────────────────────────────────────────
 
     /**
-     * Refreshes the editable text fields and avatar picker on the Profile page
+     * Refreshes the editable text fields on the Profile page
      * to match the current logged-in user's data.
      */
     private void refreshProfileFields() {
@@ -377,30 +359,12 @@ public class AdminDashboard extends JPanel {
             String r = user.getRole();
             profileRoleLabel.setText(r.substring(0, 1).toUpperCase() + r.substring(1));
         }
-        selectedAvatarIndex = user.getProfilePicture();
 
         // Reload images so the banner and profile pic reflect the latest saved state
         profileImage = profilePicStorage.loadImage(user.getEmail());
         bannerImage  = backgroundStorage.loadImage(user.getEmail());
         if (profileBanner   != null) profileBanner.repaint();
         if (profilePicLabel != null) profilePicLabel.repaint();
-
-        updateAvatarSelection();
-    }
-
-    private void updateAvatarSelection() {
-        if (profileAvatarDisplay != null) { profileAvatarDisplay.setText(AVATAR_ICONS[selectedAvatarIndex]); profileAvatarDisplay.repaint(); }
-        if (avatarSelectionPanel != null) {
-            Component[] avatars = avatarSelectionPanel.getComponents();
-            for (int i = 0; i < avatars.length; i++) {
-                if (avatars[i] instanceof JLabel) {
-                    ((JLabel) avatars[i]).setBorder(i == selectedAvatarIndex
-                            ? BorderFactory.createLineBorder(UIConstants.PRIMARY, 3)
-                            : BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1));
-                }
-            }
-        }
-        if (avatarLabel != null) { avatarLabel.repaint(); }
     }
 
     /**
@@ -655,80 +619,6 @@ public class AdminDashboard extends JPanel {
         card.add(topSep);
         card.add(Box.createVerticalStrut(22));
 
-        // ── Emoji avatar section (kept from original AdminDashboard) ──
-//        JLabel chooseLabel = new JLabel("Choose Icon Avatar");
-//        chooseLabel.setFont(UIConstants.FONT_SMALL_BOLD);
-//        chooseLabel.setForeground(UIConstants.TEXT_DARK);
-//        chooseLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-//        card.add(chooseLabel);
-//        card.add(Box.createVerticalStrut(12));
-
-        // Large avatar preview
-        profileAvatarDisplay = new JLabel(AVATAR_ICONS[0]) {
-            @Override protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(AVATAR_COLORS[selectedAvatarIndex]);
-                g2.fillOval(0, 0, 60, 60);
-                g2.dispose();
-                super.paintComponent(g);
-            }
-        };
-        profileAvatarDisplay.setFont(new Font("SansSerif", Font.PLAIN, 28));
-        profileAvatarDisplay.setForeground(Color.WHITE);
-        profileAvatarDisplay.setHorizontalAlignment(SwingConstants.CENTER);
-        profileAvatarDisplay.setVerticalAlignment(SwingConstants.CENTER);
-        profileAvatarDisplay.setPreferredSize(new Dimension(60, 60));
-        profileAvatarDisplay.setMaximumSize(new Dimension(60, 60));
-        profileAvatarDisplay.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(profileAvatarDisplay);
-        card.add(Box.createVerticalStrut(12));
-
-        // Avatar picker grid
-        avatarSelectionPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
-        avatarSelectionPanel.setOpaque(false);
-        avatarSelectionPanel.setMaximumSize(new Dimension(460, 60));
-        for (int i = 0; i < AVATAR_COLORS.length; i++) {
-            final int idx = i;
-            JLabel av = new JLabel(AVATAR_ICONS[i]) {
-                @Override protected void paintComponent(Graphics g) {
-                    Graphics2D g2 = (Graphics2D) g.create();
-                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    g2.setColor(AVATAR_COLORS[idx]);
-                    g2.fillOval(2, 2, 42, 42);
-                    g2.dispose();
-                    super.paintComponent(g);
-                }
-            };
-            av.setFont(new Font("SansSerif", Font.PLAIN, 20));
-            av.setForeground(Color.WHITE);
-            av.setHorizontalAlignment(SwingConstants.CENTER);
-            av.setVerticalAlignment(SwingConstants.CENTER);
-            av.setPreferredSize(new Dimension(46, 46));
-            av.setCursor(new Cursor(Cursor.HAND_CURSOR));
-            av.setBorder(BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1));
-            av.addMouseListener(new MouseAdapter() {
-                @Override public void mouseClicked(MouseEvent e) { selectedAvatarIndex = idx; updateAvatarSelection(); }
-            });
-            avatarSelectionPanel.add(av);
-        }
-        card.add(avatarSelectionPanel);
-        card.add(Box.createVerticalStrut(6));
-
-        JLabel avatarNote = new JLabel("This icon appears on your header when no photo is set.");
-        avatarNote.setFont(UIConstants.FONT_SMALL);
-        avatarNote.setForeground(UIConstants.TEXT_MUTED);
-        avatarNote.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(avatarNote);
-        card.add(Box.createVerticalStrut(24));
-
-        JSeparator midSep = new JSeparator();
-        midSep.setForeground(UIConstants.BORDER_DEFAULT);
-        midSep.setMaximumSize(new Dimension(380, 1));
-        midSep.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(midSep);
-        card.add(Box.createVerticalStrut(22));
-
         // ── Name / Email / Role fields ────────────────────────────────
         card.add(UIFactory.createFieldLabel("Name")); card.add(Box.createVerticalStrut(6));
         profileNameField = UIFactory.createTextField("Enter your name"); card.add(profileNameField);
@@ -776,7 +666,7 @@ public class AdminDashboard extends JPanel {
             JOptionPane.showMessageDialog(app, "An account with this email already exists.", "Error", JOptionPane.ERROR_MESSAGE); return;
         }
 
-        User updated = new User(user.getUserId(), newName, newEmail, user.getPassword(), user.getRole(), selectedAvatarIndex);
+        User updated = new User(user.getUserId(), newName, newEmail, user.getPassword(), user.getRole(), 0);
         if (svc.updateUser(user.getEmail(), updated)) {
             app.setLoggedInUser(newName);
             app.setLoggedInUserObj(updated);
