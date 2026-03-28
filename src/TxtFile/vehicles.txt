@@ -2,3 +2,5 @@ V1,C1,WXY1234,Toyota Vios,2021,White
 V2,C2,ABC5678,Honda City,2019,Silver
 V3,C3,LIN110,Mercedes AMG Coupe,2025,White
 V4,C3,NEW123,BMW i5,2024,Black
+V5,C3,FF6666,Toyota Supra,2021,Red
+V6,C3,LV66,Lambo,2020,White

@@ -39,6 +39,10 @@ public class VehicleSectionController implements SectionController {
         /**
          * Rebuilds the vehicle list panel with the given vehicles.
          * Each String array contains: [vehicleID, plate, brand, year, colour]
+         *
+         * IMPORTANT: The FULL list is passed here (not just top 3).
+         * CustomerDashboard decides how many to show on screen (top 3)
+         * and whether to show a "View All" button.
          */
         void rebuildList(List<String[]> items);
 
@@ -68,10 +72,16 @@ public class VehicleSectionController implements SectionController {
 
     /**
      * Reads vehicles.txt and tells the UI to rebuild the vehicle list.
-     * Only shows the first 3 vehicles (top 3).
      *
-     * Uses getUserId() instead of getEmail() to look up vehicles,
-     * because vehicles.txt now stores user ID (e.g. "C3") not email.
+     * KEY FIX: We now pass ALL vehicles (no limit here).
+     * The CustomerDashboard.rebuildVehicleList() method decides to show
+     * only the first 3, and shows a "View All" button if there are more.
+     *
+     * Before this fix, we called allVehicles.subList(0, limit) here,
+     * which meant rebuildVehicleList() only ever got 3 or fewer items
+     * and could never know the total count to show "View All".
+     *
+     * Uses getUserId() instead of getEmail() to look up vehicles.
      */
     @Override
     public void refreshList() {
@@ -83,13 +93,12 @@ public class VehicleSectionController implements SectionController {
             return;
         }
 
-        // Read all vehicles belonging to this user from vehicles.txt
-        // Using getUserId() (e.g. "C3") instead of getEmail()
+        // Read ALL vehicles belonging to this user from vehicles.txt.
+        // We do NOT limit to 3 here. CustomerDashboard handles the display limit.
         List<String[]> allVehicles = vehicleService.getVehiclesByUserId(user.getUserId());
 
-        // Only show the first 3
-        int limit = Math.min(3, allVehicles.size());
-        view.rebuildList(allVehicles.subList(0, limit));
+        // Pass the FULL list to the dashboard
+        view.rebuildList(allVehicles);
     }
 
     /**
@@ -117,9 +126,8 @@ public class VehicleSectionController implements SectionController {
         if (user == null) return false;
 
         // Step 3: Save the new vehicle to vehicles.txt
-        // Using getUserId() (e.g. "C3") instead of getEmail()
         boolean saved = vehicleService.addVehicle(
-                user.getUserId(), // was user.getEmail()
+                user.getUserId(), // customer ID e.g. "C3"
                 fields[0],        // plate
                 fields[1],        // brand
                 fields[2],        // year
@@ -157,10 +165,9 @@ public class VehicleSectionController implements SectionController {
         User user = view.getLoggedInUser();
         if (user == null) return false;
 
-        // Step 3: Update the record in place — keeps original position in vehicles.txt
-        // Using getUserId() (e.g. "C3") instead of getEmail()
+        // Step 3: Update the record in place
         boolean updated = vehicleService.updateVehicle(
-                user.getUserId(), // was user.getEmail()
+                user.getUserId(), // customer ID e.g. "C3"
                 id,               // old plate (identifies which record to update)
                 fields[0],        // new plate
                 fields[1],        // new brand
@@ -185,7 +192,6 @@ public class VehicleSectionController implements SectionController {
      */
     @Override
     public void handleDelete(String id) {
-        // Show a confirmation popup before deleting
         int choice = javax.swing.JOptionPane.showConfirmDialog(
                 view.getWindow(),
                 "Are you sure you want to remove this vehicle?",
@@ -195,16 +201,13 @@ public class VehicleSectionController implements SectionController {
 
         if (choice == javax.swing.JOptionPane.YES_OPTION) {
             User user = view.getLoggedInUser();
-
-            // Using getUserId() (e.g. "C3") instead of getEmail()
             if (user != null && vehicleService.deleteVehicle(user.getUserId(), id)) {
-                refreshList(); // reload to remove the deleted vehicle from the list
+                refreshList();
             } else {
                 view.showMessage("Failed to remove vehicle.", "Error",
                         javax.swing.JOptionPane.ERROR_MESSAGE);
             }
         }
-        // If the user clicked No, the dialog just closes — nothing is deleted
     }
 
     /**
@@ -212,13 +215,9 @@ public class VehicleSectionController implements SectionController {
      *
      * Rules:
      *  fields[0] — Car Plate  : must have BOTH letters AND numbers, no special characters
-     *                           ✅ "WXY1234"     ❌ "ABC"    ❌ "1234"   ❌ "WXY-123"
      *  fields[1] — Brand/Model: letters and/or numbers only, no special characters
-     *                           ✅ "Toyota Vios" ✅ "BMW i5" ❌ "BMW-i5"
      *  fields[2] — Year       : exactly 4 digits, numbers only
-     *                           ✅ "2025"        ❌ "25"     ❌ "202A"
-     *  fields[3] — Colour     : letters and spaces only, no numbers or special characters
-     *                           ✅ "White"       ✅ "Dark Blue" ❌ "Blue2" ❌ "Blue-Red"
+     *  fields[3] — Colour     : letters and spaces only
      *
      * @return error message string if invalid, null if all fields are valid
      */
@@ -229,43 +228,25 @@ public class VehicleSectionController implements SectionController {
         String year   = fields[2];
         String colour = fields[3];
 
-        // ── Car Plate ─────────────────────────────────────────────
-        if (plate.isEmpty()) {
-            return "Car Plate cannot be empty.";
-        }
-        if (!plate.matches("[a-zA-Z0-9 ]+")) {
+        if (plate.isEmpty()) return "Car Plate cannot be empty.";
+        if (!plate.matches("[a-zA-Z0-9 ]+"))
             return "Car Plate can only contain letters and numbers (no special characters).";
-        }
         boolean plateHasLetter = plate.matches(".*[a-zA-Z].*");
         boolean plateHasNumber = plate.matches(".*[0-9].*");
-        if (!plateHasLetter || !plateHasNumber) {
+        if (!plateHasLetter || !plateHasNumber)
             return "Car Plate must contain both letters and numbers (e.g. WXY1234).";
-        }
 
-        // ── Brand / Model ─────────────────────────────────────────
-        if (brand.isEmpty()) {
-            return "Brand / Model cannot be empty.";
-        }
-        if (!brand.matches("[a-zA-Z0-9 ]+")) {
+        if (brand.isEmpty()) return "Brand / Model cannot be empty.";
+        if (!brand.matches("[a-zA-Z0-9 ]+"))
             return "Brand / Model can only contain letters and numbers (no special characters).";
-        }
 
-        // ── Year ──────────────────────────────────────────────────
-        if (year.isEmpty()) {
-            return "Year cannot be empty.";
-        }
-        if (!year.matches("\\d{4}")) {
-            return "Year must be exactly 4 digits (e.g. 2025).";
-        }
+        if (year.isEmpty()) return "Year cannot be empty.";
+        if (!year.matches("\\d{4}")) return "Year must be exactly 4 digits (e.g. 2025).";
 
-        // ── Colour ────────────────────────────────────────────────
-        if (colour.isEmpty()) {
-            return "Colour cannot be empty.";
-        }
-        if (!colour.matches("[a-zA-Z ]+")) {
+        if (colour.isEmpty()) return "Colour cannot be empty.";
+        if (!colour.matches("[a-zA-Z ]+"))
             return "Colour can only contain letters (e.g. White, Dark Blue).";
-        }
 
-        return null; // null means all fields passed validation — no errors
+        return null; // all fields are valid
     }
 }

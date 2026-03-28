@@ -1,6 +1,9 @@
 package view;
 
+import model.AppointmentService;
 import model.CustomerProfileController;
+import model.PaymentService;
+import model.ServiceHistoryService;
 import model.User;
 import model.VehicleService;
 import model.VehicleSectionController;
@@ -12,144 +15,130 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.FileDialog;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Ellipse2D;
 import java.awt.image.BufferedImage;
 import java.util.List;
+import java.util.Set;
 
-// The main screen customers see after logging in.
-// This file ONLY builds and displays the UI.
-// All logic (save, validate, file reading) is in CustomerDashboardController
-// and VehicleSectionController.
-//
-// Java OOP principles:
-//   Class        : organises all UI code in one place
-//   Object       : one instance created per login session
-//   Encapsulation: UI components are private; controller updates them via interface methods
-//   Abstraction  : calls controller.handleSave() without knowing HOW saving works
-//   Inheritance  : implements VehicleSectionController.SectionView interface
-//   Polymorphism : SectionView methods update real Swing components here
+/**
+ * CustomerDashboard — the main profile screen customers see after logging in.
+ *
+ * FIXES IN THIS VERSION:
+ * 1. rebuildVehicleList() now receives ALL vehicles (VehicleSectionController
+ *    no longer limits to 3). This method shows top 3 and decides whether to
+ *    show the "View All" button — which previously never appeared because the
+ *    controller was cutting the list before passing it here.
+ *
+ * 2. Pay button is now wide enough to show the full word "Pay" (not "P...").
+ *
+ * 3. Invoice popup is compact — no horizontal scrollbar, all info visible at once.
+ *
+ * 4. Enter key in vehicle edit fields triggers the Save button.
+ */
 public class CustomerDashboard extends JPanel {
 
-    // ── Reference to the main application window ─────────────────
+    // ── App reference ─────────────────────────────────────────────
     private final AppFrame app;
 
     // ── Page switching ────────────────────────────────────────────
     private CardLayout contentLayout;
     private JPanel     contentPanel;
-    private String     activeNav = "Profile"; // which nav item is currently selected
+    private String     activeNav = "Profile";
 
     // ── Header labels ─────────────────────────────────────────────
-    private JLabel profileLabel; // customer's name shown in the header
-    private JLabel avatarLabel;  // small circle avatar in the header
-    private JLabel headerTitle;  // current page name shown in the header
+    private JLabel profileLabel;
+    private JLabel avatarLabel;
+    private JLabel headerTitle;
 
-    // ── Avatar circle colours and icons ──────────────────────────
+    // ── Avatar options ────────────────────────────────────────────
     private static final Color[] AVATAR_COLORS = {
-            new Color(80, 110, 230),  // blue
-            new Color(230, 80, 80),   // red
-            new Color(80, 190, 110),  // green
-            new Color(230, 160, 40),  // orange
-            new Color(160, 80, 230),  // purple
-            new Color(40, 180, 200),  // teal
-            new Color(230, 80, 160),  // pink
-            new Color(100, 100, 120), // grey
+            new Color(80, 110, 230), new Color(230, 80, 80),
+            new Color(80, 190, 110), new Color(230, 160, 40),
+            new Color(160, 80, 230), new Color(40, 180, 200),
+            new Color(230, 80, 160), new Color(100, 100, 120),
     };
     private static final String[] AVATAR_ICONS = {
-            "\u263A", // smiley face
-            "\u2605", // star
-            "\u2665", // heart
-            "\u2666", // diamond
-            "\u263C", // sun
-            "\u2708", // plane
-            "\u266B", // music note
-            "\u2618"  // clover
+            "\u263A", "\u2605", "\u2665", "\u2666",
+            "\u263C", "\u2708", "\u266B", "\u2618"
     };
-    private int selectedAvatarIndex = 0; // which avatar colour/icon to show
+    private int selectedAvatarIndex = 0;
 
-    // ── Profile page labels (read mode) ──────────────────────────
+    // ── Profile card display labels ───────────────────────────────
     private JLabel profileNameDisplay;
     private JLabel profileEmailDisplay;
     private JLabel profileRoleDisplay;
 
-    // ── Profile page text fields (edit mode) ─────────────────────
+    // ── Profile card edit fields ──────────────────────────────────
     private JTextField profileNameField;
     private JTextField profileEmailField;
 
-    // ── Panels that swap between read mode and edit mode ─────────
-    private JPanel nameDisplayPanel;  // shown in read mode
-    private JPanel nameEditPanel;     // shown in edit mode
-    private JPanel emailDisplayPanel; // shown in read mode
-    private JPanel emailEditPanel;    // shown in edit mode
+    // ── Profile card panels (read/edit mode swap) ─────────────────
+    private JPanel nameDisplayPanel;
+    private JPanel nameEditPanel;
+    private JPanel emailDisplayPanel;
+    private JPanel emailEditPanel;
 
-    // ── Edit / Save / Cancel buttons on the Personal Info card ───
+    // ── Profile card buttons ──────────────────────────────────────
     private JButton editBtn;
     private JButton saveBtn;
     private JButton cancelBtn;
 
     // ── Vehicle section ───────────────────────────────────────────
-    private JPanel vehicleListPanel; // holds all vehicle rows
-    private JPanel vehicleAddPanel;  // the inline add form (hidden by default)
-    private JButton[] navButtons;    // sidebar nav buttons — kept as a field so View Profile can highlight Profile
+    private JPanel    vehicleListPanel;
+    private JPanel    vehicleAddPanel;
+    private JButton[] navButtons;
 
-    // The four section pages — kept as fields so we can call refresh() on them
-    private ServiceHistoryPage  serviceHistoryPage;
-    private PaymentHistoryPage  paymentHistoryPage;
-    private StaffReviewPage     staffReviewPage;
-    private MyFeedbackPage      myFeedbackPage;
+    // ── Section pages ─────────────────────────────────────────────
+    private ServiceHistoryPage serviceHistoryPage;
+    private PaymentHistoryPage paymentHistoryPage;
+    private StaffReviewPage    staffReviewPage;
+    private MyFeedbackPage     myFeedbackPage;
 
-    // ── Controllers and services ──────────────────────────────────
+    // ── Services ──────────────────────────────────────────────────
     private final CustomerProfileController profileController;
     private final VehicleSectionController  vehicleController;
-    private final VehicleService            vehicleService = new VehicleService();
-    private final ProfilePicStorage         profilePicStorage = new ProfilePicStorage();
-    private final BackgroundImageStorage    backgroundStorage = new BackgroundImageStorage();
+    private final VehicleService            vehicleService        = new VehicleService();
+    private final ProfilePicStorage         profilePicStorage     = new ProfilePicStorage();
+    private final BackgroundImageStorage    backgroundStorage     = new BackgroundImageStorage();
+    private final AppointmentService        appointmentService    = new AppointmentService();
+    private final PaymentService            paymentService        = new PaymentService();
+    private final ServiceHistoryService     serviceHistoryService = new ServiceHistoryService();
 
-    // ── Images currently shown on screen ─────────────────────────
-    private BufferedImage profileImage = null; // null = show default smiley
-    private BufferedImage bannerImage  = null; // null = show default blue gradient
-
-    // ── The banner and profile picture components ─────────────────
-    private JPanel profileBanner;
-    private JLabel profilePicLabel;
+    // ── Images ────────────────────────────────────────────────────
+    private BufferedImage profileImage = null;
+    private BufferedImage bannerImage  = null;
+    private JPanel        profileBanner;
+    private JLabel        profilePicLabel;
 
     // ── Brand colours ─────────────────────────────────────────────
     private static final Color BRAND_BLUE  = new Color(80, 110, 230);
     private static final Color BANNER_BLUE = new Color(100, 130, 240);
 
-    // ── Sidebar navigation items (Appointment Booking removed) ───
+    // ── Sidebar navigation ────────────────────────────────────────
     private static final String[] NAV_ITEMS = {
-            "Profile",
-            "Service History",
-            "Payment History",
-            "Staff Review",
-            "My Feedback"
+            "Profile", "Service History", "Payment History", "Staff Review", "My Feedback"
     };
-
-    // Converts a Unicode code point to a String emoji
-    private static String navIcon(int codePoint) {
-        return new StringBuilder().appendCodePoint(codePoint).toString();
-    }
-
+    private static String navIcon(int cp) { return new StringBuilder().appendCodePoint(cp).toString(); }
     private static final String[] NAV_ICONS = {
-            navIcon(0x1F464), // 👤 person  (Profile)
-            navIcon(0x1F504), // 🔄 cycle   (Service History)
-            navIcon(0x1F4B5), // 💵 money   (Payment History)
-            "\u2605",         // ★ star     (Staff Review)
-            navIcon(0x1F4AC)  // 💬 chat    (My Feedback)
+            navIcon(0x1F464), navIcon(0x1F504), navIcon(0x1F4B5), "\u2605", navIcon(0x1F4AC)
     };
+
+    // ── RIGHT COLUMN — class field so refreshUser() can rebuild it ─
+    // This MUST be a class field. If it were a local variable inside
+    // buildProfileInner(), Java would forget it after that method ends
+    // and refreshUser() would have no way to update the cards.
+    private JPanel rightColumn;
 
     // ═══════════════════════════════════════════════════════════════
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════
-
     public CustomerDashboard(AppFrame app) {
         this.app = app;
 
-        // ── Set up ProfileController ──────────────────────────────
-        // AppFrameAccessor lets the controller update the session without
-        // importing AppFrame (keeps model independent of view)
         profileController = new CustomerProfileController(
                 app.getAccountService(),
                 new CustomerProfileController.AppFrameAccessor() {
@@ -160,37 +149,21 @@ public class CustomerDashboard extends JPanel {
                 }
         );
 
-        // ── Set up VehicleSectionController ──────────────────────
-        // SectionView lets the controller update the vehicle list UI
-        // without importing CustomerDashboard directly
         vehicleController = new VehicleSectionController(
                 vehicleService,
                 new VehicleSectionController.SectionView() {
-                    @Override
-                    public User getLoggedInUser() {
-                        return app.getLoggedInUserObj();
+                    @Override public User   getLoggedInUser() { return app.getLoggedInUserObj(); }
+                    // rebuildList receives ALL vehicles — the dashboard limits display to 3
+                    @Override public void   rebuildList(List<String[]> v) { rebuildVehicleList(v); }
+                    @Override public void   showMessage(String msg, String title, int type) {
+                        JOptionPane.showMessageDialog(app, msg, title, type);
                     }
-
-                    @Override
-                    public void rebuildList(List<String[]> vehicles) {
-                        // Rebuild the vehicle list panel with the given vehicles
-                        rebuildVehicleList(vehicles);
-                    }
-
-                    @Override
-                    public void showMessage(String message, String title, int type) {
-                        JOptionPane.showMessageDialog(app, message, title, type);
-                    }
-
-                    @Override
-                    public java.awt.Window getWindow() {
+                    @Override public java.awt.Window getWindow() {
                         return SwingUtilities.getWindowAncestor(CustomerDashboard.this);
                     }
                 }
         );
 
-        // ── Build the layout ──────────────────────────────────────
-        // Sidebar on the LEFT, header + content pages on the RIGHT
         setLayout(new BorderLayout());
         add(buildSidebar(), BorderLayout.WEST);
 
@@ -198,15 +171,12 @@ public class CustomerDashboard extends JPanel {
         rightSide.setBackground(UIConstants.BG_CONTENT);
         rightSide.add(buildHeader(), BorderLayout.NORTH);
 
-        // ContentPanel uses CardLayout to switch between pages
         contentLayout = new CardLayout();
         contentPanel  = new JPanel(contentLayout);
         contentPanel.setBackground(UIConstants.BG_CONTENT);
 
-        // Add each page — Appointment Booking removed
-        contentPanel.add(buildProfilePage(),   "Profile");
+        contentPanel.add(buildProfilePage(), "Profile");
 
-        // Create real section pages
         serviceHistoryPage = new ServiceHistoryPage();
         paymentHistoryPage = new PaymentHistoryPage();
         staffReviewPage    = new StaffReviewPage();
@@ -221,42 +191,38 @@ public class CustomerDashboard extends JPanel {
         add(rightSide, BorderLayout.CENTER);
     }
 
-    // Called automatically by Java when this panel is shown on screen
     @Override
     public void addNotify() {
         super.addNotify();
         refreshUser();
     }
 
-    /**
-     * Refreshes all information displayed on the dashboard.
-     * Called after login and after any profile changes.
-     */
+    // ─────────────────────────────────────────────────────────────
+    // refreshUser() — rebuilds everything after login or any change
+    // ─────────────────────────────────────────────────────────────
     public void refreshUser() {
-        // Update the header name
+        // Step 1: auto-complete any appointments whose time has passed
+        User user = app.getLoggedInUserObj();
+        if (user != null) {
+            appointmentService.autoCompleteExpiredAppointments(serviceHistoryService);
+        }
+
+        // Step 2: update header name and avatar icon
         String name = app.getLoggedInUser();
         if (name == null || name.isEmpty()) name = "Customer";
         if (profileLabel != null) profileLabel.setText(name);
 
-        // Update the avatar icon
-        User user = app.getLoggedInUserObj();
         if (user != null) selectedAvatarIndex = user.getProfilePicture();
-        if (avatarLabel != null) {
-            avatarLabel.setText(AVATAR_ICONS[selectedAvatarIndex]);
-            avatarLabel.repaint();
-        }
+        if (avatarLabel != null) { avatarLabel.setText(AVATAR_ICONS[selectedAvatarIndex]); avatarLabel.repaint(); }
 
-        // Update the profile page labels
+        // Step 3: update profile card labels
         if (user != null) {
             if (profileNameDisplay  != null) profileNameDisplay.setText(user.getName());
             if (profileEmailDisplay != null) profileEmailDisplay.setText(user.getEmail());
             if (profileRoleDisplay  != null) {
                 String role = user.getRole();
-                String capitalisedRole = role.substring(0, 1).toUpperCase() + role.substring(1);
-                profileRoleDisplay.setText(capitalisedRole);
+                profileRoleDisplay.setText(role.substring(0, 1).toUpperCase() + role.substring(1));
             }
-
-            // Load saved profile picture and background image from disk
             profileImage = profilePicStorage.loadImage(user.getUserId());
             bannerImage  = backgroundStorage.loadImage(user.getUserId());
             if (profilePicLabel != null) profilePicLabel.repaint();
@@ -264,51 +230,94 @@ public class CustomerDashboard extends JPanel {
             if (avatarLabel     != null) avatarLabel.repaint();
         }
 
-        // Reload the vehicle list via the controller
+        // Step 4: rebuild vehicle list
         vehicleController.refreshList();
+
+        // Step 5: rebuild the right column (Upcoming + Pending Payment cards)
+        // rightColumn is a CLASS FIELD so we can reach it from here.
+        if (rightColumn != null) {
+            rightColumn.removeAll();
+            rightColumn.add(buildUpcomingCard());
+            rightColumn.add(Box.createVerticalStrut(16));
+            rightColumn.add(buildPaymentSummaryCard());
+            rightColumn.revalidate();
+            rightColumn.repaint();
+        }
     }
 
-    /**
-     * Called by VehicleSectionController.SectionView.rebuildList().
-     * Clears the vehicle list panel and rebuilds it with the given vehicles.
-     *
-     * Each vehicle array: [vehicleID, plate, brand, year, colour]
-     */
-    /** Clears the vehicle list panel and rebuilds it using the given vehicle data. */
+    // ─────────────────────────────────────────────────────────────
+    // rebuildVehicleList() — called by VehicleSectionController
+    //
+    // FIX EXPLAINED:
+    // VehicleSectionController.refreshList() now passes ALL vehicles.
+    // This method shows the FIRST 3 in the scrollable area.
+    // If there are MORE than 3, it shows a "View All (N)" link below.
+    // Before this fix, the controller was passing only 3, so this method
+    // could never know there were more — the "View All" button never appeared.
+    // ─────────────────────────────────────────────────────────────
     private void rebuildVehicleList(List<String[]> vehicles) {
         if (vehicleListPanel == null) return;
-
         vehicleListPanel.removeAll();
 
         if (vehicles.isEmpty()) {
             vehicleListPanel.add(makeEmptyLabel("No vehicles registered."));
         } else {
-            for (int i = 0; i < vehicles.size(); i++) {
-                String[] vehicle  = vehicles.get(i);
-                String vehicleID = vehicle[0];
-                String plate     = vehicle[1];
-                String brand     = vehicle[2];
-                String year      = vehicle[3];
-                String colour    = vehicle[4];
-
-                vehicleListPanel.add(buildVehicleRow(vehicleID, plate, brand, year, colour));
-
-                // Add a small gap between rows (not after the last one)
-                if (i < vehicles.size() - 1) {
-                    vehicleListPanel.add(Box.createVerticalStrut(10));
-                }
+            // Show only the FIRST 3 vehicles in the fixed-height scroll area
+            int displayCount = Math.min(3, vehicles.size());
+            for (int i = 0; i < displayCount; i++) {
+                String[] v = vehicles.get(i);
+                vehicleListPanel.add(buildVehicleRow(v[0], v[1], v[2], v[3], v[4]));
+                if (i < displayCount - 1) vehicleListPanel.add(Box.createVerticalStrut(10));
             }
         }
 
         vehicleListPanel.revalidate();
         vehicleListPanel.repaint();
+
+        // Find the "View All" placeholder row inside the vehicle card
+        // and populate it if there are more than 3 vehicles
+        JPanel viewAllRow = findNamedPanel("vehicleViewAllRow");
+        if (viewAllRow != null) {
+            viewAllRow.removeAll();
+            if (vehicles.size() > 3) {
+                // Show the "View All (N)" link button
+                JButton viewAllBtn = createTextLinkButton("View All (" + vehicles.size() + ")");
+                final List<String[]> all = vehicles; // capture for use inside lambda
+                viewAllBtn.addActionListener(e -> showViewAllVehiclesDialog(all));
+                viewAllRow.add(viewAllBtn);
+            }
+            viewAllRow.revalidate();
+            viewAllRow.repaint();
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // findNamedPanel() — walks up the component tree from vehicleListPanel
+    // and searches sibling components for a JPanel with the given name.
+    // Used to find the "vehicleViewAllRow" placeholder after it is built.
+    // ─────────────────────────────────────────────────────────────
+    private JPanel findNamedPanel(String name) {
+        if (vehicleListPanel == null) return null;
+        Component comp = vehicleListPanel;
+        // Walk up at most 6 levels of parents
+        for (int level = 0; level < 6 && comp != null; level++) {
+            comp = comp.getParent();
+            if (comp instanceof JPanel) {
+                // Search the direct children of this panel
+                for (Component child : ((JPanel) comp).getComponents()) {
+                    if (child instanceof JPanel && name.equals(((JPanel) child).getName())) {
+                        return (JPanel) child;
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     // ═══════════════════════════════════════════════════════════════
     // PROFILE PAGE
     // ═══════════════════════════════════════════════════════════════
 
-    /** Builds the Profile page wrapped in a scroll pane so it scrolls vertically. */
     private JPanel buildProfilePage() {
         JPanel page = new JPanel(new BorderLayout());
         page.setBackground(UIConstants.BG_CONTENT);
@@ -321,7 +330,6 @@ public class CustomerDashboard extends JPanel {
         return page;
     }
 
-    /** Builds the inner content of the Profile page — banner at the top, two columns below. */
     private JPanel buildProfileInner() {
         JPanel inner = new JPanel();
         inner.setLayout(new BoxLayout(inner, BoxLayout.Y_AXIS));
@@ -335,7 +343,7 @@ public class CustomerDashboard extends JPanel {
         body.setBackground(UIConstants.BG_CONTENT);
         body.setBorder(new EmptyBorder(0, 30, 0, 30));
 
-        // Left column: Personal Info card + My Vehicle card
+        // Left column: Personal Info + My Vehicle
         JPanel leftColumn = new JPanel();
         leftColumn.setLayout(new BoxLayout(leftColumn, BoxLayout.Y_AXIS));
         leftColumn.setOpaque(false);
@@ -344,8 +352,10 @@ public class CustomerDashboard extends JPanel {
         leftColumn.add(buildVehicleCard());
         body.add(leftColumn, BorderLayout.CENTER);
 
-        // Right column: fixed 440px wide
-        JPanel rightColumn = new JPanel();
+        // Right column: Upcoming Appointments + Pending Payment
+        // NOTE: we assign to the CLASS FIELD — not a new local JPanel variable.
+        // This is essential so refreshUser() can call rightColumn.removeAll() later.
+        rightColumn = new JPanel();
         rightColumn.setLayout(new BoxLayout(rightColumn, BoxLayout.Y_AXIS));
         rightColumn.setOpaque(false);
         rightColumn.setPreferredSize(new Dimension(440, 0));
@@ -360,8 +370,7 @@ public class CustomerDashboard extends JPanel {
         return inner;
     }
 
-    // ── Banner + profile picture ──────────────────────────────────
-    /** Builds the banner (background image) and the overlapping circular profile picture. */
+    // ── Banner + overlapping profile picture ──────────────────────
     private JPanel buildBannerHero() {
         JPanel hero = new JPanel(null);
         hero.setOpaque(false);
@@ -372,17 +381,14 @@ public class CustomerDashboard extends JPanel {
         boolean[] avatarHovered = {false};
 
         profileBanner = new JPanel() {
-            @Override
-            protected void paintComponent(Graphics g) {
+            @Override protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 if (bannerImage != null) {
                     g2.drawImage(bannerImage, 0, 0, getWidth(), getHeight(), null);
                 } else {
-                    GradientPaint gradient = new GradientPaint(
-                            0, 0, BANNER_BLUE, getWidth(), getHeight(), new Color(60, 90, 210));
-                    g2.setPaint(gradient);
+                    g2.setPaint(new GradientPaint(0, 0, BANNER_BLUE, getWidth(), getHeight(), new Color(60, 90, 210)));
                     g2.fillRect(0, 0, getWidth(), getHeight());
                 }
                 if (bannerHovered[0]) {
@@ -409,21 +415,16 @@ public class CustomerDashboard extends JPanel {
         });
 
         profilePicLabel = new JLabel() {
-            @Override
-            protected void paintComponent(Graphics g) {
+            @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 int size = Math.min(getWidth(), getHeight());
                 if (profileImage != null) {
-                    // Crop to square from the centre so the image is never stretched
-                    int imgW    = profileImage.getWidth();
-                    int imgH    = profileImage.getHeight();
-                    int crop    = Math.min(imgW, imgH);
-                    int cropX   = (imgW - crop) / 2;
-                    int cropY   = (imgH - crop) / 2;
+                    int imgW = profileImage.getWidth(), imgH = profileImage.getHeight();
+                    int crop = Math.min(imgW, imgH);
+                    int cropX = (imgW - crop) / 2, cropY = (imgH - crop) / 2;
                     g2.setClip(new Ellipse2D.Float(0, 0, size, size));
-                    g2.drawImage(profileImage, 0, 0, size, size,
-                            cropX, cropY, cropX + crop, cropY + crop, null);
+                    g2.drawImage(profileImage, 0, 0, size, size, cropX, cropY, cropX + crop, cropY + crop, null);
                     g2.setClip(null);
                 } else {
                     drawDefaultAvatar(g2, size);
@@ -450,8 +451,7 @@ public class CustomerDashboard extends JPanel {
         });
 
         hero.addComponentListener(new java.awt.event.ComponentAdapter() {
-            @Override
-            public void componentResized(java.awt.event.ComponentEvent e) {
+            @Override public void componentResized(java.awt.event.ComponentEvent e) {
                 profileBanner.setBounds(0, 0, hero.getWidth(), 170);
                 profilePicLabel.setBounds(30, 90, 110, 110);
             }
@@ -466,7 +466,6 @@ public class CustomerDashboard extends JPanel {
         return hero;
     }
 
-    /** Draws a simple camera icon — shown as a hover overlay on the banner and profile picture. */
     private void drawCameraIcon(Graphics2D g2, int cx, int cy, int size, Color color) {
         g2.setColor(color);
         g2.setStroke(new BasicStroke(size / 10f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
@@ -477,7 +476,6 @@ public class CustomerDashboard extends JPanel {
         g2.drawRoundRect(bx + size / 6, by - size / 6, size / 4, size / 6, 2, 2);
     }
 
-    /** Draws a blue circle with a white smiley face — the default profile picture. */
     private void drawDefaultAvatar(Graphics2D g2, int size) {
         g2.setColor(BRAND_BLUE);
         g2.fillOval(0, 0, size, size);
@@ -490,7 +488,6 @@ public class CustomerDashboard extends JPanel {
     }
 
     // ── Personal Information card ─────────────────────────────────
-    /** Builds the Personal Information card showing Username, Email and Role. */
     private JPanel buildPersonalInfoCard() {
         JPanel card = createCard();
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
@@ -524,15 +521,13 @@ public class CustomerDashboard extends JPanel {
         card.add(makeSeparator());
         card.add(Box.createVerticalStrut(20));
 
-        User currentUser    = app.getLoggedInUserObj();
-        String currentName  = currentUser != null ? currentUser.getName()  : "—";
-        String currentEmail = currentUser != null ? currentUser.getEmail() : "—";
-        String currentRole  = currentUser != null ? currentUser.getRole()  : "—";
-        if (!currentRole.equals("—")) {
+        User u = app.getLoggedInUserObj();
+        String currentName  = u != null ? u.getName()  : "—";
+        String currentEmail = u != null ? u.getEmail() : "—";
+        String currentRole  = u != null ? u.getRole()  : "—";
+        if (!currentRole.equals("—"))
             currentRole = currentRole.substring(0, 1).toUpperCase() + currentRole.substring(1);
-        }
 
-        // Username display row
         nameDisplayPanel = new JPanel(new BorderLayout(12, 0));
         nameDisplayPanel.setOpaque(false);
         nameDisplayPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
@@ -546,7 +541,6 @@ public class CustomerDashboard extends JPanel {
         nameDisplayPanel.add(nameLabel, BorderLayout.WEST);
         nameDisplayPanel.add(profileNameDisplay, BorderLayout.CENTER);
 
-        // Username edit row (hidden by default)
         nameEditPanel = new JPanel(new BorderLayout(12, 0));
         nameEditPanel.setOpaque(false);
         nameEditPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
@@ -557,8 +551,7 @@ public class CustomerDashboard extends JPanel {
         profileNameField = new JTextField(currentName);
         profileNameField.setFont(UIConstants.FONT_BODY);
         profileNameField.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(UIConstants.PRIMARY, 2),
-                new EmptyBorder(4, 8, 4, 8)));
+                BorderFactory.createLineBorder(UIConstants.PRIMARY, 2), new EmptyBorder(4, 8, 4, 8)));
         nameEditPanel.add(nameLabelEdit, BorderLayout.WEST);
         nameEditPanel.add(profileNameField, BorderLayout.CENTER);
         nameEditPanel.setVisible(false);
@@ -567,7 +560,6 @@ public class CustomerDashboard extends JPanel {
         card.add(nameEditPanel);
         card.add(Box.createVerticalStrut(14));
 
-        // Email display row
         emailDisplayPanel = new JPanel(new BorderLayout(12, 0));
         emailDisplayPanel.setOpaque(false);
         emailDisplayPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
@@ -581,7 +573,6 @@ public class CustomerDashboard extends JPanel {
         emailDisplayPanel.add(emailLabel, BorderLayout.WEST);
         emailDisplayPanel.add(profileEmailDisplay, BorderLayout.CENTER);
 
-        // Email edit row (hidden by default)
         emailEditPanel = new JPanel(new BorderLayout(12, 0));
         emailEditPanel.setOpaque(false);
         emailEditPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
@@ -592,8 +583,7 @@ public class CustomerDashboard extends JPanel {
         profileEmailField = new JTextField(currentEmail);
         profileEmailField.setFont(UIConstants.FONT_BODY);
         profileEmailField.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(UIConstants.PRIMARY, 2),
-                new EmptyBorder(4, 8, 4, 8)));
+                BorderFactory.createLineBorder(UIConstants.PRIMARY, 2), new EmptyBorder(4, 8, 4, 8)));
         emailEditPanel.add(emailLabelEdit, BorderLayout.WEST);
         emailEditPanel.add(profileEmailField, BorderLayout.CENTER);
         emailEditPanel.setVisible(false);
@@ -601,8 +591,7 @@ public class CustomerDashboard extends JPanel {
         card.add(emailDisplayPanel);
         card.add(emailEditPanel);
         card.add(Box.createVerticalStrut(14));
-
-        buildInfoRow(card, "Role", currentRole); // role is always read-only
+        buildInfoRow(card, "Role", currentRole);
         card.add(Box.createVerticalStrut(4));
 
         editBtn.addActionListener(e   -> enterEditMode());
@@ -612,8 +601,6 @@ public class CustomerDashboard extends JPanel {
         return card;
     }
 
-    /** Switches to edit mode: shows text fields, hides labels. */
-    /** Switches to edit mode — hides the labels and shows the text fields for typing. */
     private void enterEditMode() {
         profileNameField.setText(profileController.getCurrentName());
         profileEmailField.setText(profileController.getCurrentEmail());
@@ -627,8 +614,6 @@ public class CustomerDashboard extends JPanel {
         profileNameField.requestFocusInWindow();
     }
 
-    /** Switches back to read mode: shows labels, hides text fields. */
-    /** Switches back to read mode — hides the text fields and shows the labels again. */
     private void exitEditMode() {
         nameEditPanel.setVisible(false);
         emailEditPanel.setVisible(false);
@@ -639,37 +624,28 @@ public class CustomerDashboard extends JPanel {
         editBtn.setVisible(true);
     }
 
-    /** Called when Save is clicked — validates and saves the profile. */
-    /** Called when Save is clicked — checks for changes, validates, and saves the profile. */
     private void handleSave() {
         String newName  = profileNameField.getText().trim();
         String newEmail = profileEmailField.getText().trim();
-
         if (profileController.hasNoChanges(newName, newEmail)) {
-            JOptionPane.showMessageDialog(app, "No changes were made.",
-                    "No Changes", JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(app, "No changes were made.", "No Changes", JOptionPane.INFORMATION_MESSAGE);
             exitEditMode();
             return;
         }
-
         try {
             boolean saved = profileController.saveProfile(newName, newEmail);
             if (saved) {
                 exitEditMode();
                 refreshUser();
-                JOptionPane.showMessageDialog(app, "Profile updated successfully!",
-                        "Success", JOptionPane.INFORMATION_MESSAGE);
+                JOptionPane.showMessageDialog(app, "Profile updated successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
             } else {
-                JOptionPane.showMessageDialog(app, "Failed to save. Please try again.",
-                        "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(app, "Failed to save. Please try again.", "Error", JOptionPane.ERROR_MESSAGE);
             }
         } catch (IllegalArgumentException ex) {
-            JOptionPane.showMessageDialog(app, ex.getMessage(),
-                    "Validation Error", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(app, ex.getMessage(), "Validation Error", JOptionPane.WARNING_MESSAGE);
         }
     }
 
-    /** Adds one read-only field row to a card. */
     private JLabel buildInfoRow(JPanel card, String fieldName, String value) {
         JPanel row = new JPanel(new BorderLayout(12, 0));
         row.setOpaque(false);
@@ -688,8 +664,10 @@ public class CustomerDashboard extends JPanel {
         return valueLabel;
     }
 
-    // ── My Vehicle card ───────────────────────────────────────────
-    /** Builds the My Vehicle card with the vehicle list and the + Add button. */
+    // ═══════════════════════════════════════════════════════════════
+    // MY VEHICLE CARD
+    // Shows TOP 3 vehicles. A "View All (N)" link appears when > 3.
+    // ═══════════════════════════════════════════════════════════════
     private JPanel buildVehicleCard() {
         JPanel card = createCard();
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
@@ -703,27 +681,51 @@ public class CustomerDashboard extends JPanel {
         titleLabel.setForeground(UIConstants.TEXT_PRIMARY);
         titleRow.add(titleLabel, BorderLayout.WEST);
 
+        JPanel titleButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        titleButtons.setOpaque(false);
         JButton addButton = createActionButton("+ Add", new Color(80, 110, 230), Color.WHITE);
-        titleRow.add(addButton, BorderLayout.EAST);
+        titleButtons.add(addButton);
+        titleRow.add(titleButtons, BorderLayout.EAST);
 
         card.add(titleRow);
         card.add(Box.createVerticalStrut(12));
         card.add(makeSeparator());
         card.add(Box.createVerticalStrut(12));
 
+        // vehicleListPanel holds the visible vehicle rows (up to 3)
         vehicleListPanel = new JPanel();
         vehicleListPanel.setLayout(new BoxLayout(vehicleListPanel, BoxLayout.Y_AXIS));
         vehicleListPanel.setOpaque(false);
-        card.add(vehicleListPanel);
+        vehicleListPanel.setBorder(new EmptyBorder(2, 0, 2, 0));
 
+        // Height for exactly 3 vehicle rows: 66px each + 10px gap = 218px total
+        JScrollPane vehicleScroll = new JScrollPane(vehicleListPanel);
+        vehicleScroll.setOpaque(false);
+        vehicleScroll.getViewport().setOpaque(false);
+        vehicleScroll.setBorder(null);
+        vehicleScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        vehicleScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
+        vehicleScroll.setPreferredSize(new Dimension(Integer.MAX_VALUE, 218));
+        vehicleScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, 218));
+        card.add(vehicleScroll);
+
+        // ── "View All" placeholder row ────────────────────────────
+        // This panel is initially EMPTY. rebuildVehicleList() fills it with
+        // a "View All (N)" link if there are more than 3 vehicles.
+        // We give it a name so findNamedPanel() can locate it later.
+        JPanel viewAllVehicleRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        viewAllVehicleRow.setOpaque(false);
+        viewAllVehicleRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+        viewAllVehicleRow.setName("vehicleViewAllRow"); // tag used in findNamedPanel()
+        card.add(viewAllVehicleRow);
+
+        // ── Inline add form ───────────────────────────────────────
         vehicleAddPanel = buildVehicleAddForm();
         vehicleAddPanel.setVisible(false);
         card.add(vehicleAddPanel);
 
-        // Toggle the add form when + Add is clicked
         addButton.addActionListener(e -> {
-            boolean currentlyVisible = vehicleAddPanel.isVisible();
-            vehicleAddPanel.setVisible(!currentlyVisible);
+            vehicleAddPanel.setVisible(!vehicleAddPanel.isVisible());
             card.revalidate();
             card.repaint();
         });
@@ -731,8 +733,54 @@ public class CustomerDashboard extends JPanel {
         return card;
     }
 
-    /** Builds the inline Add Vehicle form (hidden by default). */
-    /** Builds the inline Add Vehicle form that appears when + Add is clicked. */
+    // ── View All vehicles popup ───────────────────────────────────
+    private void showViewAllVehiclesDialog(List<String[]> allVehicles) {
+        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "All My Vehicles", true);
+        dialog.setSize(620, 500);
+        dialog.setLocationRelativeTo(this);
+        dialog.setLayout(new BorderLayout());
+
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(Color.WHITE);
+        header.setBorder(new EmptyBorder(18, 24, 14, 24));
+        JLabel title = new JLabel("All My Vehicles");
+        title.setFont(new Font("SansSerif", Font.BOLD, 16));
+        title.setForeground(UIConstants.TEXT_PRIMARY);
+        header.add(title, BorderLayout.WEST);
+        JLabel count = new JLabel(allVehicles.size() + " vehicles");
+        count.setFont(UIConstants.FONT_SMALL);
+        count.setForeground(UIConstants.TEXT_MUTED);
+        header.add(count, BorderLayout.EAST);
+        dialog.add(header, BorderLayout.NORTH);
+
+        JPanel listPanel = new JPanel();
+        listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
+        listPanel.setBackground(Color.WHITE);
+        listPanel.setBorder(new EmptyBorder(4, 18, 18, 18));
+        for (int i = 0; i < allVehicles.size(); i++) {
+            String[] v = allVehicles.get(i);
+            listPanel.add(buildVehicleRow(v[0], v[1], v[2], v[3], v[4]));
+            if (i < allVehicles.size() - 1) listPanel.add(Box.createVerticalStrut(10));
+        }
+
+        JScrollPane scroll = new JScrollPane(listPanel);
+        scroll.setBorder(null);
+        scroll.getViewport().setBackground(Color.WHITE);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        dialog.add(scroll, BorderLayout.CENTER);
+
+        JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 18, 12));
+        footer.setBackground(Color.WHITE);
+        footer.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UIConstants.BORDER_DEFAULT));
+        JButton closeBtn = createActionButton("Close", new Color(108, 117, 125), Color.WHITE);
+        closeBtn.setPreferredSize(new Dimension(80, 34));
+        closeBtn.addActionListener(e -> dialog.dispose());
+        footer.add(closeBtn);
+        dialog.add(footer, BorderLayout.SOUTH);
+
+        dialog.setVisible(true);
+    }
+
     private JPanel buildVehicleAddForm() {
         JPanel form = new JPanel(new BorderLayout(6, 0));
         form.setOpaque(false);
@@ -755,61 +803,56 @@ public class CustomerDashboard extends JPanel {
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
         buttonPanel.setOpaque(false);
-        JButton saveBtn   = createActionButton("Save",   new Color(80, 190, 110), Color.WHITE);
-        JButton cancelBtn = createActionButton("Cancel", new Color(150, 150, 165), Color.WHITE);
-        cancelBtn.setPreferredSize(new Dimension(90, 32));
-        cancelBtn.setMinimumSize(new Dimension(90, 32));
-        cancelBtn.setMaximumSize(new Dimension(90, 32));
-        buttonPanel.add(saveBtn);
-        buttonPanel.add(cancelBtn);
+        JButton saveVehicleBtn   = createActionButton("Save",   new Color(80, 190, 110), Color.WHITE);
+        JButton cancelVehicleBtn = createActionButton("Cancel", new Color(150, 150, 165), Color.WHITE);
+        cancelVehicleBtn.setPreferredSize(new Dimension(90, 32));
+        cancelVehicleBtn.setMinimumSize(new Dimension(90, 32));
+        cancelVehicleBtn.setMaximumSize(new Dimension(90, 32));
+        buttonPanel.add(saveVehicleBtn);
+        buttonPanel.add(cancelVehicleBtn);
         form.add(buttonPanel, BorderLayout.EAST);
 
-        // Cancel: clear fields and hide the form
-        cancelBtn.addActionListener(e -> {
-            plateField.setText("");
-            brandField.setText("");
-            yearField.setText("");
-            colourField.setText("");
+        cancelVehicleBtn.addActionListener(e -> {
+            plateField.setText(""); brandField.setText("");
+            yearField.setText("");  colourField.setText("");
             vehicleAddPanel.setVisible(false);
         });
 
-        // Save: pass fields to the controller — it handles validation and saving
-        saveBtn.addActionListener(e -> {
+        Runnable doSave = () -> {
             String[] fields = {
-                plateField.getText().trim(),
-                brandField.getText().trim(),
-                yearField.getText().trim(),
-                colourField.getText().trim()
+                plateField.getText().trim(), brandField.getText().trim(),
+                yearField.getText().trim(),  colourField.getText().trim()
             };
-
-            // Delegate to VehicleSectionController.handleAdd()
             boolean saved = vehicleController.handleAdd(fields);
-
             if (saved) {
-                // Clear fields and hide the form on success
-                plateField.setText("");
-                brandField.setText("");
-                yearField.setText("");
-                colourField.setText("");
+                plateField.setText(""); brandField.setText("");
+                yearField.setText("");  colourField.setText("");
                 vehicleAddPanel.setVisible(false);
-                JOptionPane.showMessageDialog(app, "New vehicle has been added.",
-                        "Success", JOptionPane.INFORMATION_MESSAGE);
+                JOptionPane.showMessageDialog(app, "New vehicle has been added.", "Success", JOptionPane.INFORMATION_MESSAGE);
             }
-        });
+        };
+
+        saveVehicleBtn.addActionListener(e -> doSave.run());
+
+        // Allow pressing Enter in any field to trigger Save
+        KeyAdapter enterToSave = new KeyAdapter() {
+            @Override public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ENTER) doSave.run();
+            }
+        };
+        plateField.addKeyListener(enterToSave);
+        brandField.addKeyListener(enterToSave);
+        yearField.addKeyListener(enterToSave);
+        colourField.addKeyListener(enterToSave);
 
         return form;
     }
 
     // ── Image choosers ────────────────────────────────────────────
-
-    /** Opens the OS file chooser to pick a profile picture. */
-    /** Opens the OS file chooser so the user can pick a new profile picture. */
     private void chooseProfileImage() {
         User user = app.getLoggedInUserObj();
         if (user == null) return;
-        FileDialog fd = new FileDialog(
-                (Frame) SwingUtilities.getWindowAncestor(this),
-                "Choose Profile Picture", FileDialog.LOAD);
+        FileDialog fd = new FileDialog((Frame) SwingUtilities.getWindowAncestor(this), "Choose Profile Picture", FileDialog.LOAD);
         fd.setFile("*.jpg;*.jpeg;*.png;*.gif;*.bmp");
         fd.setVisible(true);
         if (fd.getFile() == null) return;
@@ -820,20 +863,13 @@ public class CustomerDashboard extends JPanel {
             profileImage = image;
             if (profilePicLabel != null) profilePicLabel.repaint();
             if (avatarLabel     != null) avatarLabel.repaint();
-        } catch (java.io.IOException ex) {
-            ex.printStackTrace();
-            JOptionPane.showMessageDialog(app, "Failed to read the selected image.", "Error", JOptionPane.ERROR_MESSAGE);
-        }
+        } catch (java.io.IOException ex) { ex.printStackTrace(); JOptionPane.showMessageDialog(app, "Failed to read the selected image.", "Error", JOptionPane.ERROR_MESSAGE); }
     }
 
-    /** Opens the OS file chooser to pick a background image. */
-    /** Opens the OS file chooser so the user can pick a new background image. */
     private void chooseBannerImage() {
         User user = app.getLoggedInUserObj();
         if (user == null) return;
-        FileDialog fd = new FileDialog(
-                (Frame) SwingUtilities.getWindowAncestor(this),
-                "Choose Background Image", FileDialog.LOAD);
+        FileDialog fd = new FileDialog((Frame) SwingUtilities.getWindowAncestor(this), "Choose Background Image", FileDialog.LOAD);
         fd.setFile("*.jpg;*.jpeg;*.png;*.gif;*.bmp");
         fd.setVisible(true);
         if (fd.getFile() == null) return;
@@ -843,21 +879,11 @@ public class CustomerDashboard extends JPanel {
             if (!backgroundStorage.saveImage(user.getUserId(), image)) { JOptionPane.showMessageDialog(app, "Failed to save background image.", "Error", JOptionPane.ERROR_MESSAGE); return; }
             bannerImage = image;
             if (profileBanner != null) profileBanner.repaint();
-        } catch (java.io.IOException ex) {
-            ex.printStackTrace();
-            JOptionPane.showMessageDialog(app, "Failed to read the selected image.", "Error", JOptionPane.ERROR_MESSAGE);
-        }
+        } catch (java.io.IOException ex) { ex.printStackTrace(); JOptionPane.showMessageDialog(app, "Failed to read the selected image.", "Error", JOptionPane.ERROR_MESSAGE); }
     }
 
-    // ── Vehicle row ───────────────────────────────────────────────
-
-    /**
-     * Builds one vehicle row using CardLayout to switch between display and edit mode.
-     * vehicleID is kept for backend operations but not displayed on screen.
-     */
-    /** Builds one vehicle row that can switch between display mode and edit mode. */
-    private JPanel buildVehicleRow(String vehicleID, String plate,
-                                   String brand, String year, String colour) {
+    // ── Vehicle row — with Enter key support for the edit form ────
+    private JPanel buildVehicleRow(String vehicleID, String plate, String brand, String year, String colour) {
         JPanel outerBox = new JPanel(new BorderLayout());
         outerBox.setOpaque(false);
         outerBox.setMaximumSize(new Dimension(Integer.MAX_VALUE, 66));
@@ -935,118 +961,546 @@ public class CustomerDashboard extends JPanel {
         switcher.show(switcherPanel, "display");
         outerBox.add(switcherPanel, BorderLayout.CENTER);
 
-        // ── Button actions ────────────────────────────────────────
-
-        // Edit: pre-fill the edit fields and switch to edit mode
         editButton.addActionListener(e -> {
-            editPlateField.setText(plate);
-            editBrandField.setText(brand);
-            editYearField.setText(year);
-            editColourField.setText(colour);
+            editPlateField.setText(plate); editBrandField.setText(brand);
+            editYearField.setText(year);   editColourField.setText(colour);
             switcher.show(switcherPanel, "edit");
+            editPlateField.requestFocusInWindow(); // focus first field when edit opens
         });
-
-        // Cancel: go back to display mode without saving
         cancelVehicleBtn.addActionListener(e -> switcher.show(switcherPanel, "display"));
 
-        // Save: check for changes, then delegate to VehicleSectionController.handleEdit()
-        saveVehicleBtn.addActionListener(e -> {
+        // The actual save logic, extracted to a Runnable so both the button
+        // AND the Enter key can trigger it without duplicating code.
+        Runnable doEditSave = () -> {
             String newPlate  = editPlateField.getText().trim();
             String newBrand  = editBrandField.getText().trim();
             String newYear   = editYearField.getText().trim();
             String newColour = editColourField.getText().trim();
-
-            // Check if anything actually changed (view-level check, no file I/O)
-            boolean nothingChanged = newPlate.equals(plate) && newBrand.equals(brand)
-                    && newYear.equals(year) && newColour.equals(colour);
-            if (nothingChanged) {
-                JOptionPane.showMessageDialog(app, "No changes were made.",
-                        "No Changes", JOptionPane.INFORMATION_MESSAGE);
+            if (newPlate.equals(plate) && newBrand.equals(brand) && newYear.equals(year) && newColour.equals(colour)) {
+                JOptionPane.showMessageDialog(app, "No changes were made.", "No Changes", JOptionPane.INFORMATION_MESSAGE);
                 switcher.show(switcherPanel, "display");
                 return;
             }
-
-            // Delegate validation + in-place update to the controller
-            String[] newFields = { newPlate, newBrand, newYear, newColour };
-            boolean updated = vehicleController.handleEdit(plate, newFields);
-
+            boolean updated = vehicleController.handleEdit(plate, new String[]{ newPlate, newBrand, newYear, newColour });
             if (updated) {
                 switcher.show(switcherPanel, "display");
-                JOptionPane.showMessageDialog(app, "Vehicle information has been updated.",
-                        "Success", JOptionPane.INFORMATION_MESSAGE);
+                JOptionPane.showMessageDialog(app, "Vehicle information has been updated.", "Success", JOptionPane.INFORMATION_MESSAGE);
             }
-        });
+        };
 
-        // Remove: delegate confirmation + deletion to the controller
+        saveVehicleBtn.addActionListener(e -> doEditSave.run());
+
+        // ── Enter key in any edit field triggers Save ─────────────
+        // KeyAdapter listens for key events on a text field.
+        // When the user presses Enter (VK_ENTER), we run doEditSave.
+        KeyAdapter enterKey = new KeyAdapter() {
+            @Override public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ENTER) doEditSave.run();
+            }
+        };
+        editPlateField.addKeyListener(enterKey);
+        editBrandField.addKeyListener(enterKey);
+        editYearField.addKeyListener(enterKey);
+        editColourField.addKeyListener(enterKey);
+
         removeButton.addActionListener(e -> vehicleController.handleDelete(plate));
-
         return outerBox;
     }
 
-    // ── Upcoming Appointments card ────────────────────────────────
-    /** Builds the Upcoming Appointments summary card shown on the right side. */
+    // ─────────────────────────────────────────────────────────────
+    // resolveUserName() — converts a user ID like "T3" to "Mike Tan"
+    // Falls back to the raw ID if no match is found in accounts.txt.
+    // ─────────────────────────────────────────────────────────────
+    private String resolveUserName(String userId) {
+        for (User u : app.getAccountService().getAllUsers()) {
+            if (u.getUserId() != null && u.getUserId().equalsIgnoreCase(userId)) return u.getName();
+        }
+        return userId;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // UPCOMING APPOINTMENTS CARD — top 2, "View All" if more than 2
+    // ═══════════════════════════════════════════════════════════════
     private JPanel buildUpcomingCard() {
         JPanel card = createCard();
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(new EmptyBorder(20, 22, 20, 22));
+
         JPanel titleRow = new JPanel(new BorderLayout());
         titleRow.setOpaque(false);
-        titleRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
+        titleRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
         JLabel title = new JLabel("Upcoming Appointments");
         title.setFont(new Font("SansSerif", Font.BOLD, 15));
         title.setForeground(UIConstants.TEXT_PRIMARY);
         titleRow.add(title, BorderLayout.WEST);
-        JLabel hint = new JLabel("Top 3");
-        hint.setFont(UIConstants.FONT_SMALL);
-        hint.setForeground(UIConstants.TEXT_MUTED);
-        titleRow.add(hint, BorderLayout.EAST);
         card.add(titleRow);
         card.add(Box.createVerticalStrut(12));
         card.add(makeSeparator());
         card.add(Box.createVerticalStrut(12));
-        JLabel empty = new JLabel("No upcoming appointments.");
-        empty.setFont(UIConstants.FONT_BODY);
-        empty.setForeground(UIConstants.TEXT_SECONDARY);
-        empty.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(empty);
+
+        User user = app.getLoggedInUserObj();
+        if (user == null) {
+            card.add(makeEmptyLabel("No upcoming appointments."));
+        } else {
+            List<String[]> allUpcoming = appointmentService.getPendingAppointments(user.getUserId());
+            if (allUpcoming.isEmpty()) {
+                card.add(makeEmptyLabel("No upcoming appointments."));
+            } else {
+                int show = Math.min(2, allUpcoming.size());
+                for (int i = 0; i < show; i++) {
+                    card.add(buildUpcomingRow(allUpcoming.get(i)));
+                    if (i < show - 1) card.add(Box.createVerticalStrut(8));
+                }
+                if (allUpcoming.size() > 2) {
+                    card.add(Box.createVerticalStrut(10));
+                    JPanel viewAllRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+                    viewAllRow.setOpaque(false);
+                    viewAllRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+                    JButton btn = createTextLinkButton("View All (" + allUpcoming.size() + ")");
+                    btn.addActionListener(e -> showViewAllDialog("All Upcoming Appointments", allUpcoming, false));
+                    viewAllRow.add(btn);
+                    card.add(viewAllRow);
+                }
+            }
+        }
         card.add(Box.createVerticalStrut(4));
         return card;
     }
 
-    // ── Payment History card ──────────────────────────────────────
-    /** Builds the Payment History summary card shown on the right side. */
+    // ═══════════════════════════════════════════════════════════════
+    // PENDING PAYMENT CARD — top 2, "View All" if more than 2
+    // ═══════════════════════════════════════════════════════════════
     private JPanel buildPaymentSummaryCard() {
         JPanel card = createCard();
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(new EmptyBorder(20, 22, 20, 22));
+
         JPanel titleRow = new JPanel(new BorderLayout());
         titleRow.setOpaque(false);
-        titleRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
-        JLabel title = new JLabel("Payment History");
+        titleRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+        JLabel title = new JLabel("Pending Payment");
         title.setFont(new Font("SansSerif", Font.BOLD, 15));
         title.setForeground(UIConstants.TEXT_PRIMARY);
         titleRow.add(title, BorderLayout.WEST);
-        JLabel hint = new JLabel("Top 3");
-        hint.setFont(UIConstants.FONT_SMALL);
-        hint.setForeground(UIConstants.TEXT_MUTED);
-        titleRow.add(hint, BorderLayout.EAST);
         card.add(titleRow);
         card.add(Box.createVerticalStrut(12));
         card.add(makeSeparator());
         card.add(Box.createVerticalStrut(12));
-        JLabel empty = new JLabel("No payment records found.");
-        empty.setFont(UIConstants.FONT_BODY);
-        empty.setForeground(UIConstants.TEXT_SECONDARY);
-        empty.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(empty);
+
+        User user = app.getLoggedInUserObj();
+        if (user == null) {
+            card.add(makeEmptyLabel("No pending payments."));
+        } else {
+            Set<String> paidIds = paymentService.getPaidAppointmentIds(user.getUserId());
+            List<String[]> allUnpaid = appointmentService.getUnpaidAppointments(user.getUserId(), paidIds);
+            if (allUnpaid.isEmpty()) {
+                card.add(makeEmptyLabel("No pending payments."));
+            } else {
+                int show = Math.min(2, allUnpaid.size());
+                for (int i = 0; i < show; i++) {
+                    card.add(buildPaymentRow(allUnpaid.get(i)));
+                    if (i < show - 1) card.add(Box.createVerticalStrut(8));
+                }
+                if (allUnpaid.size() > 2) {
+                    card.add(Box.createVerticalStrut(10));
+                    JPanel viewAllRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+                    viewAllRow.setOpaque(false);
+                    viewAllRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+                    JButton btn = createTextLinkButton("View All (" + allUnpaid.size() + ")");
+                    btn.addActionListener(e -> showViewAllDialog("All Pending Payments", allUnpaid, true));
+                    viewAllRow.add(btn);
+                    card.add(viewAllRow);
+                }
+            }
+        }
         card.add(Box.createVerticalStrut(4));
         return card;
+    }
+
+    // ── One upcoming appointment row ──────────────────────────────
+    // Row: [0]=apptID [1]=techID [2]=serviceType [3]=status [4]=dateTime [5]=duration
+    private JPanel buildUpcomingRow(String[] row) {
+        String apptId = row[0], techId = row[1], serviceType = row[2];
+        String status = row[3], dateTime = row[4], duration = row[5];
+        String techName = resolveUserName(techId);
+
+        JPanel panel = new JPanel(new BorderLayout(8, 0));
+        panel.setOpaque(false);
+        panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 72));
+        panel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1),
+                new EmptyBorder(8, 12, 8, 12)));
+
+        JLabel icon = new JLabel("\uD83D\uDCC5");
+        icon.setFont(new Font("SansSerif", Font.PLAIN, 20));
+        icon.setVerticalAlignment(SwingConstants.CENTER);
+        panel.add(icon, BorderLayout.WEST);
+
+        JPanel info = new JPanel();
+        info.setLayout(new BoxLayout(info, BoxLayout.Y_AXIS));
+        info.setOpaque(false);
+        JLabel line1 = new JLabel(apptId + "  ·  " + serviceType);
+        line1.setFont(new Font("SansSerif", Font.BOLD, 12));
+        line1.setForeground(UIConstants.TEXT_PRIMARY);
+        JLabel line2 = new JLabel("Tech: " + techName + "   |   " + dateTime + "   ·   " + duration + " hr(s)");
+        line2.setFont(UIConstants.FONT_SMALL);
+        line2.setForeground(UIConstants.TEXT_MUTED);
+        info.add(Box.createVerticalGlue());
+        info.add(line1);
+        info.add(Box.createVerticalStrut(3));
+        info.add(line2);
+        info.add(Box.createVerticalGlue());
+        panel.add(info, BorderLayout.CENTER);
+
+        JLabel badge = new JLabel(status);
+        badge.setFont(new Font("SansSerif", Font.BOLD, 10));
+        badge.setForeground(status.equalsIgnoreCase("In Progress") ? new Color(40, 130, 220) : new Color(230, 160, 40));
+        badge.setHorizontalAlignment(SwingConstants.RIGHT);
+        panel.add(badge, BorderLayout.EAST);
+
+        return panel;
+    }
+
+    // ── One pending payment row ───────────────────────────────────
+    // FIX: Pay button is now 64px wide so "Pay" shows in full (was 56 → still cut off on some LAFs).
+    // Row: [0]=apptID [1]=techID [2]=serviceType [3]=status [4]=dateTime [5]=duration
+    private JPanel buildPaymentRow(String[] row) {
+        String apptId = row[0], techId = row[1], serviceType = row[2], duration = row[5];
+        String techName = resolveUserName(techId);
+
+        double pricePerHour = serviceType.equalsIgnoreCase("Major Service") ? 350.00 : 150.00;
+        int hours = 1;
+        try { hours = Integer.parseInt(duration.trim()); } catch (NumberFormatException ignored) {}
+        String amountStr = String.format("%.2f", pricePerHour * hours);
+
+        JPanel panel = new JPanel(new BorderLayout(8, 0));
+        panel.setOpaque(false);
+        panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 72));
+        panel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1),
+                new EmptyBorder(8, 12, 8, 12)));
+
+        JLabel icon = new JLabel("\uD83D\uDCB3");
+        icon.setFont(new Font("SansSerif", Font.PLAIN, 20));
+        icon.setVerticalAlignment(SwingConstants.CENTER);
+        panel.add(icon, BorderLayout.WEST);
+
+        JPanel info = new JPanel();
+        info.setLayout(new BoxLayout(info, BoxLayout.Y_AXIS));
+        info.setOpaque(false);
+        JLabel line1 = new JLabel(apptId + "  ·  " + serviceType);
+        line1.setFont(new Font("SansSerif", Font.BOLD, 12));
+        line1.setForeground(UIConstants.TEXT_PRIMARY);
+        JLabel line2 = new JLabel("Tech: " + techName + "   |   RM " + amountStr);
+        line2.setFont(UIConstants.FONT_SMALL);
+        line2.setForeground(UIConstants.TEXT_MUTED);
+        info.add(Box.createVerticalGlue());
+        info.add(line1);
+        info.add(Box.createVerticalStrut(3));
+        info.add(line2);
+        info.add(Box.createVerticalGlue());
+        panel.add(info, BorderLayout.CENTER);
+
+        // ── Pay button — wide enough so "Pay" shows completely ─────
+        // Using a plain JButton (not createActionButton) so we can
+        // control the exact size reliably without the custom paint code
+        // interfering with the preferred size.
+        final String finalAmount = amountStr;
+        JButton payBtn = new JButton("Pay") {
+            private boolean hovered = false;
+            {
+                addMouseListener(new MouseAdapter() {
+                    public void mouseEntered(MouseEvent e) { hovered = true;  repaint(); }
+                    public void mouseExited (MouseEvent e) { hovered = false; repaint(); }
+                });
+            }
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(hovered ? new Color(60, 170, 90) : new Color(80, 190, 110));
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        payBtn.setFont(UIConstants.FONT_SMALL_BOLD);
+        payBtn.setForeground(Color.WHITE);
+        payBtn.setContentAreaFilled(false);
+        payBtn.setBorderPainted(false);
+        payBtn.setFocusPainted(false);
+        payBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        // Width = 64px so "Pay" is fully visible. Height = 36px to fill the row nicely.
+        payBtn.setPreferredSize(new Dimension(64, 36));
+        payBtn.setMinimumSize(new Dimension(64, 36));
+        payBtn.setMaximumSize(new Dimension(64, 36));
+        payBtn.addActionListener(e -> showPaymentInvoiceDialog(apptId, serviceType, duration, finalAmount, row));
+        panel.add(payBtn, BorderLayout.EAST);
+
+        return panel;
+    }
+
+    // ── View All popup (upcoming or payment) ──────────────────────
+    private void showViewAllDialog(String dialogTitle, List<String[]> allRows, boolean isPayment) {
+        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), dialogTitle, true);
+        dialog.setSize(580, 520);
+        dialog.setLocationRelativeTo(this);
+        dialog.setLayout(new BorderLayout());
+
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(Color.WHITE);
+        header.setBorder(new EmptyBorder(18, 24, 14, 24));
+        JLabel titleLabel = new JLabel(dialogTitle);
+        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 16));
+        titleLabel.setForeground(UIConstants.TEXT_PRIMARY);
+        header.add(titleLabel, BorderLayout.WEST);
+        JLabel countLabel = new JLabel(allRows.size() + " records");
+        countLabel.setFont(UIConstants.FONT_SMALL);
+        countLabel.setForeground(UIConstants.TEXT_MUTED);
+        header.add(countLabel, BorderLayout.EAST);
+        dialog.add(header, BorderLayout.NORTH);
+
+        JPanel listPanel = new JPanel();
+        listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
+        listPanel.setBackground(Color.WHITE);
+        listPanel.setBorder(new EmptyBorder(4, 18, 18, 18));
+
+        for (int i = 0; i < allRows.size(); i++) {
+            JPanel rowPanel = isPayment ? buildPaymentRow(allRows.get(i)) : buildUpcomingRow(allRows.get(i));
+            listPanel.add(rowPanel);
+            if (i < allRows.size() - 1) listPanel.add(Box.createVerticalStrut(8));
+        }
+
+        JScrollPane scrollPane = new JScrollPane(listPanel);
+        scrollPane.setBorder(null);
+        scrollPane.getViewport().setBackground(Color.WHITE);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
+        dialog.add(scrollPane, BorderLayout.CENTER);
+
+        JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 18, 12));
+        footer.setBackground(Color.WHITE);
+        footer.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UIConstants.BORDER_DEFAULT));
+        JButton closeBtn = createActionButton("Close", new Color(108, 117, 125), Color.WHITE);
+        closeBtn.setPreferredSize(new Dimension(80, 34));
+        closeBtn.addActionListener(e -> dialog.dispose());
+        footer.add(closeBtn);
+        dialog.add(footer, BorderLayout.SOUTH);
+
+        dialog.setVisible(true);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // showPaymentInvoiceDialog() — official invoice popup
+    //
+    // FIX: No horizontal scrollbar. The dialog is wide enough (460px)
+    // and content uses a plain JPanel (not a JScrollPane with horizontal
+    // scrolling). All info fits in one view without scrolling sideways.
+    //
+    // Shows: Appointment ID, Customer, Technician, Service Type,
+    //        Date & Time, Service Hours, Payment Type dropdown,
+    //        Total Amount, Confirm & Pay button.
+    // ─────────────────────────────────────────────────────────────
+    private void showPaymentInvoiceDialog(String apptId, String serviceType,
+            String duration, String amountStr, String[] row) {
+
+        User user = app.getLoggedInUserObj();
+        if (user == null) return;
+
+        String customerName = user.getName();
+        String techName     = resolveUserName(row[1]);
+        String dateTime     = row[4];
+        int    hours        = 1;
+        try { hours = Integer.parseInt(duration.trim()); } catch (NumberFormatException ignored) {}
+        double totalAmount;
+        try { totalAmount = Double.parseDouble(amountStr); } catch (NumberFormatException e) { totalAmount = 150.00; }
+
+        // ── Dialog setup ──────────────────────────────────────────
+        // Width = 460px — wide enough to show all labels without truncation.
+        // Height = 480px — fits all rows comfortably without needing vertical scroll.
+        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this),
+                "Payment Invoice — " + apptId, true);
+        dialog.setSize(460, 480);
+        dialog.setResizable(false); // fixed size so layout is predictable
+        dialog.setLocationRelativeTo(this);
+        dialog.setLayout(new BorderLayout());
+
+        // ── Main content panel ────────────────────────────────────
+        // We use a plain JPanel with BorderLayout — NO JScrollPane — so
+        // there is absolutely no scrollbar (horizontal or vertical).
+        JPanel content = new JPanel();
+        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+        content.setBackground(Color.WHITE);
+        content.setBorder(new EmptyBorder(20, 28, 20, 28));
+
+        // ── Invoice header ────────────────────────────────────────
+        JLabel orgName = new JLabel("APU Automotive Service Centre");
+        orgName.setFont(new Font("SansSerif", Font.BOLD, 14));
+        orgName.setForeground(UIConstants.PRIMARY);
+        orgName.setAlignmentX(Component.LEFT_ALIGNMENT);
+        content.add(orgName);
+
+        JLabel orgSub = new JLabel("Official Payment Invoice");
+        orgSub.setFont(UIConstants.FONT_SMALL);
+        orgSub.setForeground(UIConstants.TEXT_MUTED);
+        orgSub.setAlignmentX(Component.LEFT_ALIGNMENT);
+        content.add(orgSub);
+        content.add(Box.createVerticalStrut(14));
+        content.add(makeInvoiceSeparator());
+        content.add(Box.createVerticalStrut(10));
+
+        // ── Detail rows (alternating shading) ────────────────────
+        content.add(makeInvoiceRow("Appointment ID", apptId,       false));
+        content.add(makeInvoiceRow("Customer",       customerName, true));
+        content.add(makeInvoiceRow("Technician",     techName,     false));
+        content.add(makeInvoiceRow("Service Type",   serviceType,  true));
+        content.add(makeInvoiceRow("Date & Time",    dateTime,     false));
+        content.add(makeInvoiceRow("Service Hours",  hours + " hour(s)", true));
+
+        content.add(Box.createVerticalStrut(10));
+        content.add(makeInvoiceSeparator());
+        content.add(Box.createVerticalStrut(12));
+
+        // ── Payment type dropdown ─────────────────────────────────
+        JPanel methodRow = new JPanel(new BorderLayout(12, 0));
+        methodRow.setOpaque(false);
+        methodRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        methodRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+
+        JLabel methodLabel = new JLabel("Payment Type");
+        methodLabel.setFont(UIConstants.FONT_SMALL_BOLD);
+        methodLabel.setForeground(UIConstants.TEXT_MUTED);
+        methodLabel.setPreferredSize(new Dimension(110, 20));
+
+        JComboBox<String> methodCombo = new JComboBox<>(new String[]{"Cash", "Card", "Online"});
+        methodCombo.setFont(UIConstants.FONT_BODY);
+        methodCombo.setBackground(Color.WHITE);
+
+        methodRow.add(methodLabel, BorderLayout.WEST);
+        methodRow.add(methodCombo, BorderLayout.CENTER);
+        content.add(methodRow);
+        content.add(Box.createVerticalStrut(12));
+        content.add(makeInvoiceSeparator());
+        content.add(Box.createVerticalStrut(12));
+
+        // ── Total amount row ──────────────────────────────────────
+        JPanel totalRow = new JPanel(new BorderLayout());
+        totalRow.setOpaque(false);
+        totalRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        totalRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
+
+        JLabel totalLabel = new JLabel("Total Amount");
+        totalLabel.setFont(new Font("SansSerif", Font.BOLD, 14));
+        totalLabel.setForeground(UIConstants.TEXT_PRIMARY);
+
+        JLabel totalValue = new JLabel(String.format("RM %.2f", totalAmount));
+        totalValue.setFont(new Font("SansSerif", Font.BOLD, 16));
+        totalValue.setForeground(new Color(40, 160, 80)); // green
+        totalValue.setHorizontalAlignment(SwingConstants.RIGHT);
+
+        totalRow.add(totalLabel, BorderLayout.WEST);
+        totalRow.add(totalValue, BorderLayout.EAST);
+        content.add(totalRow);
+        content.add(Box.createVerticalStrut(18));
+
+        // ── Confirm & Pay button ──────────────────────────────────
+        final String finalAmountStr = String.format("%.2f", totalAmount);
+
+        JButton confirmBtn = new JButton("Confirm & Pay") {
+            private boolean hovered = false;
+            {
+                addMouseListener(new MouseAdapter() {
+                    public void mouseEntered(MouseEvent e) { hovered = true;  repaint(); }
+                    public void mouseExited (MouseEvent e) { hovered = false; repaint(); }
+                });
+            }
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(hovered ? new Color(60, 170, 90) : new Color(80, 190, 110));
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        confirmBtn.setFont(new Font("SansSerif", Font.BOLD, 13));
+        confirmBtn.setForeground(Color.WHITE);
+        confirmBtn.setContentAreaFilled(false);
+        confirmBtn.setBorderPainted(false);
+        confirmBtn.setFocusPainted(false);
+        confirmBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        confirmBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        confirmBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+        confirmBtn.setPreferredSize(new Dimension(Integer.MAX_VALUE, 40));
+
+        confirmBtn.addActionListener(e -> {
+            String selectedMethod = (String) methodCombo.getSelectedItem();
+            boolean saved = paymentService.savePayment(user.getUserId(), apptId, finalAmountStr, selectedMethod);
+            if (saved) {
+                dialog.dispose();
+                JOptionPane.showMessageDialog(this,
+                        "Payment of RM " + finalAmountStr + " via " + selectedMethod + " recorded successfully.",
+                        "Payment Successful", JOptionPane.INFORMATION_MESSAGE);
+                refreshUser(); // remove paid item from the card
+            } else {
+                JOptionPane.showMessageDialog(this, "Failed to save payment. Please try again.", "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        content.add(confirmBtn);
+
+        // Add the content directly to the dialog (no wrapping JScrollPane)
+        // so there is NO scrollbar at all.
+        dialog.add(content, BorderLayout.CENTER);
+        dialog.setVisible(true);
+    }
+
+    // ── Invoice helper: alternating-shaded label-value row ────────
+    private JPanel makeInvoiceRow(String label, String value, boolean shaded) {
+        JPanel row = new JPanel(new BorderLayout(10, 0));
+        row.setOpaque(true);
+        row.setBackground(shaded ? new Color(245, 246, 248) : Color.WHITE);
+        row.setBorder(new EmptyBorder(7, 4, 7, 4));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel lbl = new JLabel(label);
+        lbl.setFont(UIConstants.FONT_SMALL);
+        lbl.setForeground(UIConstants.TEXT_MUTED);
+        lbl.setPreferredSize(new Dimension(120, 20));
+
+        JLabel val = new JLabel(value);
+        val.setFont(UIConstants.FONT_SMALL_BOLD);
+        val.setForeground(UIConstants.TEXT_PRIMARY);
+
+        row.add(lbl, BorderLayout.WEST);
+        row.add(val, BorderLayout.CENTER);
+        return row;
+    }
+
+    // ── Invoice separator line ────────────────────────────────────
+    private JSeparator makeInvoiceSeparator() {
+        JSeparator sep = new JSeparator();
+        sep.setForeground(new Color(220, 222, 228));
+        sep.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1));
+        sep.setAlignmentX(Component.LEFT_ALIGNMENT);
+        return sep;
+    }
+
+    // ── Text link button for "View All (N)" ───────────────────────
+    private JButton createTextLinkButton(String text) {
+        JButton btn = new JButton(text);
+        btn.setFont(new Font("SansSerif", Font.BOLD, 11));
+        btn.setForeground(UIConstants.PRIMARY);
+        btn.setContentAreaFilled(false);
+        btn.setBorderPainted(false);
+        btn.setFocusPainted(false);
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btn.setMargin(new Insets(0, 0, 0, 0));
+        return btn;
     }
 
     // ═══════════════════════════════════════════════════════════════
     // HEADER
     // ═══════════════════════════════════════════════════════════════
-    /** Builds the top header bar with the page title on the left and avatar on the right. */
     private JPanel buildHeader() {
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(UIConstants.BG_HEADER);
@@ -1062,26 +1516,20 @@ public class CustomerDashboard extends JPanel {
         return header;
     }
 
-    /** Builds the avatar circle, customer name, and dropdown arrow in the header. */
     private JPanel buildHeaderProfileArea() {
         JPanel profileArea = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 12));
         profileArea.setBackground(UIConstants.BG_HEADER);
 
         avatarLabel = new JLabel(AVATAR_ICONS[selectedAvatarIndex]) {
-            @Override
-            protected void paintComponent(Graphics g) {
+            @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 if (profileImage != null) {
-                    // Crop to square from centre so image is never stretched
-                    int imgW  = profileImage.getWidth();
-                    int imgH  = profileImage.getHeight();
-                    int crop  = Math.min(imgW, imgH);
-                    int cropX = (imgW - crop) / 2;
-                    int cropY = (imgH - crop) / 2;
+                    int imgW = profileImage.getWidth(), imgH = profileImage.getHeight();
+                    int crop = Math.min(imgW, imgH);
+                    int cropX = (imgW - crop) / 2, cropY = (imgH - crop) / 2;
                     g2.setClip(new Ellipse2D.Float(0, 0, 38, 38));
-                    g2.drawImage(profileImage, 0, 0, 38, 38,
-                            cropX, cropY, cropX + crop, cropY + crop, null);
+                    g2.drawImage(profileImage, 0, 0, 38, 38, cropX, cropY, cropX + crop, cropY + crop, null);
                     g2.setClip(null);
                 } else {
                     g2.setColor(AVATAR_COLORS[selectedAvatarIndex]);
@@ -1123,20 +1571,14 @@ public class CustomerDashboard extends JPanel {
 
         JMenuItem viewProfileItem = createMenuItem("View Profile");
         viewProfileItem.addActionListener(e -> {
-            // Switch to Profile page
             activeNav = "Profile";
             headerTitle.setText("Profile");
             contentLayout.show(contentPanel, "Profile");
             dropdownMenu.setVisible(false);
-
-            // Update the sidebar so Profile button is highlighted
-            if (navButtons != null) {
-                for (int j = 0; j < navButtons.length; j++) {
+            if (navButtons != null)
+                for (int j = 0; j < navButtons.length; j++)
                     updateNavButtonStyle(navButtons[j], NAV_ITEMS[j].equals("Profile"));
-                }
-            }
         });
-
         JMenuItem logoutItem = createMenuItem("Logout");
         logoutItem.setForeground(UIConstants.TEXT_DANGER);
         logoutItem.addActionListener(e -> {
@@ -1144,24 +1586,19 @@ public class CustomerDashboard extends JPanel {
             app.setLoggedInUserObj(null);
             app.showPage(PageName.ONBOARDING);
         });
-
         dropdownMenu.add(viewProfileItem);
         dropdownMenu.add(logoutItem);
 
         profileButton.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseEntered(MouseEvent e) {
+            @Override public void mouseEntered(MouseEvent e) {
                 dropdownMenu.show(profileButton,
                         profileButton.getWidth() - dropdownMenu.getPreferredSize().width,
                         profileButton.getHeight());
             }
         });
         dropdownMenu.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseExited(MouseEvent e) {
-                if (!dropdownMenu.getBounds().contains(e.getPoint())) {
-                    dropdownMenu.setVisible(false);
-                }
+            @Override public void mouseExited(MouseEvent e) {
+                if (!dropdownMenu.getBounds().contains(e.getPoint())) dropdownMenu.setVisible(false);
             }
         });
 
@@ -1172,7 +1609,6 @@ public class CustomerDashboard extends JPanel {
     // ═══════════════════════════════════════════════════════════════
     // SIDEBAR
     // ═══════════════════════════════════════════════════════════════
-    /** Builds the left sidebar with the APU logo and navigation buttons. */
     private JPanel buildSidebar() {
         JPanel sidebar = new JPanel();
         sidebar.setLayout(new BoxLayout(sidebar, BoxLayout.Y_AXIS));
@@ -1184,18 +1620,15 @@ public class CustomerDashboard extends JPanel {
         logoArea.setBackground(UIConstants.SIDEBAR_BG);
         logoArea.setBorder(new EmptyBorder(25, 20, 25, 20));
         logoArea.setMaximumSize(new Dimension(UIConstants.SIDEBAR_WIDTH, 100));
-
         ImageIcon logoIcon   = new ImageIcon(getClass().getResource("/Image/apu-logo.png"));
         Image     scaledLogo = logoIcon.getImage().getScaledInstance(40, 40, Image.SCALE_SMOOTH);
         JLabel    logoLabel  = new JLabel(new ImageIcon(scaledLogo));
         logoLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
         JLabel brandName = new JLabel("APU ASC");
         brandName.setFont(UIConstants.FONT_SIDEBAR);
         brandName.setForeground(Color.WHITE);
         brandName.setAlignmentX(Component.LEFT_ALIGNMENT);
         brandName.setBorder(new EmptyBorder(8, 0, 0, 0));
-
         logoArea.add(logoLabel);
         logoArea.add(brandName);
         sidebar.add(logoArea);
@@ -1224,13 +1657,10 @@ public class CustomerDashboard extends JPanel {
             navButtons[i] = createNavButton(buttonText, pageName.equals(activeNav));
             navButtons[i].addActionListener(e -> {
                 activeNav = pageName;
-                for (int j = 0; j < navButtons.length; j++) {
+                for (int j = 0; j < navButtons.length; j++)
                     updateNavButtonStyle(navButtons[j], NAV_ITEMS[j].equals(activeNav));
-                }
                 headerTitle.setText(pageName);
                 contentLayout.show(contentPanel, pageName);
-
-                // Refresh the page data each time the user navigates to it
                 if (pageName.equals("Service History") && serviceHistoryPage != null) serviceHistoryPage.refresh();
                 if (pageName.equals("Payment History") && paymentHistoryPage != null) paymentHistoryPage.refresh();
                 if (pageName.equals("Staff Review")    && staffReviewPage    != null) staffReviewPage.refresh();
@@ -1239,24 +1669,21 @@ public class CustomerDashboard extends JPanel {
             sidebar.add(navButtons[i]);
             sidebar.add(Box.createVerticalStrut(2));
         }
-
         sidebar.add(Box.createVerticalGlue());
         return sidebar;
     }
 
     private JButton createNavButton(String text, boolean isActive) {
         JButton btn = new JButton(text) {
-            @Override
-            protected void paintComponent(Graphics g) {
+            @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                if (getClientProperty("active") == Boolean.TRUE) {
+                if (getClientProperty("active") == Boolean.TRUE)
                     g2.setColor(UIConstants.SIDEBAR_ACTIVE);
-                    g2.fillRoundRect(4, 0, getWidth() - 8, getHeight(), 8, 8);
-                } else if (getModel().isRollover()) {
+                else if (getModel().isRollover())
                     g2.setColor(UIConstants.SIDEBAR_HOVER);
-                    g2.fillRoundRect(4, 0, getWidth() - 8, getHeight(), 8, 8);
-                }
+                else { g2.dispose(); super.paintComponent(g); return; }
+                g2.fillRoundRect(4, 0, getWidth() - 8, getHeight(), 8, 8);
                 g2.dispose();
                 super.paintComponent(g);
             }
@@ -1277,53 +1704,11 @@ public class CustomerDashboard extends JPanel {
         return btn;
     }
 
-    /** Updates a nav button to look active (white + bold) or inactive (grey + plain). */
     private void updateNavButtonStyle(JButton btn, boolean isActive) {
         btn.putClientProperty("active", isActive);
         btn.setForeground(isActive ? Color.WHITE : UIConstants.TEXT_SIDEBAR);
         btn.setFont(new Font("SansSerif", isActive ? Font.BOLD : Font.PLAIN, 14));
         btn.repaint();
-    }
-
-    // ── Placeholder pages ─────────────────────────────────────────
-    /** Builds a placeholder page for sections not yet implemented — shows icon + title + description. */
-    private JPanel buildPlaceholder(String title, String description, String icon, int iconSize) {
-        JPanel page = new JPanel(new BorderLayout());
-        page.setBackground(UIConstants.BG_CONTENT);
-        JPanel centreWrapper = new JPanel(new GridBagLayout());
-        centreWrapper.setBackground(UIConstants.BG_CONTENT);
-        JPanel card = new JPanel() {
-            @Override protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(UIConstants.BG_CARD);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
-                g2.dispose();
-            }
-        };
-        card.setOpaque(false);
-        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
-        card.setBorder(new EmptyBorder(50, 60, 50, 60));
-        JLabel iconLabel = new JLabel(icon);
-        iconLabel.setFont(new Font("SansSerif", Font.PLAIN, iconSize));
-        iconLabel.setForeground(UIConstants.TEXT_SIDEBAR);
-        iconLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(iconLabel);
-        card.add(Box.createVerticalStrut(16));
-        JLabel titleLabel = new JLabel(title);
-        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 20));
-        titleLabel.setForeground(UIConstants.TEXT_DARK);
-        titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(titleLabel);
-        card.add(Box.createVerticalStrut(8));
-        JLabel descLabel = new JLabel(description);
-        descLabel.setFont(UIConstants.FONT_BODY);
-        descLabel.setForeground(UIConstants.TEXT_MUTED);
-        descLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(descLabel);
-        centreWrapper.add(card);
-        page.add(centreWrapper, BorderLayout.CENTER);
-        return page;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -1355,8 +1740,7 @@ public class CustomerDashboard extends JPanel {
         JTextField field = new JTextField(value);
         field.setFont(new Font("SansSerif", Font.PLAIN, 11));
         field.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(UIConstants.PRIMARY, 1),
-                new EmptyBorder(2, 4, 2, 4)));
+                BorderFactory.createLineBorder(UIConstants.PRIMARY, 1), new EmptyBorder(2, 4, 2, 4)));
         return field;
     }
 
@@ -1380,26 +1764,24 @@ public class CustomerDashboard extends JPanel {
         return label;
     }
 
-    private JButton createActionButton(String text, Color backgroundColor, Color textColor) {
+    private JButton createActionButton(String text, Color bg, Color fg) {
         JButton btn = new JButton(text) {
-            private boolean isHovered = false;
-            {
-                addMouseListener(new MouseAdapter() {
-                    public void mouseEntered(MouseEvent e) { isHovered = true;  repaint(); }
-                    public void mouseExited (MouseEvent e) { isHovered = false; repaint(); }
-                });
-            }
+            private boolean hovered = false;
+            { addMouseListener(new MouseAdapter() {
+                public void mouseEntered(MouseEvent e) { hovered = true;  repaint(); }
+                public void mouseExited (MouseEvent e) { hovered = false; repaint(); }
+            }); }
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(isHovered ? backgroundColor.darker() : backgroundColor);
+                g2.setColor(hovered ? bg.darker() : bg);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
                 g2.dispose();
                 super.paintComponent(g);
             }
         };
         btn.setFont(UIConstants.FONT_SMALL_BOLD);
-        btn.setForeground(textColor);
+        btn.setForeground(fg);
         btn.setContentAreaFilled(false);
         btn.setBorderPainted(false);
         btn.setFocusPainted(false);
