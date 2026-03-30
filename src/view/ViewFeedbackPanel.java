@@ -27,27 +27,54 @@ import java.util.List;
 public class ViewFeedbackPanel extends JPanel {
 
     private static final String COMMENTS_FILE  = "src" + File.separator + "TxtFile"
-            + File.separator + "customer_comments.txt";
+            + File.separator + "comments.txt";
     private static final String FEEDBACK_FILE  = "src" + File.separator + "TxtFile"
-            + File.separator + "technician_feedback.txt";
+            + File.separator + "feedback.txt";
 
     public ViewFeedbackPanel() {
         setLayout(new BorderLayout(0, 16));
         setBackground(UIConstants.BG_CONTENT);
         setBorder(new EmptyBorder(30, 36, 30, 36));
 
-        add(buildSection("Customer Comments",
-                new String[]{"#", "Appt ID", "Rating", "Comment", "Staff ID", "Tech ID"},
-                loadFile(COMMENTS_FILE)), BorderLayout.NORTH);
-
-        add(buildSection("Technician Feedback",
-                new String[]{"#", "Appt ID", "Vehicle Condition", "Work Done", "Recommendations", "Date"},
-                loadFile(FEEDBACK_FILE)), BorderLayout.CENTER);
+        add(buildCommentsSection("Customer Comments", loadFile(COMMENTS_FILE)), BorderLayout.NORTH);
+        add(buildFeedbackSection("Technician Feedback", loadFile(FEEDBACK_FILE)), BorderLayout.CENTER);
     }
 
-    // ─── Section builder (reused for both tables) ────────────────
+    private JPanel buildCommentsSection(String heading, List<String[]> rows) {
+        String[] columns = {"No", "Comment ID", "Appointment ID", "Staff ID", "Technician ID", "Rating", "Comment", "Date"};
+        JPanel section = createSectionBase(heading);
+        DefaultTableModel model = createModel(columns);
+        
+        int idx = 1;
+        for (String[] row : rows) {
+            if (row.length >= 9) {
+                model.addRow(new String[]{
+                    String.valueOf(idx++), row[0], row[2], row[4], row[5], row[6], row[7], row[8]
+                });
+            }
+        }
+        
+        return finalizeSection(section, model, columns, true, rows.isEmpty());
+    }
 
-    private JPanel buildSection(String heading, String[] columns, List<String[]> rows) {
+    private JPanel buildFeedbackSection(String heading, List<String[]> rows) {
+        String[] columns = {"No", "Feedback ID", "Appointment ID", "Technicia ID", "Condition", "Feedback", "Date"};
+        JPanel section = createSectionBase(heading);
+        DefaultTableModel model = createModel(columns);
+        
+        int idx = 1;
+        for (String[] row : rows) {
+            if (row.length >= 8) {
+                model.addRow(new String[]{
+                    String.valueOf(idx++), row[0], row[2], row[4], row[5], row[6], row[7]
+                });
+            }
+        }
+        
+        return finalizeSection(section, model, columns, false, rows.isEmpty());
+    }
+
+    private JPanel createSectionBase(String heading) {
         JPanel section = new JPanel(new BorderLayout(0, 10));
         section.setBackground(UIConstants.BG_CONTENT);
 
@@ -55,22 +82,16 @@ public class ViewFeedbackPanel extends JPanel {
         title.setFont(UIConstants.FONT_BODY_BOLD);
         title.setForeground(UIConstants.TEXT_PRIMARY);
         section.add(title, BorderLayout.NORTH);
+        return section;
+    }
 
-        DefaultTableModel model = new DefaultTableModel(columns, 0) {
+    private DefaultTableModel createModel(String[] columns) {
+        return new DefaultTableModel(columns, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
         };
+    }
 
-        int idx = 1;
-        for (String[] row : rows) {
-            // Build a row: # + up to 5 data columns (pad/truncate to match columns length-1)
-            String[] display = new String[columns.length];
-            display[0] = String.valueOf(idx++);
-            for (int i = 1; i < columns.length; i++) {
-                display[i] = (i - 1 < row.length) ? row[i - 1].trim() : "";
-            }
-            model.addRow(display);
-        }
-
+    private JPanel finalizeSection(JPanel section, DefaultTableModel model, String[] columns, boolean isComments, boolean isEmpty) {
         JTable table = new JTable(model);
         table.setRowHeight(36);
         table.setFont(UIConstants.FONT_SMALL);
@@ -85,23 +106,20 @@ public class ViewFeedbackPanel extends JPanel {
         table.getTableHeader().setBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, UIConstants.BORDER_DEFAULT));
 
-        // Centre the # column
         DefaultTableCellRenderer centre = new DefaultTableCellRenderer();
         centre.setHorizontalAlignment(SwingConstants.CENTER);
         table.getColumnModel().getColumn(0).setPreferredWidth(30);
         table.getColumnModel().getColumn(0).setCellRenderer(centre);
 
-        // Colour the rating column for comments (column index 2)
-        if (heading.contains("Comments")) {
-            table.getColumnModel().getColumn(2).setCellRenderer(new RatingRenderer());
+        if (isComments) {
+            table.getColumnModel().getColumn(5).setCellRenderer(new RatingRenderer());
         }
 
         JScrollPane scroll = new JScrollPane(table);
         scroll.setBorder(BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1));
         scroll.setPreferredSize(new Dimension(0, 200));
 
-        // Empty state message
-        if (rows.isEmpty()) {
+        if (isEmpty) {
             JLabel empty = new JLabel("No records found.", SwingConstants.CENTER);
             empty.setFont(UIConstants.FONT_SMALL);
             empty.setForeground(UIConstants.TEXT_MUTED);
