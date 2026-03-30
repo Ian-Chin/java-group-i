@@ -2,7 +2,6 @@ package view;
 
 import model.AccountService;
 import model.DashboardData;
-import model.PriceConfig;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -47,14 +46,14 @@ public class ReportPanel extends JPanel {
     private static final Color[] REVENUE_COLORS  = {C_TEAL};
     private static final Color[] RATING_COLORS   = {C_AMBER};
     private static final Color[] ROLE_COLORS     = {C_PURPLE, C_BLUE, C_GREEN, C_AMBER};
+    private static final Color[] METHOD_COLORS   = {C_GREEN, C_BLUE, C_TEAL};
+    private static final Color[] VEHICLE_COLORS  = {C_BLUE, C_CORAL};
 
     private final DashboardData  data;
-    private final PriceConfig    prices;
     private final AccountService accountService;
 
     public ReportPanel(AccountService accountService) {
         this.accountService = accountService;
-        this.prices = new PriceConfig();
         this.data   = new DashboardData();
 
         setLayout(new BorderLayout());
@@ -80,14 +79,14 @@ public class ReportPanel extends JPanel {
         title.setAlignmentX(Component.LEFT_ALIGNMENT);
         dash.add(title);
 
-        JLabel sub = new JLabel("Service performance  \u00B7  Staff workload  \u00B7  Customer satisfaction");
+        JLabel sub = new JLabel("Service performance  \u00B7  Staff workload  \u00B7  Revenue  \u00B7  Vehicles");
         sub.setFont(UIConstants.FONT_SMALL);
         sub.setForeground(UIConstants.TEXT_MUTED);
         sub.setAlignmentX(Component.LEFT_ALIGNMENT);
         sub.setBorder(new EmptyBorder(4, 0, 24, 0));
         dash.add(sub);
 
-        // Section 1
+        // Section 1 — Appointment overview
         dash.add(sectionLabel("Appointment Overview"));
         dash.add(vgap(10));
         dash.add(row3(
@@ -98,26 +97,36 @@ public class ReportPanel extends JPanel {
         ));
         dash.add(vgap(22));
 
-        // Section 2
+        // Section 2 — Revenue & ratings (revenueByMonth now reads real payment amounts)
         dash.add(sectionLabel("Trends & Revenue"));
         dash.add(vgap(10));
         dash.add(row3(
             buildBarChart("Weekly Appointment Volume",
                 toNumberMap(data.appointmentsByWeek()), WEEKLY_COLORS, false),
             buildBarChart("Monthly Revenue (RM)",
-                data.revenueByMonth(prices.getNormalPrice(), prices.getMajorPrice()),
-                REVENUE_COLORS, true),
+                data.revenueByMonth(), REVENUE_COLORS, true),
             buildBarChart("Avg Rating by Technician",
                 data.avgRatingByTechnician(), RATING_COLORS, true)
         ));
         dash.add(vgap(22));
 
-        // Section 3
+        // Section 3 — Payments & vehicles
+        dash.add(sectionLabel("Payments & Fleet"));
+        dash.add(vgap(10));
+        dash.add(row3(
+            buildPieChart("Payment Method",   data.paymentMethodBreakdown(), METHOD_COLORS),
+            buildPieChart("Vehicle Type",     data.vehicleTypeBreakdown(),   VEHICLE_COLORS),
+            buildBarChart("Top Vehicle Brands",
+                toNumberMap(data.topVehicleBrands()), WORKLOAD_COLORS, false)
+        ));
+        dash.add(vgap(22));
+
+        // Section 4 — Staff & status summary
         dash.add(sectionLabel("Staff & Status Summary"));
         dash.add(vgap(10));
         dash.add(row2(
-            buildHBarChart("Staff by Role",       buildRoleMap(),                   ROLE_COLORS),
-            buildHBarChart("Appointment Status",  toLinked(data.statusBreakdown()), STATUS_COLORS)
+            buildHBarChart("Staff by Role",      buildRoleMap(),                   ROLE_COLORS),
+            buildHBarChart("Appointment Status", toLinked(data.statusBreakdown()), STATUS_COLORS)
         ));
 
         return dash;
