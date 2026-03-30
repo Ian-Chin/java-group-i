@@ -34,6 +34,7 @@ public class AppFrame extends JFrame {
         mainPanel.add(new AdminDashboard(this), PageName.DASHBOARD.name());
         mainPanel.add(new CustomerDashboard(this), PageName.CUSTOMER_DASHBOARD.name());
         mainPanel.add(new CounterStaffDashboard(this), PageName.COUNTERSTAFF_DASHBOARD.name());
+        mainPanel.add(new TechnicianDashboard(this), PageName.TECHNICIAN_DASHBOARD.name());
 
         add(mainPanel);
         showPage(PageName.ONBOARDING);

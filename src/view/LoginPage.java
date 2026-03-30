@@ -118,7 +118,9 @@ public class LoginPage extends JPanel {
                 app.showPage(PageName.CUSTOMER_DASHBOARD);
             } else if (user.getRole().equals("staff")) {
                 app.showPage(PageName.COUNTERSTAFF_DASHBOARD);
-            } else {
+            } else if(user.getRole().equals("technician")) {
+          	  app.showPage(PageName.TECHNICIAN_DASHBOARD);
+            }else {
                 app.showPage(PageName.DASHBOARD);
             }
         } else {

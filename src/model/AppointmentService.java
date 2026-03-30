@@ -427,4 +427,78 @@ public class AppointmentService {
             String.valueOf(a.getDurationHours()) // [6] duration
         };
     }
+    
+//    Technician Dashboard
+    public boolean updateStatus(String id, String newStatus) {
+    	List<Appointment> all = getAll();
+    	boolean found = false;
+    	for (Appointment a : all) {
+            if (a.getId().equalsIgnoreCase(id)) {
+                a.setStatus(newStatus);
+                found = true;
+                break;
+            }
+    }
+    	return found && saveAll(all);
+    }
+    
+    
+    public boolean saveFeedback(String appointmentId, String feedbackText) {
+        return saveEntry(appointmentId, "feedback", feedbackText);
+    }
+    
+
+    public String getFeedback(String appointmentId) {
+        return getEntry(appointmentId, "feedback");
+    }
+
+    public boolean saveComment(String appointmentId, String commentText) {
+        return saveEntry(appointmentId, "comment", commentText);
+    }
+
+    public String getComment(String appointmentId) {
+        return getEntry(appointmentId, "comment");
+    }
+
+    private static final String FEEDBACK_FILE = "src" + java.io.File.separator + "TxtFile" + java.io.File.separator + "feedback.txt";
+
+    private List<String> loadFeedbackLines() {
+        List<String> lines = new java.util.ArrayList<>();
+        java.io.File file = new java.io.File(FEEDBACK_FILE);
+        if (!file.exists()) return lines;
+        try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(file))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (!line.isBlank() && !line.startsWith("#")) lines.add(line);
+            }
+        } catch (java.io.IOException e) { e.printStackTrace(); }
+        return lines;
+    }
+
+    private boolean saveEntry(String appointmentId, String type, String text) {
+        List<String> lines = loadFeedbackLines();
+        String prefix = appointmentId + "," + type + ",";
+        boolean found = false;
+        for (int i = 0; i < lines.size(); i++) {
+            if (lines.get(i).startsWith(prefix)) { lines.set(i, prefix + text); found = true; break; }
+        }
+        if (!found) lines.add(prefix + text);
+        java.io.File file = new java.io.File(FEEDBACK_FILE);
+        try {
+            java.io.File parent = file.getParentFile();
+            if (parent != null && !parent.exists()) parent.mkdirs();
+            try (java.io.BufferedWriter bw = new java.io.BufferedWriter(new java.io.FileWriter(file, false))) {
+                for (String l : lines) { bw.write(l); bw.newLine(); }
+            }
+            return true;
+        } catch (java.io.IOException e) { e.printStackTrace(); return false; }
+    }
+
+    private String getEntry(String appointmentId, String type) {
+        String prefix = appointmentId + "," + type + ",";
+        for (String line : loadFeedbackLines()) {
+            if (line.startsWith(prefix)) return line.substring(prefix.length());
+        }
+        return null;
+    }
 }
