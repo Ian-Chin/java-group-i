@@ -11,65 +11,69 @@ import java.util.Set;
 /**
  * AppointmentService reads/writes appointment data from appointments.txt.
  *
- * File format — each line has 7 values:
- *   AppointmentID, CustomerID, TechnicianID, ServiceType, Status, DateTime, Duration(Hours)
+ * File format — each line has 8 values:
+ *   AppointmentID, CustomerID, VehicleID, TechnicianID,
+ *   ServiceType, Status, DateTime, Duration(Hours)
  *
  * Example:
- *   AP4,C3,T3,Major Service,In Progress,2026-03-26 13:00,3
+ *   AP4,C3,V4,T3,Major Service,Completed,2026-03-26 13:00,3
  *
- * KEY FEATURE — Auto-complete:
- *   When autoCompleteExpiredAppointments() is called on login, it scans every
- *   appointment that is "In Progress" or "Pending".
- *   If the end time (start time + duration hours) has already passed the
- *   current Malaysia clock time, it marks that appointment as "Completed"
- *   in appointments.txt and writes a new record in serviceHistory.txt.
- *   This means the appointment will automatically move from "Upcoming" to
- *   "Pending Payment" so the customer can pay for it.
+ * NEW METHOD ADDED:
+ *   deletePendingByVehicleId(vehicleId) — when a vehicle is deleted,
+ *   this removes ALL appointments for that vehicle whose status is
+ *   "Pending". Appointments that are "Completed" are left alone
+ *   because the customer still owes payment for those services.
  */
 public class AppointmentService {
 
     private static final String FILE_PATH = "src" + File.separator
             + "TxtFile" + File.separator + "appointments.txt";
 
-    private static final int EXPECTED_COLUMNS = 7;
+    private static final int EXPECTED_COLUMNS = 8;
 
-    // The date-time format used in appointments.txt: "2026-03-05 09:00"
     private static final DateTimeFormatter DATE_TIME_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     // ── Inner class — one appointment row ─────────────────────────
     public static class Appointment {
         private final String id;
-        private final String customerEmail;    // stores customerID e.g. "C3"
-        private final String technicianEmail;  // stores technicianID e.g. "T1"
+        private final String customerId;
+        private final String vehicleId;
+        private final String technicianId;
         private final String serviceType;
         private String status;
         private final String dateTime;
         private final int durationHours;
 
-        public Appointment(String id, String customerEmail, String technicianEmail,
-                           String serviceType, String status,
-                           String dateTime, int durationHours) {
-            this.id             = id;
-            this.customerEmail  = customerEmail;
-            this.technicianEmail = technicianEmail;
-            this.serviceType    = serviceType;
-            this.status         = status;
-            this.dateTime       = dateTime;
-            this.durationHours  = durationHours;
+        public Appointment(String id, String customerId, String vehicleId,
+                           String technicianId, String serviceType,
+                           String status, String dateTime, int durationHours) {
+            this.id            = id;
+            this.customerId    = customerId;
+            this.vehicleId     = vehicleId;
+            this.technicianId  = technicianId;
+            this.serviceType   = serviceType;
+            this.status        = status;
+            this.dateTime      = dateTime;
+            this.durationHours = durationHours;
         }
 
-        public String getId()              { return id; }
-        public String getCustomerEmail()   { return customerEmail; }
-        public String getTechnicianEmail() { return technicianEmail; }
-        public String getServiceType()     { return serviceType; }
-        public String getStatus()          { return status; }
-        public void   setStatus(String s)  { this.status = s; }
-        public String getDateTime()        { return dateTime; }
-        public int    getDurationHours()   { return durationHours; }
+        public String getId()             { return id; }
+        public String getCustomerId()     { return customerId; }
+        public String getVehicleId()      { return vehicleId; }
+        public String getTechnicianId()   { return technicianId; }
+        public String getServiceType()    { return serviceType; }
+        public String getStatus()         { return status; }
+        public void   setStatus(String s) { this.status = s; }
+        public String getDateTime()       { return dateTime; }
+        public int    getDurationHours()  { return durationHours; }
+
+        // Keep old getter names so existing code still compiles
+        public String getCustomerEmail()   { return customerId; }
+        public String getTechnicianEmail() { return technicianId; }
     }
 
-    // ── Read all appointments ─────────────────────────────────────
+    // ── Read all appointments from the file ───────────────────────
     public List<Appointment> getAll() {
         List<Appointment> list = new ArrayList<>();
         File file = new File(FILE_PATH);
@@ -79,21 +83,23 @@ public class AppointmentService {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (line.isBlank() || line.trim().startsWith("#")) continue;
+
                 String[] cols = line.split(",", EXPECTED_COLUMNS);
                 if (cols.length != EXPECTED_COLUMNS) continue;
 
                 int duration;
-                try { duration = Integer.parseInt(cols[6].trim()); }
+                try { duration = Integer.parseInt(cols[7].trim()); }
                 catch (NumberFormatException e) { duration = 1; }
 
                 list.add(new Appointment(
-                        cols[0].trim(), // appointmentID
-                        cols[1].trim(), // customerID
-                        cols[2].trim(), // technicianID
-                        cols[3].trim(), // serviceType
-                        cols[4].trim(), // status
-                        cols[5].trim(), // dateTime
-                        duration        // durationHours
+                        cols[0].trim(), // [0] appointmentID
+                        cols[1].trim(), // [1] customerID
+                        cols[2].trim(), // [2] vehicleID
+                        cols[3].trim(), // [3] technicianID
+                        cols[4].trim(), // [4] serviceType
+                        cols[5].trim(), // [5] status
+                        cols[6].trim(), // [6] dateTime
+                        duration        // [7] durationHours
                 ));
             }
         } catch (IOException e) {
@@ -102,14 +108,15 @@ public class AppointmentService {
         return list;
     }
 
-    // ── Add a new appointment ─────────────────────────────────────
+    // ── Add a new appointment to the file ─────────────────────────
     public boolean add(Appointment appt) {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(FILE_PATH, true))) {
             writer.newLine();
             writer.write(String.join(",",
                     appt.getId(),
-                    appt.getCustomerEmail(),
-                    appt.getTechnicianEmail(),
+                    appt.getCustomerId(),
+                    appt.getVehicleId(),
+                    appt.getTechnicianId(),
                     appt.getServiceType(),
                     appt.getStatus(),
                     appt.getDateTime(),
@@ -157,7 +164,98 @@ public class AppointmentService {
         return true;
     }
 
-    // ── Generate the next appointment ID ─────────────────────────
+    // ═══════════════════════════════════════════════════════════════
+    // deletePendingByVehicleId()  ← NEW METHOD
+    // ═══════════════════════════════════════════════════════════════
+    /**
+     * When a vehicle is deleted, this method removes ALL appointments
+     * for that vehicle whose status is "Pending".
+     *
+     * WHY only "Pending"?
+     *   - "Pending" means the service has NOT happened yet.
+     *     There is nothing to pay, so deleting these is safe and correct.
+     *   - "Completed" means the service already happened and the customer
+     *     owes payment. These must stay in appointments.txt so they
+     *     still appear in the Pending Payment card.
+     *   - "In Progress" is treated the same as "Pending" — the appointment
+     *     was scheduled but removing the vehicle cancels it.
+     *
+     * This method is called automatically by VehicleService.deleteVehicle()
+     * so the caller does not need to remember to call it separately.
+     *
+     * @param vehicleId  the ID of the vehicle being deleted, e.g. "V4"
+     * @return true if the file was rewritten successfully (even if 0 rows removed)
+     */
+    public boolean deletePendingByVehicleId(String vehicleId) {
+        File file = new File(FILE_PATH);
+        if (!file.exists()) return false;
+
+        // Read every line and decide which ones to keep
+        List<String> linesToKeep = new ArrayList<>();
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+
+                // Always keep blank lines and comment lines unchanged
+                if (line.isBlank() || line.trim().startsWith("#")) {
+                    linesToKeep.add(line);
+                    continue;
+                }
+
+                String[] cols = line.split(",", EXPECTED_COLUMNS);
+
+                // If the line does not have the right number of columns,
+                // keep it as-is to avoid corrupting the file
+                if (cols.length != EXPECTED_COLUMNS) {
+                    linesToKeep.add(line);
+                    continue;
+                }
+
+                // cols[2] = vehicleID   cols[5] = status
+                String lineVehicleId = cols[2].trim();
+                String lineStatus    = cols[5].trim();
+
+                // RULE: Remove only if BOTH conditions are true:
+                //   1. The vehicleID matches the deleted vehicle
+                //   2. The status is "Pending" or "In Progress"
+                //      (these are future/active appointments — not yet done)
+                boolean isThisVehicle  = lineVehicleId.equalsIgnoreCase(vehicleId);
+                boolean isNotYetDone   = lineStatus.equalsIgnoreCase("Pending")
+                                      || lineStatus.equalsIgnoreCase("In Progress");
+
+                if (isThisVehicle && isNotYetDone) {
+                    // DROP this line — appointment is cancelled because vehicle is deleted
+                    System.out.println("[deletePendingByVehicleId] Removed appointment: "
+                            + cols[0].trim() + " (vehicleId=" + vehicleId
+                            + ", status=" + lineStatus + ")");
+                } else {
+                    // KEEP this line — either a different vehicle, or a Completed appointment
+                    linesToKeep.add(line);
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            return false;
+        }
+
+        // Rewrite appointments.txt with only the kept lines
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file, false))) {
+            for (int i = 0; i < linesToKeep.size(); i++) {
+                writer.write(linesToKeep.get(i));
+                if (i < linesToKeep.size() - 1) {
+                    writer.newLine();
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            return false;
+        }
+
+        return true;
+    }
+
+    // ── Generate the next appointment ID ──────────────────────────
     public String nextId() {
         int max = 0;
         for (Appointment a : getAll()) {
@@ -174,85 +272,50 @@ public class AppointmentService {
     // AUTO-COMPLETE EXPIRED APPOINTMENTS
     // ═══════════════════════════════════════════════════════════════
     /**
-     * Scans ALL appointments and auto-marks any expired ones as "Completed".
-     *
-     * An appointment is "expired" (i.e., the service should be done) when:
-     *   current Malaysia time  >  appointment start time + duration hours
-     *
-     * Example:
-     *   AP4: start = 2026-03-26 13:00, duration = 3 hours
-     *   End time = 2026-03-26 16:00
-     *   If current time is 2026-03-27 (after end time), mark as Completed.
-     *
-     * For each expired appointment, we:
-     *   1. Change its status to "Completed" in appointments.txt
-     *   2. Add a new record to serviceHistory.txt (with PaymentID = "NULL")
-     *
-     * This method is called once when the customer logs in.
-     * It is safe to call multiple times — it skips already-Completed appointments.
-     *
-     * @param serviceHistoryService  used to write new rows to serviceHistory.txt
+     * Scans all appointments. For any that are "Pending" or "In Progress"
+     * and whose end time has already passed, this method:
+     *   1. Changes status to "Completed" in appointments.txt
+     *   2. Adds a new record in serviceHistory.txt
      */
     public void autoCompleteExpiredAppointments(ServiceHistoryService serviceHistoryService) {
-        // Get current Malaysia time (UTC+8)
-        // LocalDateTime.now() uses the system clock, which on any real device is
-        // already in local time. For a PC set to Malaysia time, this is correct.
         LocalDateTime nowMalaysia = LocalDateTime.now(
                 java.time.ZoneId.of("Asia/Kuala_Lumpur"));
 
-        // Read ALL appointments from the file
         List<Appointment> allAppointments = getAll();
-
-        // Track whether we actually changed anything (so we only rewrite if needed)
         boolean anyChanges = false;
 
         for (Appointment appt : allAppointments) {
-
-            // Only check appointments that are still "active"
-            // (Pending = booked, In Progress = currently at garage)
             String status = appt.getStatus();
             boolean isActive = status.equalsIgnoreCase("Pending")
                             || status.equalsIgnoreCase("In Progress");
+            if (!isActive) continue;
 
-            if (!isActive) continue; // skip Completed ones — already done
-
-            // Parse the appointment's start date-time, e.g. "2026-03-26 13:00"
             LocalDateTime startTime;
             try {
                 startTime = LocalDateTime.parse(appt.getDateTime(), DATE_TIME_FORMAT);
             } catch (DateTimeParseException e) {
-                // If the date format is invalid, skip this appointment safely
                 System.out.println("[AutoComplete] Bad date format: " + appt.getDateTime());
                 continue;
             }
 
-            // Calculate when the appointment ENDS
-            // e.g. start = 2026-03-26 13:00, duration = 3 hours → end = 2026-03-26 16:00
             LocalDateTime endTime = startTime.plusHours(appt.getDurationHours());
 
-            // Is the end time already in the past?
-            // isBefore(nowMalaysia) = true if end time < current time
             if (endTime.isBefore(nowMalaysia)) {
-
-                // The appointment has ended — mark it as Completed
                 appt.setStatus("Completed");
                 anyChanges = true;
 
-                // Write a new serviceHistory record (PaymentID = "NULL" until customer pays)
-                // Only add if this appointment isn't already in serviceHistory.txt
                 if (!serviceHistoryService.appointmentAlreadyRecorded(appt.getId())) {
-
-                    // Extract just the date part from dateTime, e.g. "2026-03-26 13:00" → "2026-03-26"
                     String serviceDate = appt.getDateTime().contains(" ")
-                            ? appt.getDateTime().split(" ")[0]  // "2026-03-26"
+                            ? appt.getDateTime().split(" ")[0]
                             : appt.getDateTime();
 
                     serviceHistoryService.addRecord(
-                            appt.getCustomerEmail(),    // customerID e.g. "C3"
-                            appt.getId(),               // appointmentID e.g. "AP4"
-                            "NULL",                     // no payment yet
-                            appt.getTechnicianEmail(),  // technicianID e.g. "T3"
-                            serviceDate                 // "2026-03-26"
+                            appt.getCustomerId(),
+                            appt.getId(),
+                            appt.getVehicleId(),
+                            "NULL",
+                            appt.getTechnicianId(),
+                            serviceDate
                     );
 
                     System.out.println("[AutoComplete] Marked " + appt.getId() + " as Completed.");
@@ -260,27 +323,22 @@ public class AppointmentService {
             }
         }
 
-        // If any appointments changed status, rewrite the whole file
         if (anyChanges) {
             saveAll(allAppointments);
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // saveAll() — rewrites appointments.txt with the given list.
-    // Used by autoCompleteExpiredAppointments() after making changes.
-    // ─────────────────────────────────────────────────────────────
+    // Rewrites appointments.txt with the updated list
     private boolean saveAll(List<Appointment> list) {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(FILE_PATH, false))) {
-            for (int i = 0; i < list.size(); i++) {
-                Appointment a = list.get(i);
-                // Write each appointment as one CSV line
-                writer.write(a.getId() + ","
-                           + a.getCustomerEmail() + ","
-                           + a.getTechnicianEmail() + ","
-                           + a.getServiceType() + ","
-                           + a.getStatus() + ","
-                           + a.getDateTime() + ","
+            for (Appointment a : list) {
+                writer.write(a.getId()           + ","
+                           + a.getCustomerId()   + ","
+                           + a.getVehicleId()    + ","
+                           + a.getTechnicianId() + ","
+                           + a.getServiceType()  + ","
+                           + a.getStatus()       + ","
+                           + a.getDateTime()     + ","
                            + a.getDurationHours());
                 writer.newLine();
             }
@@ -292,43 +350,28 @@ public class AppointmentService {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // getPendingAppointments — Upcoming Appointments card
+    // getPendingAppointments — for the Upcoming Appointments card
     // ═══════════════════════════════════════════════════════════════
     /**
-     * Returns "upcoming" appointments for a given customer.
+     * Returns upcoming appointments for a customer.
+     * "In Progress" = always shown.
+     * "Pending"     = only shown if start time is in the future.
      *
-     * "UPCOMING" definition:
-     *   - "In Progress" → ALWAYS shown (service is currently happening).
-     *     Even if the date is slightly in the past, the job is still active.
-     *   - "Pending" → only shown if the start date is in the FUTURE.
-     *     A pending appointment that is already past is handled by auto-complete.
-     *
-     * Results are sorted earliest-first.
-     *
-     * Returned array per row (6 elements):
-     *   [0] appointmentID  [1] technicianID  [2] serviceType
-     *   [3] status         [4] dateTime      [5] duration (String)
-     *
-     * @param userId  customer ID e.g. "C3"
+     * Returned array has 7 elements:
+     *   [0] appointmentID  [1] vehicleID  [2] technicianID
+     *   [3] serviceType    [4] status     [5] dateTime     [6] duration
      */
     public List<String[]> getPendingAppointments(String userId) {
         List<String[]> result = new ArrayList<>();
-
         LocalDateTime now = LocalDateTime.now(java.time.ZoneId.of("Asia/Kuala_Lumpur"));
 
         for (Appointment a : getAll()) {
-
-            // Only include appointments belonging to this customer
-            if (!a.getCustomerEmail().equalsIgnoreCase(userId)) continue;
+            if (!a.getCustomerId().equalsIgnoreCase(userId)) continue;
 
             String status = a.getStatus();
-
             if (status.equalsIgnoreCase("In Progress")) {
-                // Always show In Progress appointments
                 result.add(toRow(a));
-
             } else if (status.equalsIgnoreCase("Pending")) {
-                // Only show Pending if the start time is in the future
                 try {
                     LocalDateTime startTime = LocalDateTime.parse(a.getDateTime(), DATE_TIME_FORMAT);
                     if (startTime.isAfter(now)) {
@@ -338,42 +381,28 @@ public class AppointmentService {
                     System.out.println("[getPending] Bad date: " + a.getDateTime());
                 }
             }
-            // Completed appointments are NOT upcoming — skip them
         }
 
-        // Sort by date-time (earliest first)
-        // Works because "yyyy-MM-dd HH:mm" sorts alphabetically = chronologically
-        result.sort((rowA, rowB) -> rowA[4].compareTo(rowB[4]));
-
+        result.sort((rowA, rowB) -> rowA[5].compareTo(rowB[5]));
         return result;
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // getUnpaidAppointments — Pending Payment card
+    // getUnpaidAppointments — for the Pending Payment card
     // ═══════════════════════════════════════════════════════════════
     /**
-     * Returns appointments that are Completed but not yet paid.
+     * Returns completed but unpaid appointments for a customer.
      *
-     * "PENDING PAYMENT" definition:
-     *   - Status is "Completed" (service fully done)
-     *   - The appointment ID is NOT in paidIds (not yet paid)
-     *
-     * Returned array per row (6 elements — same layout as getPendingAppointments):
-     *   [0] appointmentID  [1] technicianID  [2] serviceType
-     *   [3] status         [4] dateTime      [5] duration (String)
-     *
-     * @param userId   customer ID e.g. "C3"
-     * @param paidIds  set of appointment IDs already paid (from PaymentService)
+     * Returned array has 7 elements:
+     *   [0] appointmentID  [1] vehicleID  [2] technicianID
+     *   [3] serviceType    [4] status     [5] dateTime     [6] duration
      */
     public List<String[]> getUnpaidAppointments(String userId, Set<String> paidIds) {
         List<String[]> result = new ArrayList<>();
 
         for (Appointment a : getAll()) {
+            if (!a.getCustomerId().equalsIgnoreCase(userId)) continue;
 
-            // Must belong to this customer
-            if (!a.getCustomerEmail().equalsIgnoreCase(userId)) continue;
-
-            // Must be Completed and not yet paid
             boolean isCompleted = a.getStatus().equalsIgnoreCase("Completed");
             boolean notPaid     = !paidIds.contains(a.getId());
 
@@ -381,22 +410,21 @@ public class AppointmentService {
                 result.add(toRow(a));
             }
         }
-
         return result;
     }
 
     // ─────────────────────────────────────────────────────────────
-    // toRow() — helper: converts an Appointment object to a String[]
-    // that matches what CustomerDashboard expects.
+    // toRow() — converts an Appointment to a String[] for the UI
     // ─────────────────────────────────────────────────────────────
     private String[] toRow(Appointment a) {
         return new String[]{
             a.getId(),                           // [0] appointmentID
-            a.getTechnicianEmail(),              // [1] technicianID e.g. "T3"
-            a.getServiceType(),                  // [2] serviceType
-            a.getStatus(),                       // [3] status
-            a.getDateTime(),                     // [4] dateTime
-            String.valueOf(a.getDurationHours()) // [5] duration as String
+            a.getVehicleId(),                    // [1] vehicleID
+            a.getTechnicianId(),                 // [2] technicianID
+            a.getServiceType(),                  // [3] serviceType
+            a.getStatus(),                       // [4] status
+            a.getDateTime(),                     // [5] dateTime
+            String.valueOf(a.getDurationHours()) // [6] duration
         };
     }
 }

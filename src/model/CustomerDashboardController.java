@@ -6,7 +6,6 @@ import java.awt.image.BufferedImage;
 import java.util.List;
 import javax.imageio.ImageIO;
 import javax.swing.JOptionPane;
-import javax.swing.SwingUtilities;
 
 /**
  * CustomerDashboardController handles ALL the business logic for the Customer Dashboard.
@@ -25,17 +24,21 @@ import javax.swing.SwingUtilities;
  *  - Inheritance  : uses CustomerProfileController which extends ProfileController
  *  - Polymorphism : saveProfile() and deleteAccount() behave differently per role
  *                   (defined in ProfileController, overridden in CustomerProfileController)
+ *
+ * CHANGE: vehicles.txt now has 7 columns — vehicleType (Car/Motor) was added.
+ *   handleAddVehicle()    now accepts vehicleType as the first parameter.
+ *   handleUpdateVehicle() now accepts newType as a parameter.
+ *   validateVehicleFields() now validates 5 fields (type, plate, brand, year, colour).
  */
 public class CustomerDashboardController {
 
     // ── Services used to read/write data files ────────────────────
-    private final VehicleService          vehicleService;
-    private final ProfilePicStorage       profilePicStorage;
-    private final BackgroundImageStorage  backgroundImageStorage;
+    private final VehicleService            vehicleService;
+    private final ProfilePicStorage         profilePicStorage;
+    private final BackgroundImageStorage    backgroundImageStorage;
     private final CustomerProfileController profileController;
 
     // ── Callback interface so this controller can update the UI ──
-    // (without importing any Swing/view classes directly)
     private final DashboardView view;
 
     /**
@@ -43,81 +46,92 @@ public class CustomerDashboardController {
      * controller needs to update in the UI.
      *
      * CustomerDashboard implements this interface and provides the
-     * actual UI update code. This way, the controller (model) never
-     * imports CustomerDashboard (view) — keeping the layers clean.
+     * actual UI update code. This way, the controller never imports
+     * CustomerDashboard directly — keeping model and view separate.
      */
     public interface DashboardView {
 
         // ── Session access ────────────────────────────────────────
+
         /** Returns the full logged-in User object. */
-        User   getLoggedInUserObj();
+        User getLoggedInUserObj();
 
         /** Returns the logged-in user's display name. */
         String getLoggedInUser();
 
-        /** Updates the logged-in name in the session. */
-        void   setLoggedInUser(String name);
+        /** Updates the logged-in name stored in the session. */
+        void setLoggedInUser(String name);
 
-        /** Updates the full User object in the session. */
-        void   setLoggedInUserObj(User user);
+        /** Updates the full User object stored in the session. */
+        void setLoggedInUserObj(User user);
 
         // ── UI update methods called by the controller ────────────
 
-        /** Updates the name shown in the header. */
+        /** Updates the name shown in the top header bar. */
         void updateHeaderName(String name);
 
-        /** Updates the avatar icon index shown in the header circle. */
+        /** Updates which avatar icon is shown in the header circle. */
         void updateAvatarIndex(int index);
 
-        /** Updates the name label on the profile card. */
+        /** Updates the name label on the profile card (read mode). */
         void updateProfileNameLabel(String name);
 
-        /** Updates the email label on the profile card. */
+        /** Updates the email label on the profile card (read mode). */
         void updateProfileEmailLabel(String email);
 
-        /** Updates the role label on the profile card. */
+        /** Updates the role label on the profile card (read mode). */
         void updateProfileRoleLabel(String role);
 
         /** Sets the profile picture image shown on the profile page and header. */
         void setProfileImage(BufferedImage image);
 
-        /** Sets the banner/background image shown on the profile page. */
+        /** Sets the banner/background image shown at the top of the profile page. */
         void setBannerImage(BufferedImage image);
 
-        /** Repaints the profile picture circle. */
+        /** Repaints the circular profile picture on the profile page. */
         void repaintProfilePic();
 
-        /** Repaints the banner/background area. */
+        /** Repaints the banner/background area on the profile page. */
         void repaintBanner();
 
-        /** Repaints the small header avatar circle. */
+        /** Repaints the small circular avatar in the header bar. */
         void repaintAvatar();
 
-        /** Switches to edit mode (shows text fields, hides labels). */
+        /** Switches the profile card to edit mode (shows text fields, hides labels). */
         void showEditMode();
 
-        /** Switches back to read mode (shows labels, hides text fields). */
+        /** Switches the profile card back to read mode (shows labels, hides text fields). */
         void showReadMode();
 
-        /** Returns the text currently typed in the name field. */
+        /** Returns the text currently typed in the name text field. */
         String getNameFieldText();
 
-        /** Returns the text currently typed in the email field. */
+        /** Returns the text currently typed in the email text field. */
         String getEmailFieldText();
 
-        /** Fills the name field with the given value. */
+        /** Pre-fills the name text field with the given value. */
         void setNameFieldText(String name);
 
-        /** Fills the email field with the given value. */
+        /** Pre-fills the email text field with the given value. */
         void setEmailFieldText(String email);
 
-        /** Rebuilds the vehicle list panel with current data. */
+        /**
+         * Tells the view to rebuild the vehicle list panel with the given vehicles.
+         *
+         * Each vehicle array has 6 elements:
+         *   [0] vehicleID
+         *   [1] vehicleType  ("Car" or "Motor")  ← NEW
+         *   [2] plate
+         *   [3] brand
+         *   [4] year
+         *   [5] colour
+         */
         void rebuildVehicleList(List<String[]> vehicles);
 
-        /** Shows a popup message to the user. */
+        /** Shows a popup message dialog to the user. */
         void showMessage(String message, String title, int messageType);
 
-        /** Returns the main application window (used as parent for dialogs). */
+        /** Returns the main application window (used as a parent for dialogs). */
         java.awt.Window getWindow();
 
         /** Navigates back to the login/onboarding screen. */
@@ -127,15 +141,14 @@ public class CustomerDashboardController {
     // ── Constructor ───────────────────────────────────────────────
 
     /**
-     * Creates the controller with all required services.
+     * Creates the controller and connects it to all the required services and the view.
      *
      * @param view                   the dashboard UI (implements DashboardView)
      * @param vehicleService         reads/writes vehicles.txt
-     * @param profilePicStorage      saves/loads profile pictures
-     * @param backgroundImageStorage saves/loads background images
-     * @param profileController      handles profile save/validation
+     * @param profilePicStorage      saves/loads profile pictures from disk
+     * @param backgroundImageStorage saves/loads background/banner images from disk
+     * @param profileController      handles profile save and validation logic
      */
-    /** Creates the controller and connects it to all the services and the view. */
     public CustomerDashboardController(
             DashboardView view,
             VehicleService vehicleService,
@@ -143,11 +156,11 @@ public class CustomerDashboardController {
             BackgroundImageStorage backgroundImageStorage,
             CustomerProfileController profileController) {
 
-        this.view                    = view;
-        this.vehicleService          = vehicleService;
-        this.profilePicStorage       = profilePicStorage;
-        this.backgroundImageStorage  = backgroundImageStorage;
-        this.profileController       = profileController;
+        this.view                   = view;
+        this.vehicleService         = vehicleService;
+        this.profilePicStorage      = profilePicStorage;
+        this.backgroundImageStorage = backgroundImageStorage;
+        this.profileController      = profileController;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -155,45 +168,46 @@ public class CustomerDashboardController {
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Refreshes all information displayed on the dashboard.
-     * Called after login and after any profile changes.
+     * Refreshes ALL information shown on the dashboard.
+     * Called when the user first logs in and after any profile change.
      *
      * Steps:
      *  1. Update the header name
-     *  2. Update the avatar icon
-     *  3. Update profile labels (name, email, role)
-     *  4. Load and display saved profile picture + background image
-     *  5. Reload the vehicle list
+     *  2. Update the avatar icon index
+     *  3. Update the profile labels (name, email, role)
+     *  4. Load and show the saved profile picture and background image
+     *  5. Reload the vehicle list from vehicles.txt
      */
-    /** Reloads all user information and updates every label and image on the dashboard. */
     public void refreshUser() {
-        // Step 1: Update the name shown in the header
+
+        // Step 1: Update the name shown in the top header
         String name = view.getLoggedInUser();
         if (name == null || name.isEmpty()) {
-            name = "Customer"; // fallback if name is missing
+            name = "Customer"; // use a safe fallback if no name is stored
         }
         view.updateHeaderName(name);
 
-        // Step 2: Update the avatar icon index
+        // Step 2: Update the avatar icon
         User user = view.getLoggedInUserObj();
         if (user != null) {
             view.updateAvatarIndex(user.getProfilePicture());
         }
         view.repaintAvatar();
 
-        // Step 3: Update the profile labels
+        // Step 3: Update the profile card labels (name, email, role)
         if (user != null) {
             view.updateProfileNameLabel(user.getName());
             view.updateProfileEmailLabel(user.getEmail());
 
-            // Capitalise the first letter of the role e.g. "customer" → "Customer"
+            // Capitalise the first letter of the role, e.g. "customer" → "Customer"
             String role = user.getRole();
             String capitalisedRole = role.substring(0, 1).toUpperCase() + role.substring(1);
             view.updateProfileRoleLabel(capitalisedRole);
 
-            // Step 4: Load the saved images from disk and update the UI
-            BufferedImage profileImage = profilePicStorage.loadImage(user.getEmail());
-            BufferedImage bannerImage  = backgroundImageStorage.loadImage(user.getEmail());
+            // Step 4: Load the saved images from disk and push them to the UI
+            // NOTE: images are stored by userId (e.g. "C3"), NOT by email
+            BufferedImage profileImage = profilePicStorage.loadImage(user.getUserId());
+            BufferedImage bannerImage  = backgroundImageStorage.loadImage(user.getUserId());
 
             view.setProfileImage(profileImage);
             view.setBannerImage(bannerImage);
@@ -202,7 +216,7 @@ public class CustomerDashboardController {
             view.repaintAvatar();
         }
 
-        // Step 5: Reload the vehicle list
+        // Step 5: Reload the vehicle list from vehicles.txt
         refreshVehicleList();
     }
 
@@ -211,44 +225,42 @@ public class CustomerDashboardController {
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Switches the profile card to edit mode.
-     * Fills in the text fields with the current name and email.
+     * Switches the Personal Information card to edit mode.
+     * Pre-fills the text fields with the current saved name and email.
      */
-    /** Tells the view to show the text fields so the user can edit their name and email. */
     public void enterEditMode() {
-        // Pre-fill the text fields with current values
+        // Pre-fill the text fields with the current values from accounts.txt
         view.setNameFieldText(profileController.getCurrentName());
         view.setEmailFieldText(profileController.getCurrentEmail());
 
-        // Tell the UI to show the text fields (and hide the labels)
+        // Tell the UI to show the text fields (and hide the read-only labels)
         view.showEditMode();
     }
 
     /**
-     * Switches back to read mode without saving.
+     * Switches back to read mode WITHOUT saving any changes.
+     * The original name and email remain unchanged.
      */
-    /** Tells the view to hide the text fields and go back to showing labels. */
     public void exitEditMode() {
-        // Tell the UI to show the labels (and hide the text fields)
+        // Tell the UI to show the labels again (and hide the text fields)
         view.showReadMode();
     }
 
     /**
-     * Handles the Save button click on the Personal Information card.
+     * Handles the Save button on the Personal Information card.
      *
      * Steps:
-     *  1. Read the new values from the text fields
-     *  2. Check if anything actually changed
-     *  3. Try to save via the profile controller
-     *  4. Show a success or error message
+     *  1. Read the values typed in the text fields
+     *  2. Check if anything actually changed — if not, show "No Changes" message
+     *  3. Try to save via profileController (which validates and writes to accounts.txt)
+     *  4. Show a success message, or show the error if validation failed
      */
-    /** Reads the typed values, checks for changes, validates, and saves the profile. */
     public void handleSave() {
-        // Step 1: Get the values typed by the user
+        // Step 1: Read what the user typed
         String newName  = view.getNameFieldText().trim();
         String newEmail = view.getEmailFieldText().trim();
 
-        // Step 2: Check if anything actually changed
+        // Step 2: If nothing changed, tell the user and exit edit mode
         if (profileController.hasNoChanges(newName, newEmail)) {
             view.showMessage("No changes were made.", "No Changes",
                     JOptionPane.INFORMATION_MESSAGE);
@@ -262,7 +274,7 @@ public class CustomerDashboardController {
 
             if (saved) {
                 exitEditMode();
-                refreshUser(); // update all displayed labels with new values
+                refreshUser(); // update all displayed labels with the new values
                 view.showMessage("Profile updated successfully!", "Success",
                         JOptionPane.INFORMATION_MESSAGE);
             } else {
@@ -282,28 +294,29 @@ public class CustomerDashboardController {
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Reads vehicles from vehicles.txt and tells the UI to rebuild the list.
-     * Shows a maximum of 3 vehicles.
-     * Called on login and after add/update/remove.
+     * Reads ALL vehicles from vehicles.txt for the logged-in user,
+     * then tells the UI to rebuild the vehicle list panel.
+     *
+     * We pass ALL vehicles — the view (CustomerDashboard) decides
+     * how many to show on screen (top 3) and when to show "View All".
+     *
+     * Each vehicle array returned has 6 elements:
+     *   [0] vehicleID, [1] vehicleType, [2] plate, [3] brand, [4] year, [5] colour
      */
-    /** Reads the vehicle list from file and tells the view to rebuild the vehicle panel. */
     public void refreshVehicleList() {
         User user = view.getLoggedInUserObj();
 
         if (user == null) {
-            // No user logged in — pass empty list so UI shows "No vehicles registered."
+            // No user logged in — pass an empty list so the UI shows
+            // "No vehicles registered."
             view.rebuildVehicleList(new java.util.ArrayList<>());
             return;
         }
 
-        // Read this user's vehicles from vehicles.txt
+        // Read ALL this user's vehicles from vehicles.txt (no limit here)
+        // The view will decide to show only the first 3 and add a "View All" button
         List<String[]> allVehicles = vehicleService.getVehiclesByUserId(user.getUserId());
-
-        // Only pass the first 3 to the UI
-        int limit = Math.min(3, allVehicles.size());
-        List<String[]> vehiclesToShow = allVehicles.subList(0, limit);
-
-        view.rebuildVehicleList(vehiclesToShow);
+        view.rebuildVehicleList(allVehicles);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -311,34 +324,44 @@ public class CustomerDashboardController {
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Validates and adds a new vehicle.
+     * Validates and adds a new vehicle to vehicles.txt.
      * Called when the Save button on the Add Vehicle form is clicked.
      *
-     * @param plate   car plate number entered by the user
-     * @param brand   brand/model entered by the user
-     * @param year    year entered by the user
-     * @param colour  colour entered by the user
+     * CHANGE: vehicleType ("Car" or "Motor") is now the FIRST parameter.
+     *
+     * @param vehicleType "Car" or "Motor" — chosen from the dropdown
+     * @param plate       car/motor plate number entered by the user
+     * @param brand       brand/model entered by the user
+     * @param year        year entered by the user
+     * @param colour      colour entered by the user
      * @return true if the vehicle was added successfully, false otherwise
      */
-    /** Validates the new vehicle fields and saves the vehicle to vehicles.txt if valid. */
-    public boolean handleAddVehicle(String plate, String brand, String year, String colour) {
-        // Validate all fields first
-        String validationError = validateVehicleFields(plate, brand, year, colour);
+    public boolean handleAddVehicle(String vehicleType, String plate,
+                                    String brand, String year, String colour) {
+
+        // Validate all 5 fields first (type, plate, brand, year, colour)
+        String validationError = validateVehicleFields(vehicleType, plate, brand, year, colour);
         if (validationError != null) {
             view.showMessage(validationError, "Validation Error", JOptionPane.WARNING_MESSAGE);
-            return false;
+            return false; // stop here — do not save if any field is invalid
         }
 
-        // Get the logged-in user's email
+        // Get the logged-in user's ID (e.g. "C3")
         User user = view.getLoggedInUserObj();
         if (user == null) return false;
 
-        // Save the vehicle to vehicles.txt
+        // Save the new vehicle to vehicles.txt via VehicleService
+        // VehicleService.addVehicle() now accepts vehicleType as the 2nd parameter
         boolean saved = vehicleService.addVehicle(
-                user.getUserId(), plate, brand, year, colour);
+                user.getUserId(), // e.g. "C3"
+                vehicleType,      // "Car" or "Motor"
+                plate,
+                brand,
+                year,
+                colour);
 
         if (saved) {
-            refreshVehicleList(); // reload so the new vehicle appears
+            refreshVehicleList(); // reload so the new vehicle appears on screen immediately
         } else {
             view.showMessage("Failed to add vehicle.", "Error", JOptionPane.ERROR_MESSAGE);
         }
@@ -351,39 +374,49 @@ public class CustomerDashboardController {
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Validates and updates an existing vehicle in place.
-     * Called when the Save button on an Edit Vehicle row is clicked.
+     * Validates and updates an existing vehicle record in vehicles.txt.
+     * Called when the Save button on a vehicle's Edit form is clicked.
      *
-     * "In place" means the vehicle stays in the same position in vehicles.txt
-     * — the order does not change after editing.
+     * "In place" means the vehicle stays in the same position in the file
+     * — only the field values change, the order does not change.
      *
-     * @param oldPlate  the original plate (used to find the record)
-     * @param newPlate  the new plate number
+     * CHANGE: newType ("Car" or "Motor") is now the 2nd parameter.
+     *
+     * @param oldPlate  the ORIGINAL plate number — used to FIND the record in vehicles.txt
+     * @param newType   the updated vehicle type ("Car" or "Motor")
+     * @param newPlate  the new plate number (may be the same as oldPlate)
      * @param newBrand  the updated brand/model
      * @param newYear   the updated year
      * @param newColour the updated colour
      * @return true if updated successfully, false otherwise
      */
-    /** Validates the edited vehicle fields and updates the record in place in vehicles.txt. */
-    public boolean handleUpdateVehicle(String oldPlate, String newPlate,
+    public boolean handleUpdateVehicle(String oldPlate, String newType, String newPlate,
                                        String newBrand, String newYear, String newColour) {
-        // Validate all fields first
-        String validationError = validateVehicleFields(newPlate, newBrand, newYear, newColour);
+
+        // Validate all 5 fields first (type, plate, brand, year, colour)
+        String validationError = validateVehicleFields(newType, newPlate, newBrand, newYear, newColour);
         if (validationError != null) {
             view.showMessage(validationError, "Validation Error", JOptionPane.WARNING_MESSAGE);
-            return false;
+            return false; // stop here — do not save if any field is invalid
         }
 
-        // Get the logged-in user's email
+        // Get the logged-in user's ID (e.g. "C3")
         User user = view.getLoggedInUserObj();
         if (user == null) return false;
 
-        // Update the record in place in vehicles.txt
+        // Update the record in place inside vehicles.txt via VehicleService
+        // VehicleService.updateVehicle() now accepts newType as a parameter
         boolean updated = vehicleService.updateVehicle(
-        		user.getUserId(), oldPlate, newPlate, newBrand, newYear, newColour);
+                user.getUserId(), // e.g. "C3"
+                oldPlate,         // used to locate the correct line in the file
+                newType,          // "Car" or "Motor"
+                newPlate,
+                newBrand,
+                newYear,
+                newColour);
 
         if (updated) {
-            refreshVehicleList(); // reload to show the updated vehicle
+            refreshVehicleList(); // reload to show the updated vehicle on screen
         } else {
             view.showMessage("Failed to update vehicle.", "Error", JOptionPane.ERROR_MESSAGE);
         }
@@ -396,14 +429,14 @@ public class CustomerDashboardController {
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Asks for confirmation then deletes a vehicle from vehicles.txt.
+     * Shows a confirmation popup, then deletes the vehicle from vehicles.txt.
      * Called when the Remove button on a vehicle row is clicked.
      *
-     * @param plate  the car plate of the vehicle to remove
+     * @param plate the plate number of the vehicle to remove
+     *              (used to locate the correct line in vehicles.txt)
      */
-    /** Shows a confirmation dialog and deletes the vehicle from vehicles.txt if confirmed. */
     public void handleRemoveVehicle(String plate) {
-        // Show a confirmation dialog before deleting
+        // Ask the user to confirm before permanently deleting
         int choice = JOptionPane.showConfirmDialog(
                 view.getWindow(),
                 "Are you sure you want to remove this vehicle?",
@@ -411,18 +444,18 @@ public class CustomerDashboardController {
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.QUESTION_MESSAGE);
 
-        // Only delete if the user clicked Yes
+        // Only delete if the user clicked YES
         if (choice == JOptionPane.YES_OPTION) {
             User user = view.getLoggedInUserObj();
 
             if (user != null && vehicleService.deleteVehicle(user.getUserId(), plate)) {
-                refreshVehicleList(); // reload to remove the deleted vehicle from the list
+                refreshVehicleList(); // reload to remove the vehicle from the displayed list
             } else {
                 view.showMessage("Failed to remove vehicle.", "Error",
                         JOptionPane.ERROR_MESSAGE);
             }
         }
-        // If the user clicked No, nothing happens
+        // If the user clicked NO, nothing happens — the vehicle stays
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -431,15 +464,14 @@ public class CustomerDashboardController {
 
     /**
      * Opens the native OS file chooser so the user can pick a profile picture.
-     * Saves the image to src/ProfilePic/{email}.jpg
-     * and updates the profile picture circle and header avatar immediately.
+     * Saves the selected image to the ProfilePic folder using the user's ID as filename.
+     * Updates the profile picture circle and header avatar immediately.
      */
-    /** Opens the OS file chooser, saves the picked image to ProfilePic folder, updates the UI. */
     public void chooseProfileImage() {
         User user = view.getLoggedInUserObj();
         if (user == null) return;
 
-        // Open the native Windows/Mac file chooser (not a Java-style one)
+        // Open the native OS file chooser (shows the Windows/Mac file picker)
         FileDialog fileChooser = new FileDialog(
                 (Frame) view.getWindow(),
                 "Choose Profile Picture",
@@ -447,11 +479,11 @@ public class CustomerDashboardController {
         fileChooser.setFile("*.jpg;*.jpeg;*.png;*.gif;*.bmp"); // show only image files
         fileChooser.setVisible(true);
 
-        // If the user cancelled the dialog, do nothing
+        // If the user cancelled the dialog without choosing a file, stop here
         if (fileChooser.getFile() == null) return;
 
         try {
-            // Read the selected file into a BufferedImage
+            // Read the selected file into a BufferedImage object
             java.io.File selectedFile = new java.io.File(
                     fileChooser.getDirectory(), fileChooser.getFile());
             BufferedImage image = ImageIO.read(selectedFile);
@@ -462,15 +494,17 @@ public class CustomerDashboardController {
                 return;
             }
 
-            // Save to src/ProfilePic/{email}.jpg via ProfilePicStorage
-            boolean saved = profilePicStorage.saveImage(user.getEmail(), image);
+            // Save the image to disk using the user's ID (e.g. "C3") as the filename
+            // NOTE: uses userId (not email) to match how VehicleService and other
+            // services identify the user
+            boolean saved = profilePicStorage.saveImage(user.getUserId(), image);
             if (!saved) {
                 view.showMessage("Failed to save profile picture.",
                         "Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
-            // Update the UI immediately so the new picture shows right away
+            // Push the new image to the UI so it shows immediately — no need to restart
             view.setProfileImage(image);
             view.repaintProfilePic();
             view.repaintAvatar();
@@ -483,11 +517,10 @@ public class CustomerDashboardController {
     }
 
     /**
-     * Opens the native OS file chooser so the user can pick a background image.
-     * Saves the image to src/BackgroundImg/{email}.jpg
-     * and updates the banner immediately.
+     * Opens the native OS file chooser so the user can pick a background/banner image.
+     * Saves the selected image to the BackgroundImg folder using the user's ID as filename.
+     * Updates the banner immediately.
      */
-    /** Opens the OS file chooser, saves the picked image to BackgroundImg folder, updates the UI. */
     public void chooseBannerImage() {
         User user = view.getLoggedInUserObj();
         if (user == null) return;
@@ -512,15 +545,15 @@ public class CustomerDashboardController {
                 return;
             }
 
-            // Save to src/BackgroundImg/{email}.jpg via BackgroundImageStorage
-            boolean saved = backgroundImageStorage.saveImage(user.getEmail(), image);
+            // Save using userId (e.g. "C3") — consistent with how other services work
+            boolean saved = backgroundImageStorage.saveImage(user.getUserId(), image);
             if (!saved) {
                 view.showMessage("Failed to save background image.",
                         "Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
-            // Update the banner immediately
+            // Update the banner on screen immediately
             view.setBannerImage(image);
             view.repaintBanner();
 
@@ -536,34 +569,53 @@ public class CustomerDashboardController {
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Validates all four vehicle fields.
-     * Returns an error message string if any field is invalid.
-     * Returns null if ALL fields are valid.
+     * Validates all FIVE vehicle fields before saving.
+     *
+     * CHANGE: vehicleType is now validated as the FIRST field.
      *
      * Rules:
-     *  Car Plate   — must have BOTH letters AND numbers, no special characters
-     *                ✅ "WXY1234"     ❌ "ABC"    ❌ "1234"   ❌ "WXY-123"
-     *  Brand/Model — letters and/or numbers only, no special characters
-     *                ✅ "Toyota Vios" ✅ "BMW i5" ❌ "BMW-i5"
-     *  Year        — exactly 4 digits, numbers only
-     *                ✅ "2025"        ❌ "25"     ❌ "202A"
-     *  Colour      — letters and spaces only, no numbers or special characters
-     *                ✅ "White"       ✅ "Dark Blue" ❌ "Blue2" ❌ "Blue-Red"
      *
-     * @return error message string if invalid, or null if all valid
+     *  vehicleType — must be exactly "Car" or "Motor"
+     *                ✅ "Car"          ✅ "Motor"       ❌ ""   ❌ "Truck"
+     *
+     *  Car Plate   — must contain BOTH letters AND numbers, no special characters
+     *                ✅ "WXY1234"      ❌ "ABC"  ❌ "1234"  ❌ "WXY-123"
+     *
+     *  Brand/Model — letters and/or numbers and spaces only, no special characters
+     *                ✅ "Toyota Vios"  ✅ "BMW i5"           ❌ "BMW-i5"
+     *
+     *  Year        — exactly 4 digits
+     *                ✅ "2025"         ❌ "25"   ❌ "202A"
+     *
+     *  Colour      — letters and spaces only, no numbers or special characters
+     *                ✅ "White"        ✅ "Dark Blue"         ❌ "Blue2"
+     *
+     * @return an error message string if any field is invalid,
+     *         or null if ALL fields are valid (null = no error = safe to save)
      */
-    /** Checks all four vehicle fields against the rules and returns an error message or null. */
-    public String validateVehicleFields(String plate, String brand,
-                                        String year, String colour) {
+    public String validateVehicleFields(String vehicleType, String plate,
+                                        String brand, String year, String colour) {
+
+        // ── Vehicle Type ──────────────────────────────────────────
+        // Must be selected — cannot be empty
+        if (vehicleType == null || vehicleType.trim().isEmpty()) {
+            return "Please select a vehicle type (Car or Motor).";
+        }
+        // Must be exactly "Car" or "Motor" — nothing else is accepted
+        if (!vehicleType.equals("Car") && !vehicleType.equals("Motor")) {
+            return "Vehicle type must be either 'Car' or 'Motor'.";
+        }
+
         // ── Car Plate ─────────────────────────────────────────────
+        // Cannot be empty
         if (plate.isEmpty()) {
             return "Car Plate cannot be empty.";
         }
-        // Only letters, digits and spaces allowed — no dashes, dots, etc.
+        // Only letters, digits, and spaces are allowed — no dashes, dots, etc.
         if (!plate.matches("[a-zA-Z0-9 ]+")) {
             return "Car Plate can only contain letters and numbers (no special characters).";
         }
-        // Must contain at least one letter AND at least one number
+        // Must have at least one letter AND at least one number
         boolean plateHasLetter = plate.matches(".*[a-zA-Z].*");
         boolean plateHasNumber = plate.matches(".*[0-9].*");
         if (!plateHasLetter || !plateHasNumber) {
@@ -583,7 +635,7 @@ public class CustomerDashboardController {
         if (year.isEmpty()) {
             return "Year cannot be empty.";
         }
-        // Must be exactly 4 digits e.g. 2025
+        // Must be exactly 4 digits, e.g. "2025"
         if (!year.matches("\\d{4}")) {
             return "Year must be exactly 4 digits (e.g. 2025).";
         }
@@ -597,21 +649,26 @@ public class CustomerDashboardController {
             return "Colour can only contain letters (e.g. White, Dark Blue).";
         }
 
-        return null; // null means all fields passed validation
+        return null; // null = ALL fields passed — safe to save
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // CONVENIENCE GETTERS (used by the view to read current user data)
+    // CONVENIENCE GETTERS
     // ═══════════════════════════════════════════════════════════════
 
-    /** Returns the profile controller (used by view to get current name/email). */
-    /** Returns the profile controller so the view can call getCurrentName() and getCurrentEmail(). */
+    /**
+     * Returns the profile controller.
+     * The view uses this to call getCurrentName() and getCurrentEmail()
+     * when pre-filling the edit form.
+     */
     public CustomerProfileController getProfileController() {
         return profileController;
     }
 
-    /** Returns the vehicle service (used by view to call add/update/delete). */
-    /** Returns the vehicle service so the view can use it if needed. */
+    /**
+     * Returns the vehicle service.
+     * The view can use this directly if needed (e.g. for the "View All" dialog).
+     */
     public VehicleService getVehicleService() {
         return vehicleService;
     }

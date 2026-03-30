@@ -7,44 +7,44 @@ import java.util.List;
 /**
  * ServiceHistoryService handles reading and writing records in serviceHistory.txt.
  *
- * File format — each line has 7 values:
- *   ServiceHistoryID , CustomerID , AppointmentID , PaymentID ,
- *   TechnicianID , ServiceDate , Status
+ * NEW File format — each line now has 8 values (vehicleID was added):
+ *   ServiceHistoryID , CustomerID , AppointmentID , VehicleID ,
+ *   PaymentID , TechnicianID , ServiceDate , Status
  *
  * Example:
- *   SH1,C1,AP1,PY1,T1,2026-03-05,Completed
- *   SH3,C3,AP3,NULL,T3,2026-03-20,Completed   ← NULL means not paid yet
+ *   SH1,C1,AP1,V1,PY1,T1,2026-03-05,Completed
+ *   SH3,C3,AP3,V3,NULL,T3,2026-03-20,Completed  ← NULL = not paid yet
  *
- * NOTE: PaymentID is "NULL" when no payment has been made yet.
- *       It gets updated to a real PY number once the customer pays.
+ * CHANGE FROM OLD FORMAT:
+ *   Old (7 cols): SH_ID, CustomerID, AppointmentID, PaymentID, TechnicianID, Date, Status
+ *   New (8 cols): SH_ID, CustomerID, AppointmentID, VehicleID, PaymentID, TechnicianID, Date, Status
+ *   VehicleID was inserted at position 3, pushing PaymentID to position 4.
  */
 public class ServiceHistoryService {
 
-    // Path to the serviceHistory.txt file
     private static final String FILE_PATH = "src" + File.separator
             + "TxtFile" + File.separator + "serviceHistory.txt";
 
-    // Each line must have exactly 7 columns
-    private static final int EXPECTED_COLUMNS = 7;
+    // CHANGE: was 7 columns, now 8 because VehicleID was added
+    private static final int EXPECTED_COLUMNS = 8;
 
     // ─────────────────────────────────────────────────────────────
-    // getAllRecords() — read every row from serviceHistory.txt
+    // getAllRecords() — reads every row from serviceHistory.txt
     //
-    // Returns a list of String arrays.
-    // Each array has 7 elements matching the 7 columns in the file.
+    // Each returned String[] has 8 elements:
+    //   [0] serviceHistoryID  [1] customerID    [2] appointmentID
+    //   [3] vehicleID          [4] paymentID     [5] technicianID
+    //   [6] serviceDate        [7] status
     // ─────────────────────────────────────────────────────────────
     public List<String[]> getAllRecords() {
         List<String[]> list = new ArrayList<>();
         File file = new File(FILE_PATH);
-        if (!file.exists()) return list; // return empty list if file doesn't exist yet
+        if (!file.exists()) return list;
 
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                // Skip blank lines and comment lines starting with #
                 if (line.isBlank() || line.trim().startsWith("#")) continue;
-
-                // Split by comma into at most EXPECTED_COLUMNS parts
                 String[] columns = line.split(",", EXPECTED_COLUMNS);
                 if (columns.length == EXPECTED_COLUMNS) {
                     list.add(columns);
@@ -53,89 +53,76 @@ public class ServiceHistoryService {
         } catch (IOException e) {
             e.printStackTrace();
         }
-
         return list;
     }
 
     // ─────────────────────────────────────────────────────────────
-    // appointmentAlreadyRecorded() — check if an appointment already
-    // has a serviceHistory entry, so we don't write it twice.
-    //
-    // Example: if SH3 already records AP3, return true for "AP3".
+    // appointmentAlreadyRecorded() — checks if an appointment ID
+    // already has a record in serviceHistory.txt.
+    // Prevents writing the same appointment twice.
     // ─────────────────────────────────────────────────────────────
     public boolean appointmentAlreadyRecorded(String appointmentId) {
         for (String[] row : getAllRecords()) {
-            // Column index 2 = AppointmentID
+            // Column index 2 = AppointmentID (unchanged position)
             if (row[2].trim().equalsIgnoreCase(appointmentId)) {
-                return true; // already in the file — don't add again
+                return true;
             }
         }
-        return false; // not found — safe to add a new record
+        return false;
     }
 
     // ─────────────────────────────────────────────────────────────
-    // generateNextId() — generates the next SH number.
-    //
-    // Looks at all existing IDs like "SH1", "SH11", finds the highest,
-    // and returns the next one (e.g. "SH12").
+    // generateNextId() — returns the next SH number.
+    // Finds the highest existing SH number and adds 1.
     // ─────────────────────────────────────────────────────────────
     public String generateNextId() {
         int highestNumber = 0;
-
         for (String[] row : getAllRecords()) {
-            String shId = row[0].trim(); // e.g. "SH11"
+            String shId = row[0].trim();
             if (shId.matches("SH\\d+")) {
-                // Remove "SH" prefix and parse the number
                 int number = Integer.parseInt(shId.substring(2));
-                if (number > highestNumber) {
-                    highestNumber = number;
-                }
+                if (number > highestNumber) highestNumber = number;
             }
         }
-
-        return "SH" + (highestNumber + 1); // e.g. "SH12"
+        return "SH" + (highestNumber + 1);
     }
 
     // ─────────────────────────────────────────────────────────────
     // addRecord() — appends one new row to serviceHistory.txt.
     //
-    // Called in two situations:
-    //   1. When an appointment is auto-completed (paymentId = "NULL")
-    //   2. When a customer pays (paymentId = actual PY number)
+    // CHANGE: vehicleId parameter was added.
     //
     // Parameters:
     //   customerId    e.g. "C3"
     //   appointmentId e.g. "AP4"
+    //   vehicleId     e.g. "V4"     ← NEW
     //   paymentId     e.g. "PY9" or "NULL"
     //   technicianId  e.g. "T3"
-    //   serviceDate   e.g. "2026-03-26"  (just the date part, no time)
+    //   serviceDate   e.g. "2026-03-26"
     // ─────────────────────────────────────────────────────────────
     public boolean addRecord(String customerId, String appointmentId,
-                              String paymentId, String technicianId,
-                              String serviceDate) {
+                              String vehicleId, String paymentId,
+                              String technicianId, String serviceDate) {
         File file = new File(FILE_PATH);
         try {
-            // Create the TxtFile folder if it doesn't exist yet
             File parent = file.getParentFile();
             if (parent != null && !parent.exists()) parent.mkdirs();
 
-            String newId = generateNextId(); // e.g. "SH12"
+            String newId = generateNextId();
 
-            // Append to the file (true = don't overwrite, just add at the end)
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(file, true))) {
-                // Format: SH12,C3,AP4,NULL,T3,2026-03-26,Completed
-                writer.write(newId + ","
-                           + customerId + ","
-                           + appointmentId + ","
-                           + paymentId + ","    // "NULL" or "PY9"
+                // Format: SH12,C3,AP4,V4,NULL,T3,2026-03-26,Completed
+                writer.write(newId        + ","
+                           + customerId   + ","
+                           + appointmentId+ ","
+                           + vehicleId    + ","   // NEW: vehicleID
+                           + paymentId    + ","
                            + technicianId + ","
-                           + serviceDate + ","
+                           + serviceDate  + ","
                            + "Completed");
                 writer.newLine();
             }
-
             return true;
-
         } catch (IOException e) {
             e.printStackTrace();
             return false;
@@ -143,11 +130,11 @@ public class ServiceHistoryService {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // updatePaymentId() — when a customer pays, update the PaymentID
-    // column from "NULL" to the real payment ID (e.g. "PY9").
+    // updatePaymentId() — when a customer pays, updates the PaymentID
+    // column in serviceHistory.txt from "NULL" to the real PY ID.
     //
-    // This reads the whole file, finds the row with the matching
-    // appointmentId, updates its PaymentID column, then rewrites the file.
+    // Reads the whole file, finds the row with the matching appointmentId,
+    // updates its PaymentID column, then rewrites the file.
     // ─────────────────────────────────────────────────────────────
     public boolean updatePaymentId(String appointmentId, String newPaymentId) {
         File file = new File(FILE_PATH);
@@ -159,7 +146,6 @@ public class ServiceHistoryService {
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                // Keep blank and comment lines unchanged
                 if (line.isBlank() || line.trim().startsWith("#")) {
                     updatedLines.add(line);
                     continue;
@@ -168,19 +154,21 @@ public class ServiceHistoryService {
                 String[] cols = line.split(",", EXPECTED_COLUMNS);
                 if (cols.length == EXPECTED_COLUMNS
                         && cols[2].trim().equalsIgnoreCase(appointmentId)) {
-                    // This row matches — update column index 3 (PaymentID)
-                    // Rebuild the line with the new PaymentID
+                    // Rebuild the line with the new PaymentID at column index 4
+                    // New format: [0]SH_ID, [1]custID, [2]apptID, [3]vehicleID,
+                    //             [4]paymentID, [5]techID, [6]date, [7]status
                     String updatedLine = cols[0].trim() + ","   // SH ID
                                       + cols[1].trim() + ","   // customerID
                                       + cols[2].trim() + ","   // appointmentID
-                                      + newPaymentId + ","     // NEW paymentID
-                                      + cols[4].trim() + ","   // technicianID
-                                      + cols[5].trim() + ","   // serviceDate
-                                      + cols[6].trim();        // status
+                                      + cols[3].trim() + ","   // vehicleID (NEW)
+                                      + newPaymentId   + ","   // paymentID (was index 3, now 4)
+                                      + cols[5].trim() + ","   // technicianID
+                                      + cols[6].trim() + ","   // serviceDate
+                                      + cols[7].trim();        // status
                     updatedLines.add(updatedLine);
                     foundAndUpdated = true;
                 } else {
-                    updatedLines.add(line); // keep the line as-is
+                    updatedLines.add(line);
                 }
             }
         } catch (IOException e) {
@@ -190,18 +178,16 @@ public class ServiceHistoryService {
 
         if (!foundAndUpdated) return false;
 
-        // Write all lines back to the file
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(file, false))) {
             for (int i = 0; i < updatedLines.size(); i++) {
                 writer.write(updatedLines.get(i));
                 if (i < updatedLines.size() - 1) writer.newLine();
             }
-            writer.newLine(); // trailing newline
+            writer.newLine();
         } catch (IOException e) {
             e.printStackTrace();
             return false;
         }
-
         return true;
     }
 }

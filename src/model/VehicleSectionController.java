@@ -3,192 +3,164 @@ package model;
 import java.util.List;
 
 /**
- * VehicleSectionController handles all logic for the My Vehicle section.
+ * VehicleSectionController — handles all logic for the My Vehicle section.
  *
- * Java OOP principles used:
- *  - Inheritance  : implements SectionController interface
- *  - Polymorphism : the four methods have vehicle-specific behaviour
- *  - Encapsulation: vehicle validation rules and file operations are hidden
- *  - Abstraction  : the dashboard only calls handleAdd(fields) without
- *                   knowing HOW vehicles are validated or saved
+ * Vehicle array from VehicleService has 6 elements:
+ *   [0] vehicleID   [1] vehicleType  [2] plate
+ *   [3] brand       [4] year         [5] colour
  *
- * Field order for add and edit:
- *   fields[0] = plate        (car plate number, e.g. "WXY1234")
- *   fields[1] = brand        (brand / model,    e.g. "Toyota Vios")
- *   fields[2] = year         (year of manufacture, e.g. "2025")
- *   fields[3] = colour       (colour,            e.g. "White")
+ * handleAdd / handleEdit fields array has 5 elements:
+ *   [0] vehicleType  [1] plate  [2] brand  [3] year  [4] colour
+ *
+ * refreshList() passes ALL vehicles to the dashboard — no limit here.
+ * CustomerDashboard.rebuildVehicleList() shows only the first 2 on screen
+ * and adds a "View All" button when there are more than 2.
+ *
+ * NEW METHODS added (moved from CustomerDashboard):
+ *   getAllVehiclesForUser() — returns every vehicle for the logged-in user
+ *   getVehicleLabel()      — returns "Car · LIN110" style label for a vehicleId
  */
 public class VehicleSectionController implements SectionController {
 
-    // ── Services and view callback ────────────────────────────────
     private final VehicleService vehicleService;
     private final SectionView    view;
 
-    /**
-     * SectionView is a small callback interface so this controller can
-     * update the UI without importing any Swing classes.
-     *
-     * CustomerDashboard creates an anonymous implementation of this
-     * when it creates the VehicleSectionController.
-     */
     public interface SectionView {
-
-        /** Returns the currently logged-in user, or null if not logged in. */
-        User getLoggedInUser();
-
-        /**
-         * Rebuilds the vehicle list panel with the given vehicles.
-         * Each String array contains: [vehicleID, plate, brand, year, colour]
-         *
-         * IMPORTANT: The FULL list is passed here (not just top 3).
-         * CustomerDashboard decides how many to show on screen (top 3)
-         * and whether to show a "View All" button.
-         */
-        void rebuildList(List<String[]> items);
-
-        /** Shows a popup message to the user. */
-        void showMessage(String message, String title, int messageType);
-
-        /** Returns the main application window (used as parent for dialogs). */
+        User            getLoggedInUser();
+        void            rebuildList(List<String[]> items);
+        void            showMessage(String message, String title, int messageType);
         java.awt.Window getWindow();
     }
 
-    // ── Constructor ───────────────────────────────────────────────
-
-    /**
-     * Creates the VehicleSectionController.
-     *
-     * @param vehicleService  reads and writes vehicles.txt
-     * @param view            callback used to update the vehicle list on screen
-     */
     public VehicleSectionController(VehicleService vehicleService, SectionView view) {
         this.vehicleService = vehicleService;
         this.view           = view;
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // SectionController INTERFACE — all four methods implemented below
+    // REFRESH — reads vehicles.txt and tells the UI to update
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Reads vehicles.txt and tells the UI to rebuild the vehicle list.
-     *
-     * KEY FIX: We now pass ALL vehicles (no limit here).
-     * The CustomerDashboard.rebuildVehicleList() method decides to show
-     * only the first 3, and shows a "View All" button if there are more.
-     *
-     * Before this fix, we called allVehicles.subList(0, limit) here,
-     * which meant rebuildVehicleList() only ever got 3 or fewer items
-     * and could never know the total count to show "View All".
-     *
-     * Uses getUserId() instead of getEmail() to look up vehicles.
+     * Reads ALL vehicles from vehicles.txt and passes the full list
+     * to the dashboard for display. The dashboard decides how many
+     * to show (top 2) and whether to add a "View All" button.
      */
     @Override
     public void refreshList() {
         User user = view.getLoggedInUser();
-
-        // No user logged in — pass empty list so UI shows "No vehicles registered."
         if (user == null) {
             view.rebuildList(new java.util.ArrayList<>());
             return;
         }
-
-        // Read ALL vehicles belonging to this user from vehicles.txt.
-        // We do NOT limit to 3 here. CustomerDashboard handles the display limit.
-        List<String[]> allVehicles = vehicleService.getVehiclesByUserId(user.getUserId());
-
-        // Pass the FULL list to the dashboard
-        view.rebuildList(allVehicles);
+        // Pass ALL — no subList limit here
+        view.rebuildList(vehicleService.getVehiclesByUserId(user.getUserId()));
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // GET ALL VEHICLES — used by the "View All" dialog
+    // ═══════════════════════════════════════════════════════════════
+
     /**
-     * Validates and adds a new vehicle to vehicles.txt.
+     * Returns ALL vehicles for the currently logged-in user.
+     * Used by CustomerDashboard to populate the "All My Vehicles" dialog.
      *
-     * fields[0] = plate
-     * fields[1] = brand
-     * fields[2] = year
-     * fields[3] = colour
+     * Each String[] has 6 elements:
+     *   [0] vehicleID  [1] vehicleType  [2] plate  [3] brand  [4] year  [5] colour
      *
-     * @return true if added successfully, false if validation failed or save failed
+     * @param userId  the logged-in user's ID e.g. "C3"
+     * @return list of vehicle rows
+     */
+    public List<String[]> getAllVehiclesForUser(String userId) {
+        return vehicleService.getVehiclesByUserId(userId);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // VEHICLE LABEL — converts vehicleId to a display string
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Looks up a vehicle by its ID and returns a short display label.
+     * Example: "Car · LIN110" or "Motor · AJH1312"
+     * Returns the vehicleId itself as a fallback if not found.
+     *
+     * @param vehicleId  e.g. "V4"
+     * @return display label string
+     */
+    public String getVehicleLabel(String vehicleId) {
+        return vehicleService.getVehiclePlate(vehicleId);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // ADD — validates and saves a new vehicle
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Validates and adds a new vehicle.
+     * fields[0]=type  fields[1]=plate  fields[2]=brand  fields[3]=year  fields[4]=colour
      */
     @Override
     public boolean handleAdd(String[] fields) {
-        // Step 1: Validate all fields using vehicle-specific rules
         String error = validateFields(fields);
         if (error != null) {
-            view.showMessage(error, "Validation Error",
-                    javax.swing.JOptionPane.WARNING_MESSAGE);
+            view.showMessage(error, "Validation Error", javax.swing.JOptionPane.WARNING_MESSAGE);
             return false;
         }
-
-        // Step 2: Get the logged-in user
         User user = view.getLoggedInUser();
         if (user == null) return false;
 
-        // Step 3: Save the new vehicle to vehicles.txt
         boolean saved = vehicleService.addVehicle(
-                user.getUserId(), // customer ID e.g. "C3"
-                fields[0],        // plate
-                fields[1],        // brand
-                fields[2],        // year
-                fields[3]         // colour
+                user.getUserId(),
+                fields[0], // vehicleType
+                fields[1], // plate
+                fields[2], // brand
+                fields[3], // year
+                fields[4]  // colour
         );
-
-        if (saved) {
-            refreshList(); // reload the list so the new vehicle appears immediately
-        } else {
-            view.showMessage("Failed to add vehicle.", "Error",
-                    javax.swing.JOptionPane.ERROR_MESSAGE);
-        }
-
+        if (saved) refreshList();
+        else view.showMessage("Failed to add vehicle.", "Error", javax.swing.JOptionPane.ERROR_MESSAGE);
         return saved;
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // EDIT — validates and updates an existing vehicle
+    // ═══════════════════════════════════════════════════════════════
+
     /**
-     * Validates and updates an existing vehicle in place (preserves order in file).
-     *
-     * @param id      the OLD plate number — used to find the record to update
-     * @param fields  new values: [plate, brand, year, colour]
-     * @return true if updated successfully, false otherwise
+     * Validates and updates an existing vehicle.
+     * id = old plate number (identifies which record to update).
+     * fields layout is the same as handleAdd.
      */
     @Override
     public boolean handleEdit(String id, String[] fields) {
-        // Step 1: Validate the new values
         String error = validateFields(fields);
         if (error != null) {
-            view.showMessage(error, "Validation Error",
-                    javax.swing.JOptionPane.WARNING_MESSAGE);
+            view.showMessage(error, "Validation Error", javax.swing.JOptionPane.WARNING_MESSAGE);
             return false;
         }
-
-        // Step 2: Get the logged-in user
         User user = view.getLoggedInUser();
         if (user == null) return false;
 
-        // Step 3: Update the record in place
         boolean updated = vehicleService.updateVehicle(
-                user.getUserId(), // customer ID e.g. "C3"
-                id,               // old plate (identifies which record to update)
-                fields[0],        // new plate
-                fields[1],        // new brand
-                fields[2],        // new year
-                fields[3]         // new colour
+                user.getUserId(),
+                id,        // old plate
+                fields[0], // new vehicleType
+                fields[1], // new plate
+                fields[2], // new brand
+                fields[3], // new year
+                fields[4]  // new colour
         );
-
-        if (updated) {
-            refreshList(); // reload to show the updated vehicle
-        } else {
-            view.showMessage("Failed to update vehicle.", "Error",
-                    javax.swing.JOptionPane.ERROR_MESSAGE);
-        }
-
+        if (updated) refreshList();
+        else view.showMessage("Failed to update vehicle.", "Error", javax.swing.JOptionPane.ERROR_MESSAGE);
         return updated;
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // DELETE — confirms then removes a vehicle
+    // ═══════════════════════════════════════════════════════════════
+
     /**
-     * Asks for confirmation then removes the vehicle with the given plate number.
-     *
-     * @param id  the plate number of the vehicle to remove
+     * Confirms then deletes the vehicle with the given plate number.
      */
     @Override
     public void handleDelete(String id) {
@@ -210,43 +182,61 @@ public class VehicleSectionController implements SectionController {
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // VALIDATE — checks all 5 vehicle fields
+    // ═══════════════════════════════════════════════════════════════
+
     /**
-     * Validates all four vehicle fields.
+     * Validates all 5 vehicle fields.
+     * Returns an error message string, or null if everything is valid.
      *
      * Rules:
-     *  fields[0] — Car Plate  : must have BOTH letters AND numbers, no special characters
-     *  fields[1] — Brand/Model: letters and/or numbers only, no special characters
-     *  fields[2] — Year       : exactly 4 digits, numbers only
-     *  fields[3] — Colour     : letters and spaces only
-     *
-     * @return error message string if invalid, null if all fields are valid
+     *   vehicleType — must be "Car" or "Motor"
+     *   plate       — letters + numbers only, must have at least one of each
+     *   brand       — letters, numbers and spaces only
+     *   year        — exactly 4 digits
+     *   colour      — letters and spaces only
      */
     @Override
     public String validateFields(String[] fields) {
-        String plate  = fields[0];
-        String brand  = fields[1];
-        String year   = fields[2];
-        String colour = fields[3];
+        String type   = fields[0];
+        String plate  = fields[1];
+        String brand  = fields[2];
+        String year   = fields[3];
+        String colour = fields[4];
 
-        if (plate.isEmpty()) return "Car Plate cannot be empty.";
+        // ── Vehicle Type ──────────────────────────────────────────
+        if (type == null || type.isEmpty())
+            return "Please select a vehicle type (Car or Motor).";
+        if (!type.equals("Car") && !type.equals("Motor"))
+            return "Vehicle type must be either 'Car' or 'Motor'.";
+
+        // ── Car Plate ─────────────────────────────────────────────
+        if (plate.isEmpty())
+            return "Car Plate cannot be empty.";
         if (!plate.matches("[a-zA-Z0-9 ]+"))
             return "Car Plate can only contain letters and numbers (no special characters).";
-        boolean plateHasLetter = plate.matches(".*[a-zA-Z].*");
-        boolean plateHasNumber = plate.matches(".*[0-9].*");
-        if (!plateHasLetter || !plateHasNumber)
+        if (!plate.matches(".*[a-zA-Z].*") || !plate.matches(".*[0-9].*"))
             return "Car Plate must contain both letters and numbers (e.g. WXY1234).";
 
-        if (brand.isEmpty()) return "Brand / Model cannot be empty.";
+        // ── Brand / Model ─────────────────────────────────────────
+        if (brand.isEmpty())
+            return "Brand / Model cannot be empty.";
         if (!brand.matches("[a-zA-Z0-9 ]+"))
             return "Brand / Model can only contain letters and numbers (no special characters).";
 
-        if (year.isEmpty()) return "Year cannot be empty.";
-        if (!year.matches("\\d{4}")) return "Year must be exactly 4 digits (e.g. 2025).";
+        // ── Year ──────────────────────────────────────────────────
+        if (year.isEmpty())
+            return "Year cannot be empty.";
+        if (!year.matches("\\d{4}"))
+            return "Year must be exactly 4 digits (e.g. 2025).";
 
-        if (colour.isEmpty()) return "Colour cannot be empty.";
+        // ── Colour ────────────────────────────────────────────────
+        if (colour.isEmpty())
+            return "Colour cannot be empty.";
         if (!colour.matches("[a-zA-Z ]+"))
             return "Colour can only contain letters (e.g. White, Dark Blue).";
 
-        return null; // all fields are valid
+        return null; // null = all valid — safe to save
     }
 }
