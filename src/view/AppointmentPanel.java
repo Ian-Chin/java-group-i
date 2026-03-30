@@ -607,7 +607,7 @@ public class AppointmentPanel extends JPanel {
         String dateTime = date + " " + time;
 
         String id = appointmentService.nextId();
-        Appointment appt = new Appointment(id, custEmail, techEmail, serviceType, "Pending", dateTime, duration);
+        Appointment appt = new Appointment(id, custEmail, "", techEmail, serviceType, "Pending", dateTime, duration);
 
         if (appointmentService.add(appt)) {
             refreshTable();
