@@ -607,7 +607,7 @@ public class AppointmentPanel extends JPanel {
         String dateTime = date + " " + time;
 
         String id = appointmentService.nextId();
-        Appointment appt = new Appointment(id, custEmail, techEmail, serviceType, "Pending", dateTime, duration);
+        Appointment appt = new Appointment(id, custEmail, "", techEmail, serviceType, "Pending", dateTime, duration);
 
         if (appointmentService.add(appt)) {
             refreshTable();
@@ -780,7 +780,7 @@ public class AppointmentPanel extends JPanel {
         combo.setBackground(Color.WHITE);
         combo.setCursor(new Cursor(Cursor.HAND_CURSOR));
         return combo;
-    }
+    }aaaaaaaa
 
     private void error(String msg) {
         JOptionPane.showMessageDialog(this, msg, "Error", JOptionPane.ERROR_MESSAGE);
