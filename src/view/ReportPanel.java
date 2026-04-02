@@ -10,6 +10,13 @@ import java.awt.geom.Arc2D;
 import java.awt.geom.RoundRectangle2D;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import com.itextpdf.text.Document;
+import com.itextpdf.text.Image;
+import com.itextpdf.text.PageSize;
+import com.itextpdf.text.pdf.PdfWriter;
+
+import java.awt.image.BufferedImage;
+import java.io.FileOutputStream;
 
 public class ReportPanel extends JPanel {
 
