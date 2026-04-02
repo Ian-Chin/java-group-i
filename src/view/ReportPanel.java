@@ -16,6 +16,7 @@ import com.itextpdf.text.PageSize;
 import com.itextpdf.text.pdf.PdfWriter;
 
 import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.FileOutputStream;
 
 public class ReportPanel extends JPanel {
@@ -61,18 +62,43 @@ public class ReportPanel extends JPanel {
         dash.setBackground(UIConstants.BG_CONTENT);
         dash.setBorder(new EmptyBorder(28, 36, 36, 36));
 
+        JPanel header = new JPanel(new BorderLayout());
+        header.setOpaque(false);
+        header.setAlignmentX(Component.LEFT_ALIGNMENT);
+        header.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
+
+        JPanel titleBox = new JPanel();
+        titleBox.setLayout(new BoxLayout(titleBox, BoxLayout.Y_AXIS));
+        titleBox.setOpaque(false);
+
         JLabel title = new JLabel("Analytics Report");
         title.setFont(new Font("SansSerif", Font.BOLD, 20));
         title.setForeground(UIConstants.TEXT_PRIMARY);
         title.setAlignmentX(Component.LEFT_ALIGNMENT);
-        dash.add(title);
+        titleBox.add(title);
 
         JLabel sub = new JLabel("Service performance  \u00B7  Staff workload  \u00B7  Revenue  \u00B7  Vehicles");
         sub.setFont(UIConstants.FONT_SMALL);
         sub.setForeground(UIConstants.TEXT_MUTED);
         sub.setAlignmentX(Component.LEFT_ALIGNMENT);
         sub.setBorder(new EmptyBorder(4, 0, 24, 0));
-        dash.add(sub);
+        titleBox.add(sub);
+
+        header.add(titleBox, BorderLayout.WEST);
+
+        JButton exportBtn = new JButton("Export PDF");
+        exportBtn.setFocusPainted(false);
+        exportBtn.setFont(UIConstants.FONT_BODY_BOLD);
+        exportBtn.setBackground(C_BLUE);
+        exportBtn.setForeground(Color.WHITE);
+        exportBtn.addActionListener(e -> exportToPDF(dash));
+        
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        btnPanel.setOpaque(false);
+        btnPanel.add(exportBtn);
+        header.add(btnPanel, BorderLayout.EAST);
+
+        dash.add(header);
 
         // Section 1 — Appointment overview
         dash.add(sectionLabel("Appointment Overview"));
@@ -415,5 +441,45 @@ public class ReportPanel extends JPanel {
         return new LinkedHashMap<>(src);
     }
     
-    
+    private void exportToPDF(JPanel panelToExport) {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Save Report as PDF");
+        fileChooser.setSelectedFile(new File("Analytics_Report.pdf"));
+        
+        if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            String path = fileChooser.getSelectedFile().getAbsolutePath();
+            if (!path.toLowerCase().endsWith(".pdf")) {
+                path += ".pdf";
+            }
+            
+            try {
+                int w = panelToExport.getWidth();
+                int h = panelToExport.getHeight();
+                if (w == 0 || h == 0) {
+                    w = panelToExport.getPreferredSize().width;
+                    h = panelToExport.getPreferredSize().height;
+                    panelToExport.setSize(w, h);
+                    panelToExport.doLayout();
+                }
+                
+                BufferedImage image = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+                Graphics2D g2 = image.createGraphics();
+                panelToExport.paint(g2);
+                g2.dispose();
+                
+                Document doc = new Document(new com.itextpdf.text.Rectangle(w, h), 0, 0, 0, 0);
+                PdfWriter.getInstance(doc, new FileOutputStream(path));
+                doc.open();
+                
+                Image pdfImg = Image.getInstance(image, null);
+                doc.add(pdfImg);
+                doc.close();
+                
+                JOptionPane.showMessageDialog(this, "Success exported to PDF!\n" + path, "Success", JOptionPane.INFORMATION_MESSAGE);
+            } catch (Exception ex) {
+                ex.printStackTrace();
+                JOptionPane.showMessageDialog(this, "Error exporting PDF: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
 }
