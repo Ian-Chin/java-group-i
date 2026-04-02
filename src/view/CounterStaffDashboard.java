@@ -16,6 +16,7 @@ import java.time.YearMonth;
 import java.time.format.TextStyle;
 import java.util.*;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class CounterStaffDashboard extends JPanel {
 
@@ -28,6 +29,9 @@ public class CounterStaffDashboard extends JPanel {
     private JLabel profileLabel;
     private JLabel avatarLabel;
     private JLabel headerTitle;
+
+    // Day detail / Gantt
+    private JPanel dayDetailPanel;
 
     // Profile section
     private JTextField profileNameField;
@@ -73,6 +77,9 @@ public class CounterStaffDashboard extends JPanel {
         contentPanel.add(new AppointmentPanel(app.getAccountService()), "Appointments");
         contentPanel.add(buildCalendarContent(),                        "Calendar");
         contentPanel.add(buildPlaceholder("Payment Collection"),  "Payment Collection");
+        dayDetailPanel = new JPanel(new BorderLayout());
+        dayDetailPanel.setBackground(UIConstants.BG_CONTENT);
+        contentPanel.add(dayDetailPanel, "DayDetail");
         contentPanel.add(buildProfileContent(),            "Profile");
 
         rightSide.add(contentPanel, BorderLayout.CENTER);
@@ -1045,8 +1052,8 @@ public class CounterStaffDashboard extends JPanel {
         };
         summaryCard.setOpaque(false);
         summaryCard.setBorder(new EmptyBorder(24, 24, 24, 24));
-        summaryCard.setPreferredSize(new Dimension(340, 0));
-        summaryCard.setMinimumSize(new Dimension(340, 0));
+        summaryCard.setPreferredSize(new Dimension(420, 0));
+        summaryCard.setMinimumSize(new Dimension(420, 0));
 
         JLabel summaryTitle = new JLabel("Appointments for today");
         summaryTitle.setFont(new Font("SansSerif", Font.BOLD, 16));
@@ -1199,9 +1206,16 @@ public class CounterStaffDashboard extends JPanel {
                 cell.setCursor(new Cursor(Cursor.HAND_CURSOR));
                 cell.addMouseListener(new MouseAdapter() {
                     @Override public void mouseClicked(MouseEvent e) {
-                        selectedDate[0] = currentMonth[0].atDay(day);
-                        calRefresh[0].run();
-                        refreshSummary.run();
+                        LocalDate clicked = currentMonth[0].atDay(day);
+                        if (clicked.equals(selectedDate[0])) {
+                            // Second click on same date -> open Gantt chart
+                            showDayDetail(selectedDate[0]);
+                        } else {
+                            // First click -> just select and show summary
+                            selectedDate[0] = clicked;
+                            calRefresh[0].run();
+                            refreshSummary.run();
+                        }
                     }
                 });
                 calGrid.add(cell);
@@ -1225,30 +1239,32 @@ public class CounterStaffDashboard extends JPanel {
 
     private JPanel buildAppointmentCard(String id, String customer, String technician,
                                          String service, String time, int hours, String status) {
-        JPanel card = new JPanel(new BorderLayout(12, 0)) {
-            @Override protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(new Color(248, 249, 252));
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
-                g2.setColor(new Color(230, 232, 240));
-                g2.setStroke(new BasicStroke(1f));
-                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
-                g2.dispose();
-            }
-        };
-        card.setOpaque(false);
-        card.setAlignmentX(Component.LEFT_ALIGNMENT);
-        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 80));
-        card.setBorder(new EmptyBorder(12, 16, 12, 16));
-
-        // Left: color bar based on status
         Color barColor;
         switch (status) {
             case "Completed":   barColor = new Color(40, 167, 69); break;
             case "In Progress": barColor = new Color(255, 165, 0); break;
             default:            barColor = new Color(108, 117, 125); break;
         }
+
+        JPanel card = new JPanel(new BorderLayout(8, 0)) {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(248, 249, 252));
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
+                g2.setColor(new Color(230, 232, 240));
+                g2.setStroke(new BasicStroke(1f));
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 10, 10);
+                g2.dispose();
+            }
+        };
+        card.setOpaque(false);
+        card.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 82));
+        card.setMinimumSize(new Dimension(0, 72));
+        card.setBorder(new EmptyBorder(8, 8, 8, 10));
+
+        // Left: color bar
         JPanel bar = new JPanel() {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -1262,37 +1278,22 @@ public class CounterStaffDashboard extends JPanel {
         bar.setPreferredSize(new Dimension(4, 0));
         card.add(bar, BorderLayout.WEST);
 
-        // Center: details
+        // Center: all details stacked vertically
         JPanel details = new JPanel();
         details.setLayout(new BoxLayout(details, BoxLayout.Y_AXIS));
         details.setOpaque(false);
 
-        JLabel topLine = new JLabel(id + "  \u2022  " + service + "  \u2022  " + hours + "h");
-        topLine.setFont(UIConstants.FONT_BODY_BOLD);
-        topLine.setForeground(UIConstants.TEXT_PRIMARY);
-        topLine.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel line1 = new JLabel(service + "  \u2022  " + hours + "h  \u2022  " + time);
+        line1.setFont(UIConstants.FONT_SMALL_BOLD);
+        line1.setForeground(UIConstants.TEXT_PRIMARY);
+        line1.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel midLine = new JLabel("Customer: " + customer + "   |   Technician: " + technician);
-        midLine.setFont(UIConstants.FONT_SMALL);
-        midLine.setForeground(UIConstants.TEXT_SECONDARY);
-        midLine.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel line2 = new JLabel(customer + "  |  Tech: " + technician);
+        line2.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        line2.setForeground(UIConstants.TEXT_SECONDARY);
+        line2.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        details.add(topLine);
-        details.add(Box.createVerticalStrut(4));
-        details.add(midLine);
-        card.add(details, BorderLayout.CENTER);
-
-        // Right: time + status badge
-        JPanel rightSide = new JPanel();
-        rightSide.setLayout(new BoxLayout(rightSide, BoxLayout.Y_AXIS));
-        rightSide.setOpaque(false);
-
-        JLabel timeLabel = new JLabel(time);
-        timeLabel.setFont(UIConstants.FONT_BODY_BOLD);
-        timeLabel.setForeground(UIConstants.TEXT_DARK);
-        timeLabel.setAlignmentX(Component.RIGHT_ALIGNMENT);
-        timeLabel.setHorizontalAlignment(SwingConstants.RIGHT);
-
+        // Status badge
         JLabel statusLabel = new JLabel(status) {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -1309,17 +1310,19 @@ public class CounterStaffDashboard extends JPanel {
                 super.paintComponent(g);
             }
         };
-        statusLabel.setFont(new Font("SansSerif", Font.BOLD, 11));
+        statusLabel.setFont(new Font("SansSerif", Font.BOLD, 10));
         statusLabel.setForeground(barColor);
         statusLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        statusLabel.setAlignmentX(Component.RIGHT_ALIGNMENT);
-        statusLabel.setPreferredSize(new Dimension(85, 24));
-        statusLabel.setMaximumSize(new Dimension(85, 24));
+        statusLabel.setBorder(new EmptyBorder(2, 8, 2, 8));
+        statusLabel.setMaximumSize(new Dimension(80, 18));
+        statusLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        rightSide.add(timeLabel);
-        rightSide.add(Box.createVerticalStrut(6));
-        rightSide.add(statusLabel);
-        card.add(rightSide, BorderLayout.EAST);
+        details.add(line1);
+        details.add(Box.createVerticalStrut(2));
+        details.add(line2);
+        details.add(Box.createVerticalStrut(4));
+        details.add(statusLabel);
+        card.add(details, BorderLayout.CENTER);
 
         return card;
     }
@@ -1342,6 +1345,254 @@ public class CounterStaffDashboard extends JPanel {
             if (u.getUserId() != null && u.getUserId().equalsIgnoreCase(idOrEmail)) return u.getName();
         }
         return idOrEmail;
+    }
+
+    // ─── Day Detail / Gantt chart ───────────────────────────────
+
+    private void showDayDetail(LocalDate date) {
+        dayDetailPanel.removeAll();
+        dayDetailPanel.add(buildDayDetailContent(date), BorderLayout.CENTER);
+        dayDetailPanel.revalidate();
+        dayDetailPanel.repaint();
+        headerTitle.setText("Schedule \u2014 " + date.toString());
+        contentLayout.show(contentPanel, "DayDetail");
+    }
+
+    private JPanel buildDayDetailContent(LocalDate date) {
+        JPanel page = new JPanel(new BorderLayout());
+        page.setBackground(UIConstants.BG_CONTENT);
+        page.setBorder(new EmptyBorder(24, 36, 24, 36));
+
+        // ── Top bar: Back button + date title + legend ──
+        JPanel topBar = new JPanel(new BorderLayout());
+        topBar.setOpaque(false);
+        topBar.setBorder(new EmptyBorder(0, 0, 16, 0));
+
+        JButton backBtn = new JButton("\u25C0  Back to Calendar");
+        backBtn.setFont(new Font("SansSerif", Font.BOLD, 13));
+        backBtn.setForeground(UIConstants.PRIMARY);
+        backBtn.setContentAreaFilled(false);
+        backBtn.setBorderPainted(false);
+        backBtn.setFocusPainted(false);
+        backBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        backBtn.addActionListener(e -> {
+            headerTitle.setText("Calendar");
+            contentLayout.show(contentPanel, "Calendar");
+        });
+        topBar.add(backBtn, BorderLayout.WEST);
+
+        JLabel dateTitle = new JLabel(date.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.ENGLISH)
+                + ", " + date.getMonth().getDisplayName(TextStyle.FULL, Locale.ENGLISH)
+                + " " + date.getDayOfMonth() + ", " + date.getYear(), SwingConstants.CENTER);
+        dateTitle.setFont(new Font("SansSerif", Font.BOLD, 18));
+        dateTitle.setForeground(UIConstants.TEXT_PRIMARY);
+        topBar.add(dateTitle, BorderLayout.CENTER);
+
+        // Legend
+        JPanel legend = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 0));
+        legend.setOpaque(false);
+        legend.add(legendDot(new Color(108, 117, 125), "Pending"));
+        legend.add(legendDot(new Color(255, 165, 0), "In Progress"));
+        legend.add(legendDot(new Color(40, 167, 69), "Completed"));
+        topBar.add(legend, BorderLayout.EAST);
+
+        page.add(topBar, BorderLayout.NORTH);
+
+        // ── Gather appointments for this date ──
+        AppointmentService apptService = new AppointmentService();
+        AccountService acctService = app.getAccountService();
+        List<Appointment> allAppts = apptService.getAll();
+        String dateStr = date.toString();
+
+        List<Appointment> dayAppts = allAppts.stream()
+                .filter(a -> {
+                    String dt = a.getDateTime();
+                    String apptDate = dt.contains(" ") ? dt.split(" ")[0] : dt;
+                    return apptDate.equals(dateStr);
+                })
+                .collect(Collectors.toList());
+
+        if (dayAppts.isEmpty()) {
+            JLabel empty = new JLabel("No appointments scheduled for this date.");
+            empty.setFont(new Font("SansSerif", Font.PLAIN, 16));
+            empty.setForeground(UIConstants.TEXT_MUTED);
+            empty.setHorizontalAlignment(SwingConstants.CENTER);
+            empty.setVerticalAlignment(SwingConstants.CENTER);
+            page.add(empty, BorderLayout.CENTER);
+            return page;
+        }
+
+        // Group by technician
+        Map<String, List<Appointment>> byTech = new LinkedHashMap<>();
+        for (Appointment a : dayAppts) {
+            String techName = resolveUserName(acctService, a.getTechnicianEmail());
+            byTech.computeIfAbsent(techName, k -> new ArrayList<>()).add(a);
+        }
+
+        // ── Gantt chart panel (stretches to fill width, no left labels) ──
+        int startHour = 7;
+        int endHour = 20;
+        int totalHours = endHour - startHour;
+        int leftPad = 16;
+        int rowHeight = 100;
+        int headerHeight = 32;
+
+        JPanel ganttChart = new JPanel() {
+            @Override protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+                int panelW = getWidth();
+                int chartAreaW = panelW - leftPad * 2;
+                int hourWidth = Math.max(50, chartAreaW / totalHours);
+
+                // Background
+                g2.setColor(Color.WHITE);
+                g2.fillRoundRect(0, 0, panelW, getHeight(), 16, 16);
+                g2.setColor(UIConstants.BORDER_DEFAULT);
+                g2.drawRoundRect(0, 0, panelW - 1, getHeight() - 1, 16, 16);
+
+                int y0 = headerHeight;
+
+                // ── Hour header labels ──
+                g2.setFont(new Font("SansSerif", Font.BOLD, 11));
+                for (int h = 0; h < totalHours; h++) {
+                    int x = leftPad + h * hourWidth;
+                    int hour = startHour + h;
+                    String lbl = (hour <= 12 ? hour : hour - 12) + ":00 " + (hour < 12 ? "AM" : "PM");
+                    g2.setColor(UIConstants.TEXT_MUTED);
+                    g2.drawString(lbl, x + 4, y0 - 8);
+                }
+
+                // ── Horizontal row separators only ──
+                for (int r = 0; r <= byTech.size(); r++) {
+                    int y = y0 + r * rowHeight;
+                    g2.setColor(new Color(235, 237, 242));
+                    g2.drawLine(leftPad, y, leftPad + totalHours * hourWidth, y);
+                }
+
+                // ── Technician rows (no left name label) ──
+                int rowIdx = 0;
+                for (Map.Entry<String, List<Appointment>> entry : byTech.entrySet()) {
+                    String techName = entry.getKey();
+                    List<Appointment> appts = entry.getValue();
+                    int rowY = y0 + rowIdx * rowHeight;
+
+                    // ── Draw appointment bars ──
+                    for (Appointment a : appts) {
+                        String dt = a.getDateTime();
+                        String timePart = dt.contains(" ") ? dt.split(" ")[1] : "09:00";
+                        String[] hm = timePart.split(":");
+                        int apptHour = 9, apptMin = 0;
+                        try {
+                            apptHour = Integer.parseInt(hm[0]);
+                            if (hm.length > 1) apptMin = Integer.parseInt(hm[1]);
+                        } catch (NumberFormatException ignored) {}
+
+                        double startOffset = (apptHour - startHour) + apptMin / 60.0;
+                        double duration = a.getDurationHours();
+                        if (startOffset < 0) { duration += startOffset; startOffset = 0; }
+                        if (startOffset + duration > totalHours) duration = totalHours - startOffset;
+                        if (duration <= 0) continue;
+
+                        int barX = leftPad + (int)(startOffset * hourWidth);
+                        int barW = (int)(duration * hourWidth);
+                        int barY = rowY + 6;
+                        int barH = rowHeight - 12;
+
+                        // Bar color based on status
+                        Color barColor;
+                        switch (a.getStatus()) {
+                            case "Completed":   barColor = new Color(40, 167, 69); break;
+                            case "In Progress": barColor = new Color(255, 165, 0); break;
+                            default:            barColor = new Color(108, 117, 125); break;
+                        }
+
+                        // Shadow
+                        g2.setColor(new Color(0, 0, 0, 30));
+                        g2.fillRoundRect(barX + 2, barY + 2, barW, barH, 12, 12);
+
+                        // Main bar
+                        g2.setColor(barColor);
+                        g2.fillRoundRect(barX, barY, barW, barH, 12, 12);
+
+                        // Left accent stripe
+                        g2.setColor(new Color(255, 255, 255, 60));
+                        g2.fillRoundRect(barX, barY, 5, barH, 4, 4);
+
+                        // 4-line bar text (bigger bar = more room)
+                        String custName = resolveUserName(acctService, a.getCustomerEmail());
+                        g2.setColor(Color.WHITE);
+
+                        // Line 1: technician name (bold)
+                        g2.setFont(new Font("SansSerif", Font.BOLD, 12));
+                        FontMetrics fm1 = g2.getFontMetrics();
+                        if (fm1.stringWidth(techName) < barW - 16) {
+                            g2.drawString(techName, barX + 12, barY + 18);
+                        }
+
+                        // Line 2: service type
+                        g2.setFont(new Font("SansSerif", Font.PLAIN, 12));
+                        FontMetrics fm2 = g2.getFontMetrics();
+                        if (fm2.stringWidth(a.getServiceType()) < barW - 16) {
+                            g2.drawString(a.getServiceType(), barX + 12, barY + 35);
+                        }
+
+                        // Line 3: customer name
+                        g2.setFont(new Font("SansSerif", Font.PLAIN, 11));
+                        FontMetrics fm3 = g2.getFontMetrics();
+                        String custLine = "Customer: " + custName;
+                        if (fm3.stringWidth(custLine) < barW - 16) {
+                            g2.drawString(custLine, barX + 12, barY + 51);
+                        }
+
+                        // Line 4: time + duration + status
+                        g2.setFont(new Font("SansSerif", Font.PLAIN, 10));
+                        FontMetrics fm4 = g2.getFontMetrics();
+                        String line4 = timePart + "  \u2022  " + a.getDurationHours() + "h  \u2022  " + a.getStatus();
+                        if (fm4.stringWidth(line4) < barW - 16) {
+                            g2.drawString(line4, barX + 12, barY + 66);
+                        }
+                    }
+                    rowIdx++;
+                }
+
+                g2.dispose();
+            }
+
+            @Override public Dimension getPreferredSize() {
+                int h = headerHeight + byTech.size() * rowHeight + 20;
+                return new Dimension(super.getPreferredSize().width, h);
+            }
+        };
+        ganttChart.setOpaque(false);
+
+        JScrollPane scroll = new JScrollPane(ganttChart,
+                JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+                JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scroll.setBorder(null);
+        scroll.setOpaque(false);
+        scroll.getViewport().setOpaque(false);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+
+        page.add(scroll, BorderLayout.CENTER);
+        return page;
+    }
+
+    private JPanel legendDot(Color color, String text) {
+        JPanel dot = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        dot.setOpaque(false);
+        JLabel circle = new JLabel("\u25CF");
+        circle.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        circle.setForeground(color);
+        JLabel label = new JLabel(text);
+        label.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        label.setForeground(UIConstants.TEXT_DARK);
+        dot.add(circle);
+        dot.add(label);
+        return dot;
     }
 
     // ─── Profile content ─────────────────────────────────────────
