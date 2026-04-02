@@ -11,25 +11,6 @@ import java.awt.geom.RoundRectangle2D;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * Analytics dashboard for the Admin — mirrors a lightweight Power BI report.
- *
- * Layout (top to bottom, inside a scroll pane):
- *   Section 1 — "Appointment Overview"
- *     Donut pie: by status  |  Donut pie: by service type  |  Bar: tech workload
- *   Section 2 — "Trends & Revenue"
- *     Bar: weekly volume  |  Bar: monthly revenue  |  Bar: avg rating per tech
- *   Section 3 — "Staff & Status Summary"
- *     Horizontal bar: staff by role  |  Horizontal bar: appointment status counts
- *
- * All charts drawn with pure Graphics2D — no external library.
- *
- * OOP highlights:
- *  - Encapsulation : DashboardData hides all file I/O and aggregation
- *  - Inheritance   : each chart is an anonymous JPanel subclass
- *  - Abstraction   : buildPieChart() / buildBarChart() / buildHBarChart() hide drawing
- *  - Polymorphism  : every chart is stored as JPanel; GridLayout treats them uniformly
- */
 public class ReportPanel extends JPanel {
 
     private static final Color C_BLUE   = new Color(80,  110, 230);
@@ -426,4 +407,6 @@ public class ReportPanel extends JPanel {
     private Map<String, Integer> toLinked(Map<String, Integer> src) {
         return new LinkedHashMap<>(src);
     }
+    
+    
 }
