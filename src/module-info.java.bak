@@ -1,0 +1,4 @@
+module assignmentjava {
+	requires java.desktop;
+	requires itextpdf;
+}
