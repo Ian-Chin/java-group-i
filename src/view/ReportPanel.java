@@ -10,6 +10,10 @@ import java.awt.geom.Arc2D;
 import java.awt.geom.RoundRectangle2D;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.awt.print.*;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import javax.imageio.ImageIO;
 
 /**
  * Analytics dashboard for the Admin — mirrors a lightweight Power BI report.
@@ -78,6 +82,12 @@ public class ReportPanel extends JPanel {
         title.setForeground(UIConstants.TEXT_PRIMARY);
         title.setAlignmentX(Component.LEFT_ALIGNMENT);
         dash.add(title);
+        
+        JButton btnExport = new JButton("Export to PDF / Print");
+        btnExport.addActionListener(e -> exportToPDF(dash));
+        btnExport.setAlignmentX(Component.LEFT_ALIGNMENT);
+        dash.add(Box.createVerticalStrut(10));
+        dash.add(btnExport);
 
         JLabel sub = new JLabel("Service performance  \u00B7  Staff workload  \u00B7  Revenue  \u00B7  Vehicles");
         sub.setFont(UIConstants.FONT_SMALL);
@@ -404,6 +414,38 @@ public class ReportPanel extends JPanel {
         g2.setFont(UIConstants.FONT_SMALL);
         g2.drawString("No data yet", w / 2 - 30, h / 2);
         g2.dispose();
+    }
+    
+    private void exportToPDF(JPanel panel) {
+        PrinterJob job = PrinterJob.getPrinterJob();
+        job.setJobName("Analytics Report");
+        
+        job.setPrintable(new Printable() {
+            public int print(Graphics pg, PageFormat pf, int pageNum) {
+                if (pageNum > 0) return Printable.NO_SUCH_PAGE;
+                
+                Graphics2D g2 = (Graphics2D) pg;
+                g2.translate(pf.getImageableX(), pf.getImageableY());
+                
+                double scaleX = pf.getImageableWidth() / panel.getWidth();
+                double scaleY = pf.getImageableHeight() / panel.getHeight();
+                double scale = Math.min(scaleX, scaleY);
+                
+                g2.scale(scale, scale);
+                panel.paint(g2);
+                
+                return Printable.PAGE_EXISTS;
+            }
+        });
+        
+        if (job.printDialog()) {
+            try {
+                job.print();
+                JOptionPane.showMessageDialog(this, "Export / Print successful!");
+            } catch (PrinterException ex) {
+                JOptionPane.showMessageDialog(this, "Export failed: " + ex.getMessage());
+            }
+        }
     }
 
     // ── Data helpers ───────────────────────────────────────────────
