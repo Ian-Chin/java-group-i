@@ -780,7 +780,7 @@ public class AppointmentPanel extends JPanel {
         combo.setBackground(Color.WHITE);
         combo.setCursor(new Cursor(Cursor.HAND_CURSOR));
         return combo;
-    }aaaaaaaa
+    }
 
     private void error(String msg) {
         JOptionPane.showMessageDialog(this, msg, "Error", JOptionPane.ERROR_MESSAGE);
