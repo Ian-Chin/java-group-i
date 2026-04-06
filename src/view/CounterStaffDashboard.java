@@ -76,7 +76,7 @@ public class CounterStaffDashboard extends JPanel {
         contentPanel.add(new CustomerManagementPanel(app.getAccountService()), "Customer Management");
         contentPanel.add(new AppointmentPanel(app.getAccountService()), "Appointments");
         contentPanel.add(buildCalendarContent(),                        "Calendar");
-        contentPanel.add(buildPlaceholder("Payment Collection"),  "Payment Collection");
+        contentPanel.add(new PaymentCollectionPanel(app.getAccountService()), "Payment Collection");
         dayDetailPanel = new JPanel(new BorderLayout());
         dayDetailPanel.setBackground(UIConstants.BG_CONTENT);
         contentPanel.add(dayDetailPanel, "DayDetail");
@@ -834,20 +834,36 @@ public class CounterStaffDashboard extends JPanel {
 
     private JPanel buildPaymentSummaryCard(List<String[]> allPayments) {
         int paidCount = 0;
-        int unpaidCount = 0;
         double totalPaid = 0;
-        double totalUnpaid = 0;
+        double todayTotal = 0;
+        int todayCount = 0;
+        String today = LocalDate.now().toString();
 
         for (String[] p : allPayments) {
-            String status = p[6].trim();
+            String status = p[8].trim();
             double amount = 0;
-            try { amount = Double.parseDouble(p[3].trim()); } catch (NumberFormatException ignored) {}
+            try { amount = Double.parseDouble(p[5].trim()); } catch (NumberFormatException ignored) {}
             if ("Paid".equalsIgnoreCase(status)) {
                 paidCount++;
                 totalPaid += amount;
-            } else {
+                if (p[6].trim().equals(today)) {
+                    todayTotal += amount;
+                    todayCount++;
+                }
+            }
+        }
+
+        // Count unpaid completed appointments (no payment record)
+        AppointmentService apptSvc = new AppointmentService();
+        List<Appointment> allAppts = apptSvc.getAll();
+        Set<String> paidApptIds = new HashSet<>();
+        for (String[] p : allPayments) {
+            paidApptIds.add(p[3].trim());
+        }
+        int unpaidCount = 0;
+        for (Appointment a : allAppts) {
+            if ("Completed".equals(a.getStatus()) && !paidApptIds.contains(a.getId())) {
                 unpaidCount++;
-                totalUnpaid += amount;
             }
         }
 
@@ -903,8 +919,8 @@ public class CounterStaffDashboard extends JPanel {
         card.add(sep);
         card.add(Box.createVerticalStrut(14));
 
-        // Paid vs Unpaid row
-        JPanel statsRow = new JPanel(new GridLayout(1, 2, 12, 0));
+        // Paid / Unpaid / Today row
+        JPanel statsRow = new JPanel(new GridLayout(1, 3, 10, 0));
         statsRow.setOpaque(false);
         statsRow.setAlignmentX(Component.LEFT_ALIGNMENT);
         statsRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
@@ -938,6 +954,7 @@ public class CounterStaffDashboard extends JPanel {
         statsRow.add(paidTile);
 
         // Unpaid tile
+        final int unpaidFinal = unpaidCount;
         JPanel unpaidTile = new JPanel() {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -957,13 +974,41 @@ public class CounterStaffDashboard extends JPanel {
         unpaidVal.setAlignmentX(Component.LEFT_ALIGNMENT);
         unpaidTile.add(unpaidVal);
 
-        JLabel unpaidAmt = new JLabel(String.format("RM %.2f", totalUnpaid));
-        unpaidAmt.setFont(UIConstants.FONT_SMALL);
-        unpaidAmt.setForeground(new Color(255, 165, 0));
-        unpaidAmt.setAlignmentX(Component.LEFT_ALIGNMENT);
-        unpaidTile.add(unpaidAmt);
+        JLabel unpaidNote = new JLabel("awaiting collection");
+        unpaidNote.setFont(UIConstants.FONT_SMALL);
+        unpaidNote.setForeground(new Color(255, 165, 0));
+        unpaidNote.setAlignmentX(Component.LEFT_ALIGNMENT);
+        unpaidTile.add(unpaidNote);
 
         statsRow.add(unpaidTile);
+
+        // Today tile
+        JPanel todayTile = new JPanel() {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(235, 240, 255));
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
+                g2.dispose();
+            }
+        };
+        todayTile.setOpaque(false);
+        todayTile.setLayout(new BoxLayout(todayTile, BoxLayout.Y_AXIS));
+        todayTile.setBorder(new EmptyBorder(10, 14, 10, 14));
+
+        JLabel todayVal = new JLabel(todayCount + " Today");
+        todayVal.setFont(new Font("SansSerif", Font.BOLD, 16));
+        todayVal.setForeground(new Color(80, 110, 230));
+        todayVal.setAlignmentX(Component.LEFT_ALIGNMENT);
+        todayTile.add(todayVal);
+
+        JLabel todayAmt = new JLabel(String.format("RM %.2f", todayTotal));
+        todayAmt.setFont(UIConstants.FONT_SMALL);
+        todayAmt.setForeground(new Color(80, 110, 230));
+        todayAmt.setAlignmentX(Component.LEFT_ALIGNMENT);
+        todayTile.add(todayAmt);
+
+        statsRow.add(todayTile);
 
         card.add(statsRow);
         card.add(Box.createVerticalGlue());
