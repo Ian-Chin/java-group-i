@@ -20,10 +20,8 @@ import javax.imageio.ImageIO;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.List;
-import com.itextpdf.text.Document;
-import com.itextpdf.text.Image;
-import com.itextpdf.text.PageSize;
-import com.itextpdf.text.pdf.PdfWriter;
+import util.PdfUtil;
+import java.io.IOException;
 
 
 /**
@@ -890,13 +888,12 @@ public class PaymentCollectionPanel extends JPanel {
         panelToExport.paint(g2);
         g2.dispose();
 
-        Document doc = new Document(new com.itextpdf.text.Rectangle(w, h), 0, 0, 0, 0);
-        PdfWriter.getInstance(doc, new FileOutputStream(path));
-        doc.open();
-
-        Image pdfImg = Image.getInstance(image, null);
-        doc.add(pdfImg);
-        doc.close();
+        // Use PdfUtil to write the image as a one-page PDF
+        try {
+            PdfUtil.writeImageAsPdf(image, new File(path));
+        } catch (IOException ioe) {
+            throw ioe;
+        }
     }
 
     private double getServicePrice(String serviceType) {

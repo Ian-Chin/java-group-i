@@ -10,14 +10,12 @@ import java.awt.geom.Arc2D;
 import java.awt.geom.RoundRectangle2D;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import com.itextpdf.text.Document;
-import com.itextpdf.text.Image;
-import com.itextpdf.text.PageSize;
-import com.itextpdf.text.pdf.PdfWriter;
+import util.PdfUtil;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 
 public class ReportPanel extends JPanel {
 
@@ -475,13 +473,12 @@ public class ReportPanel extends JPanel {
                     btnToHide.setVisible(true);
                 }
                 
-                Document doc = new Document(new com.itextpdf.text.Rectangle(w, h), 0, 0, 0, 0);
-                PdfWriter.getInstance(doc, new FileOutputStream(path));
-                doc.open();
-                
-                Image pdfImg = Image.getInstance(image, null);
-                doc.add(pdfImg);
-                doc.close();
+                // Use PdfUtil to write the image into a one-page PDF
+                try {
+                    PdfUtil.writeImageAsPdf(image, new File(path));
+                } catch (IOException ioe) {
+                    throw new RuntimeException(ioe);
+                }
                 
                 JOptionPane.showMessageDialog(this, "Success exported to PDF!\n" + path, "Success", JOptionPane.INFORMATION_MESSAGE);
                 if (Desktop.isDesktopSupported()) {
