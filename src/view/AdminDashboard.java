@@ -78,8 +78,8 @@ public class AdminDashboard extends JPanel {
         AccountService svc = app.getAccountService();
 
         // ── Real panels wired call
-        contentPanel.add(buildProfileContent(),     "Profile");
         contentPanel.add(buildDashboardContent(),   "Dashboard");
+        contentPanel.add(buildProfileContent(),     "Profile");
         contentPanel.add(new ManageStaffPanel(svc), "Manage Staff");
         contentPanel.add(new ServicePricePanel(),   "Service Price");
         contentPanel.add(new ViewFeedbackPanel(),   "View Feedback");

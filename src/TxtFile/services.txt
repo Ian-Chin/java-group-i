@@ -6,4 +6,3 @@ Full Engine Overhaul,Major Service
 Transmission Service,Major Service
 Suspension & Steering,Major Service
 Air-Conditioning Service,Major Service
-test,Major Service

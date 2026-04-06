@@ -2,7 +2,6 @@ package view;
 
 import model.AccountService;
 import model.DashboardData;
-import model.PriceConfig;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -11,26 +10,15 @@ import java.awt.geom.Arc2D;
 import java.awt.geom.RoundRectangle2D;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import com.itextpdf.text.Document;
+import com.itextpdf.text.Image;
+import com.itextpdf.text.PageSize;
+import com.itextpdf.text.pdf.PdfWriter;
 
-/**
- * Analytics dashboard for the Admin — mirrors a lightweight Power BI report.
- *
- * Layout (top to bottom, inside a scroll pane):
- *   Section 1 — "Appointment Overview"
- *     Donut pie: by status  |  Donut pie: by service type  |  Bar: tech workload
- *   Section 2 — "Trends & Revenue"
- *     Bar: weekly volume  |  Bar: monthly revenue  |  Bar: avg rating per tech
- *   Section 3 — "Staff & Status Summary"
- *     Horizontal bar: staff by role  |  Horizontal bar: appointment status counts
- *
- * All charts drawn with pure Graphics2D — no external library.
- *
- * OOP highlights:
- *  - Encapsulation : DashboardData hides all file I/O and aggregation
- *  - Inheritance   : each chart is an anonymous JPanel subclass
- *  - Abstraction   : buildPieChart() / buildBarChart() / buildHBarChart() hide drawing
- *  - Polymorphism  : every chart is stored as JPanel; GridLayout treats them uniformly
- */
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.FileOutputStream;
+
 public class ReportPanel extends JPanel {
 
     private static final Color C_BLUE   = new Color(80,  110, 230);
@@ -47,14 +35,14 @@ public class ReportPanel extends JPanel {
     private static final Color[] REVENUE_COLORS  = {C_TEAL};
     private static final Color[] RATING_COLORS   = {C_AMBER};
     private static final Color[] ROLE_COLORS     = {C_PURPLE, C_BLUE, C_GREEN, C_AMBER};
+    private static final Color[] METHOD_COLORS   = {C_GREEN, C_BLUE, C_TEAL};
+    private static final Color[] VEHICLE_COLORS  = {C_BLUE, C_CORAL};
 
     private final DashboardData  data;
-    private final PriceConfig    prices;
     private final AccountService accountService;
 
     public ReportPanel(AccountService accountService) {
         this.accountService = accountService;
-        this.prices = new PriceConfig();
         this.data   = new DashboardData();
 
         setLayout(new BorderLayout());
@@ -74,20 +62,45 @@ public class ReportPanel extends JPanel {
         dash.setBackground(UIConstants.BG_CONTENT);
         dash.setBorder(new EmptyBorder(28, 36, 36, 36));
 
+        JPanel header = new JPanel(new BorderLayout());
+        header.setOpaque(false);
+        header.setAlignmentX(Component.LEFT_ALIGNMENT);
+        header.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
+
+        JPanel titleBox = new JPanel();
+        titleBox.setLayout(new BoxLayout(titleBox, BoxLayout.Y_AXIS));
+        titleBox.setOpaque(false);
+
         JLabel title = new JLabel("Analytics Report");
         title.setFont(new Font("SansSerif", Font.BOLD, 20));
         title.setForeground(UIConstants.TEXT_PRIMARY);
         title.setAlignmentX(Component.LEFT_ALIGNMENT);
-        dash.add(title);
+        titleBox.add(title);
 
-        JLabel sub = new JLabel("Service performance  \u00B7  Staff workload  \u00B7  Customer satisfaction");
+        JLabel sub = new JLabel("Service performance  \u00B7  Staff workload  \u00B7  Revenue  \u00B7  Vehicles");
         sub.setFont(UIConstants.FONT_SMALL);
         sub.setForeground(UIConstants.TEXT_MUTED);
         sub.setAlignmentX(Component.LEFT_ALIGNMENT);
         sub.setBorder(new EmptyBorder(4, 0, 24, 0));
-        dash.add(sub);
+        titleBox.add(sub);
 
-        // Section 1
+        header.add(titleBox, BorderLayout.WEST);
+
+        JButton exportBtn = new JButton("Export PDF");
+        exportBtn.setFocusPainted(false);
+        exportBtn.setFont(UIConstants.FONT_BODY_BOLD);
+        exportBtn.setBackground(C_BLUE);
+        exportBtn.setForeground(Color.WHITE);
+        exportBtn.addActionListener(e -> exportToPDF(dash, exportBtn));
+        
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        btnPanel.setOpaque(false);
+        btnPanel.add(exportBtn);
+        header.add(btnPanel, BorderLayout.EAST);
+
+        dash.add(header);
+
+        // Section 1 — Appointment overview
         dash.add(sectionLabel("Appointment Overview"));
         dash.add(vgap(10));
         dash.add(row3(
@@ -98,26 +111,36 @@ public class ReportPanel extends JPanel {
         ));
         dash.add(vgap(22));
 
-        // Section 2
+        // Section 2 — Revenue & ratings (revenueByMonth now reads real payment amounts)
         dash.add(sectionLabel("Trends & Revenue"));
         dash.add(vgap(10));
         dash.add(row3(
             buildBarChart("Weekly Appointment Volume",
                 toNumberMap(data.appointmentsByWeek()), WEEKLY_COLORS, false),
             buildBarChart("Monthly Revenue (RM)",
-                data.revenueByMonth(prices.getNormalPrice(), prices.getMajorPrice()),
-                REVENUE_COLORS, true),
+                data.revenueByMonth(), REVENUE_COLORS, true),
             buildBarChart("Avg Rating by Technician",
                 data.avgRatingByTechnician(), RATING_COLORS, true)
         ));
         dash.add(vgap(22));
 
-        // Section 3
+        // Section 3 — Payments & vehicles
+        dash.add(sectionLabel("Payments & Fleet"));
+        dash.add(vgap(10));
+        dash.add(row3(
+            buildPieChart("Payment Method",   data.paymentMethodBreakdown(), METHOD_COLORS),
+            buildPieChart("Vehicle Type",     data.vehicleTypeBreakdown(),   VEHICLE_COLORS),
+            buildBarChart("Top Vehicle Brands",
+                toNumberMap(data.topVehicleBrands()), WORKLOAD_COLORS, false)
+        ));
+        dash.add(vgap(22));
+
+        // Section 4 — Staff & status summary
         dash.add(sectionLabel("Staff & Status Summary"));
         dash.add(vgap(10));
         dash.add(row2(
-            buildHBarChart("Staff by Role",       buildRoleMap(),                   ROLE_COLORS),
-            buildHBarChart("Appointment Status",  toLinked(data.statusBreakdown()), STATUS_COLORS)
+            buildHBarChart("Staff by Role",      buildRoleMap(),                   ROLE_COLORS),
+            buildHBarChart("Appointment Status", toLinked(data.statusBreakdown()), STATUS_COLORS)
         ));
 
         return dash;
@@ -416,5 +439,61 @@ public class ReportPanel extends JPanel {
 
     private Map<String, Integer> toLinked(Map<String, Integer> src) {
         return new LinkedHashMap<>(src);
+    }
+    
+    private void exportToPDF(JPanel panelToExport, JButton btnToHide) {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Save Report as PDF");
+        fileChooser.setSelectedFile(new File("Analytics_Report.pdf"));
+        
+        if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            String path = fileChooser.getSelectedFile().getAbsolutePath();
+            if (!path.toLowerCase().endsWith(".pdf")) {
+                path += ".pdf";
+            }
+            
+            try {
+                if (btnToHide != null) {
+                    btnToHide.setVisible(false);
+                }
+                
+                int w = panelToExport.getWidth();
+                int h = panelToExport.getHeight();
+                if (w == 0 || h == 0) {
+                    w = panelToExport.getPreferredSize().width;
+                    h = panelToExport.getPreferredSize().height;
+                    panelToExport.setSize(w, h);
+                    panelToExport.doLayout();
+                }
+                
+                BufferedImage image = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+                Graphics2D g2 = image.createGraphics();
+                panelToExport.paint(g2);
+                g2.dispose();
+                
+                if (btnToHide != null) {
+                    btnToHide.setVisible(true);
+                }
+                
+                Document doc = new Document(new com.itextpdf.text.Rectangle(w, h), 0, 0, 0, 0);
+                PdfWriter.getInstance(doc, new FileOutputStream(path));
+                doc.open();
+                
+                Image pdfImg = Image.getInstance(image, null);
+                doc.add(pdfImg);
+                doc.close();
+                
+                JOptionPane.showMessageDialog(this, "Success exported to PDF!\n" + path, "Success", JOptionPane.INFORMATION_MESSAGE);
+                if (Desktop.isDesktopSupported()) {
+                    Desktop.getDesktop().open(new File(path));
+                }
+            } catch (Exception ex) {
+                if (btnToHide != null) {
+                    btnToHide.setVisible(true);
+                }
+                ex.printStackTrace();
+                JOptionPane.showMessageDialog(this, "Error exporting PDF: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
     }
 }
