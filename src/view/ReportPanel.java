@@ -91,7 +91,7 @@ public class ReportPanel extends JPanel {
         exportBtn.setFont(UIConstants.FONT_BODY_BOLD);
         exportBtn.setBackground(C_BLUE);
         exportBtn.setForeground(Color.WHITE);
-        exportBtn.addActionListener(e -> exportToPDF(dash));
+        exportBtn.addActionListener(e -> exportToPDF(dash, exportBtn));
         
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         btnPanel.setOpaque(false);
@@ -441,7 +441,7 @@ public class ReportPanel extends JPanel {
         return new LinkedHashMap<>(src);
     }
     
-    private void exportToPDF(JPanel panelToExport) {
+    private void exportToPDF(JPanel panelToExport, JButton btnToHide) {
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setDialogTitle("Save Report as PDF");
         fileChooser.setSelectedFile(new File("Analytics_Report.pdf"));
@@ -453,6 +453,10 @@ public class ReportPanel extends JPanel {
             }
             
             try {
+                if (btnToHide != null) {
+                    btnToHide.setVisible(false);
+                }
+                
                 int w = panelToExport.getWidth();
                 int h = panelToExport.getHeight();
                 if (w == 0 || h == 0) {
@@ -467,6 +471,10 @@ public class ReportPanel extends JPanel {
                 panelToExport.paint(g2);
                 g2.dispose();
                 
+                if (btnToHide != null) {
+                    btnToHide.setVisible(true);
+                }
+                
                 Document doc = new Document(new com.itextpdf.text.Rectangle(w, h), 0, 0, 0, 0);
                 PdfWriter.getInstance(doc, new FileOutputStream(path));
                 doc.open();
@@ -476,7 +484,13 @@ public class ReportPanel extends JPanel {
                 doc.close();
                 
                 JOptionPane.showMessageDialog(this, "Success exported to PDF!\n" + path, "Success", JOptionPane.INFORMATION_MESSAGE);
+                if (Desktop.isDesktopSupported()) {
+                    Desktop.getDesktop().open(new File(path));
+                }
             } catch (Exception ex) {
+                if (btnToHide != null) {
+                    btnToHide.setVisible(true);
+                }
                 ex.printStackTrace();
                 JOptionPane.showMessageDialog(this, "Error exporting PDF: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
