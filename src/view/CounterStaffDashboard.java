@@ -1053,8 +1053,8 @@ public class CounterStaffDashboard extends JPanel {
         monthLabel.setFont(new Font("SansSerif", Font.BOLD, 22));
         monthLabel.setForeground(UIConstants.TEXT_PRIMARY);
 
-        JButton prevBtn = calNavBtn("\u25C0");
-        JButton nextBtn = calNavBtn("\u25B6");
+        JButton prevBtn = calNavBtn("<");
+        JButton nextBtn = calNavBtn(">");
 
         navRow.add(prevBtn, BorderLayout.WEST);
         navRow.add(monthLabel, BorderLayout.CENTER);

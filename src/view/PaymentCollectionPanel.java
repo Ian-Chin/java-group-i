@@ -16,6 +16,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.*;
+import javax.imageio.ImageIO;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.List;
@@ -704,7 +705,21 @@ public class PaymentCollectionPanel extends JPanel {
         receipt.setLayout(new BoxLayout(receipt, BoxLayout.Y_AXIS));
         receipt.setBackground(Color.WHITE);
         receipt.setBorder(new EmptyBorder(28, 32, 28, 32));
-        receipt.setPreferredSize(new Dimension(460, 520));
+        receipt.setPreferredSize(new Dimension(460, 660));
+
+        // Logo
+        try {
+            java.awt.image.BufferedImage logoImg = ImageIO.read(new File("src" + File.separator + "Image" + File.separator + "apu-logo.png"));
+            if (logoImg != null) {
+                int logoWidth = 120;
+                int logoHeight = (int) ((double) logoImg.getHeight() / logoImg.getWidth() * logoWidth);
+                java.awt.Image scaled = logoImg.getScaledInstance(logoWidth, logoHeight, java.awt.Image.SCALE_SMOOTH);
+                JLabel logoLabel = new JLabel(new ImageIcon(scaled));
+                logoLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+                receipt.add(logoLabel);
+                receipt.add(Box.createVerticalStrut(10));
+            }
+        } catch (Exception ignored) {}
 
         // Header
         JLabel shopName = new JLabel("APU Automotive Service Centre");
@@ -812,7 +827,23 @@ public class PaymentCollectionPanel extends JPanel {
                     path += ".pdf";
                 }
                 try {
+                    // Hide the button so it doesn't appear in the PDF
+                    exportPdfBtn.setVisible(false);
+                    receipt.revalidate();
+                    receipt.repaint();
+                    // Paint after hiding
                     exportReceiptToPdf(receipt, path);
+                    // Show the button again
+                    exportPdfBtn.setVisible(true);
+                    receipt.revalidate();
+                    receipt.repaint();
+
+                    // Auto-open the exported PDF
+                    File pdfFile = new File(path);
+                    if (Desktop.isDesktopSupported()) {
+                        Desktop.getDesktop().open(pdfFile);
+                    }
+
                     JOptionPane.showMessageDialog(
                         SwingUtilities.getWindowAncestor(this),
                         "Receipt exported successfully!\n" + path,
@@ -820,6 +851,7 @@ public class PaymentCollectionPanel extends JPanel {
                         JOptionPane.INFORMATION_MESSAGE
                     );
                 } catch (Exception ex) {
+                    exportPdfBtn.setVisible(true);
                     ex.printStackTrace();
                     JOptionPane.showMessageDialog(
                         SwingUtilities.getWindowAncestor(this),

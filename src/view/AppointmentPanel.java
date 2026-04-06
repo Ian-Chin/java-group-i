@@ -672,8 +672,8 @@ public class AppointmentPanel extends JPanel {
         monthLabel.setFont(new Font("SansSerif", Font.BOLD, 14));
         monthLabel.setForeground(UIConstants.TEXT_PRIMARY);
 
-        JButton prev = miniNavBtn("\u25C0");
-        JButton next = miniNavBtn("\u25B6");
+        JButton prev = miniNavBtn("<");
+        JButton next = miniNavBtn(">");
         navRow.add(prev, BorderLayout.WEST);
         navRow.add(monthLabel, BorderLayout.CENTER);
         navRow.add(next, BorderLayout.EAST);
