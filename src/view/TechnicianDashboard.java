@@ -15,7 +15,7 @@ import java.awt.geom.Ellipse2D;
 import java.awt.image.BufferedImage;
  
 
-public class TechnicianDashboard extends JPanel {
+public class TechnicianDashboar extends JPanel {
  
    
     private final AppFrame app;
