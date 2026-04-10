@@ -18,11 +18,9 @@ import java.util.Set;
  * Example:
  *   AP4,C3,V4,T3,Major Service,Completed,2026-03-26 13:00,3
  *
- * NEW METHOD ADDED:
- *   deletePendingByVehicleId(vehicleId) — when a vehicle is deleted,
- *   this removes ALL appointments for that vehicle whose status is
- *   "Pending". Appointments that are "Completed" are left alone
- *   because the customer still owes payment for those services.
+ * CHANGE: Removed autoCompleteExpiredAppointments().
+ *         getPendingAppointments() now simply hides past appointments
+ *         by checking the end time — it never changes the file.
  */
 public class AppointmentService {
 
@@ -165,32 +163,25 @@ public class AppointmentService {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // deletePendingByVehicleId()  ← NEW METHOD
+    // deletePendingByVehicleId()
     // ═══════════════════════════════════════════════════════════════
     /**
      * When a vehicle is deleted, this method removes ALL appointments
-     * for that vehicle whose status is "Pending".
+     * for that vehicle whose status is "Pending" or "In Progress".
      *
-     * WHY only "Pending"?
-     *   - "Pending" means the service has NOT happened yet.
-     *     There is nothing to pay, so deleting these is safe and correct.
+     * WHY only "Pending" / "In Progress"?
+     *   - These mean the service has NOT happened yet.
+     *     There is nothing to pay, so deleting these is safe.
      *   - "Completed" means the service already happened and the customer
-     *     owes payment. These must stay in appointments.txt so they
-     *     still appear in the Pending Payment card.
-     *   - "In Progress" is treated the same as "Pending" — the appointment
-     *     was scheduled but removing the vehicle cancels it.
-     *
-     * This method is called automatically by VehicleService.deleteVehicle()
-     * so the caller does not need to remember to call it separately.
+     *     owes payment. These must stay so they appear in Pending Payment.
      *
      * @param vehicleId  the ID of the vehicle being deleted, e.g. "V4"
-     * @return true if the file was rewritten successfully (even if 0 rows removed)
+     * @return true if the file was rewritten successfully
      */
     public boolean deletePendingByVehicleId(String vehicleId) {
         File file = new File(FILE_PATH);
         if (!file.exists()) return false;
 
-        // Read every line and decide which ones to keep
         List<String> linesToKeep = new ArrayList<>();
 
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
@@ -216,13 +207,9 @@ public class AppointmentService {
                 String lineVehicleId = cols[2].trim();
                 String lineStatus    = cols[5].trim();
 
-                // RULE: Remove only if BOTH conditions are true:
-                //   1. The vehicleID matches the deleted vehicle
-                //   2. The status is "Pending" or "In Progress"
-                //      (these are future/active appointments — not yet done)
-                boolean isThisVehicle  = lineVehicleId.equalsIgnoreCase(vehicleId);
-                boolean isNotYetDone   = lineStatus.equalsIgnoreCase("Pending")
-                                      || lineStatus.equalsIgnoreCase("In Progress");
+                boolean isThisVehicle = lineVehicleId.equalsIgnoreCase(vehicleId);
+                boolean isNotYetDone  = lineStatus.equalsIgnoreCase("Pending")
+                                     || lineStatus.equalsIgnoreCase("In Progress");
 
                 if (isThisVehicle && isNotYetDone) {
                     // DROP this line — appointment is cancelled because vehicle is deleted
@@ -230,7 +217,6 @@ public class AppointmentService {
                             + cols[0].trim() + " (vehicleId=" + vehicleId
                             + ", status=" + lineStatus + ")");
                 } else {
-                    // KEEP this line — either a different vehicle, or a Completed appointment
                     linesToKeep.add(line);
                 }
             }
@@ -269,93 +255,20 @@ public class AppointmentService {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // AUTO-COMPLETE EXPIRED APPOINTMENTS
-    // ═══════════════════════════════════════════════════════════════
-    /**
-     * Scans all appointments. For any that are "Pending" or "In Progress"
-     * and whose end time has already passed, this method:
-     *   1. Changes status to "Completed" in appointments.txt
-     *   2. Adds a new record in serviceHistory.txt
-     */
-    public void autoCompleteExpiredAppointments(ServiceHistoryService serviceHistoryService) {
-        LocalDateTime nowMalaysia = LocalDateTime.now(
-                java.time.ZoneId.of("Asia/Kuala_Lumpur"));
-
-        List<Appointment> allAppointments = getAll();
-        boolean anyChanges = false;
-
-        for (Appointment appt : allAppointments) {
-            String status = appt.getStatus();
-            boolean isActive = status.equalsIgnoreCase("Pending")
-                            || status.equalsIgnoreCase("In Progress");
-            if (!isActive) continue;
-
-            LocalDateTime startTime;
-            try {
-                startTime = LocalDateTime.parse(appt.getDateTime(), DATE_TIME_FORMAT);
-            } catch (DateTimeParseException e) {
-                System.out.println("[AutoComplete] Bad date format: " + appt.getDateTime());
-                continue;
-            }
-
-            LocalDateTime endTime = startTime.plusHours(appt.getDurationHours());
-
-            if (endTime.isBefore(nowMalaysia)) {
-                appt.setStatus("Completed");
-                anyChanges = true;
-
-                if (!serviceHistoryService.appointmentAlreadyRecorded(appt.getId())) {
-                    String serviceDate = appt.getDateTime().contains(" ")
-                            ? appt.getDateTime().split(" ")[0]
-                            : appt.getDateTime();
-
-                    serviceHistoryService.addRecord(
-                            appt.getCustomerId(),
-                            appt.getId(),
-                            appt.getVehicleId(),
-                            "NULL",
-                            appt.getTechnicianId(),
-                            serviceDate
-                    );
-
-                    System.out.println("[AutoComplete] Marked " + appt.getId() + " as Completed.");
-                }
-            }
-        }
-
-        if (anyChanges) {
-            saveAll(allAppointments);
-        }
-    }
-
-    // Rewrites appointments.txt with the updated list
-    private boolean saveAll(List<Appointment> list) {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(FILE_PATH, false))) {
-            for (Appointment a : list) {
-                writer.write(a.getId()           + ","
-                           + a.getCustomerId()   + ","
-                           + a.getVehicleId()    + ","
-                           + a.getTechnicianId() + ","
-                           + a.getServiceType()  + ","
-                           + a.getStatus()       + ","
-                           + a.getDateTime()     + ","
-                           + a.getDurationHours());
-                writer.newLine();
-            }
-            return true;
-        } catch (IOException e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════
     // getPendingAppointments — for the Upcoming Appointments card
     // ═══════════════════════════════════════════════════════════════
     /**
      * Returns upcoming appointments for a customer.
-     * "In Progress" = always shown.
-     * "Pending"     = only shown if start time is in the future.
+     *
+     * HOW IT WORKS (beginner-friendly explanation):
+     *   1. Read every appointment from the file.
+     *   2. Skip any appointment that does not belong to this customer.
+     *   3. Skip any appointment that is not "Pending" or "In Progress".
+     *   4. Calculate when the appointment ends (start time + duration hours).
+     *   5. If the end time has already passed → hide it (do NOT change the file).
+     *   6. If the end time is still in the future → show it.
+     *
+     * The file is NEVER modified here. We only decide what to display.
      *
      * Returned array has 7 elements:
      *   [0] appointmentID  [1] vehicleID  [2] technicianID
@@ -363,27 +276,49 @@ public class AppointmentService {
      */
     public List<String[]> getPendingAppointments(String userId) {
         List<String[]> result = new ArrayList<>();
+
+        // Get the current date and time in Malaysia timezone
         LocalDateTime now = LocalDateTime.now(java.time.ZoneId.of("Asia/Kuala_Lumpur"));
 
         for (Appointment a : getAll()) {
+
+            // Step 1: Skip appointments that don't belong to this customer
             if (!a.getCustomerId().equalsIgnoreCase(userId)) continue;
 
             String status = a.getStatus();
-            if (status.equalsIgnoreCase("In Progress")) {
+
+            // Step 2: We only care about "Pending" or "In Progress" appointments.
+            //         "Completed" appointments go to the Payment section, not here.
+            if (!status.equalsIgnoreCase("Pending")
+                    && !status.equalsIgnoreCase("In Progress")) {
+                continue;
+            }
+
+            // Step 3: Try to read the appointment's start date and time
+            LocalDateTime startTime;
+            try {
+                startTime = LocalDateTime.parse(a.getDateTime(), DATE_TIME_FORMAT);
+            } catch (DateTimeParseException e) {
+                // If the date is badly formatted, skip this appointment safely
+                System.out.println("[getPending] Bad date format, skipping: " + a.getDateTime());
+                continue;
+            }
+
+            // Step 4: Calculate when the appointment ENDS
+            //         end time = start time + how many hours the service takes
+            LocalDateTime endTime = startTime.plusHours(a.getDurationHours());
+
+            // Step 5: Only show the appointment if it has NOT ended yet.
+            //         endTime.isAfter(now) means the appointment is still upcoming.
+            //         If endTime is before now, the appointment has passed — hide it.
+            if (endTime.isAfter(now)) {
                 result.add(toRow(a));
-            } else if (status.equalsIgnoreCase("Pending")) {
-                try {
-                    LocalDateTime startTime = LocalDateTime.parse(a.getDateTime(), DATE_TIME_FORMAT);
-                    if (startTime.isAfter(now)) {
-                        result.add(toRow(a));
-                    }
-                } catch (DateTimeParseException e) {
-                    System.out.println("[getPending] Bad date: " + a.getDateTime());
-                }
             }
         }
 
+        // Step 6: Sort so the soonest appointment appears at the top
         result.sort((rowA, rowB) -> rowA[5].compareTo(rowB[5]));
+
         return result;
     }
 
@@ -427,26 +362,29 @@ public class AppointmentService {
             String.valueOf(a.getDurationHours()) // [6] duration
         };
     }
-    
-//    Technician Dashboard
+
+    // ─────────────────────────────────────────────────────────────
+    // updateStatus() — used by Technician Dashboard
+    // ─────────────────────────────────────────────────────────────
     public boolean updateStatus(String id, String newStatus) {
-    	List<Appointment> all = getAll();
-    	boolean found = false;
-    	for (Appointment a : all) {
+        List<Appointment> all = getAll();
+        boolean found = false;
+        for (Appointment a : all) {
             if (a.getId().equalsIgnoreCase(id)) {
                 a.setStatus(newStatus);
                 found = true;
                 break;
             }
+        }
+        return found && saveAll(all);
     }
-    	return found && saveAll(all);
-    }
-    
-    
+
+    // ─────────────────────────────────────────────────────────────
+    // Feedback and Comment methods
+    // ─────────────────────────────────────────────────────────────
     public boolean saveFeedback(String appointmentId, String feedbackText) {
         return saveEntry(appointmentId, "feedback", feedbackText);
     }
-    
 
     public String getFeedback(String appointmentId) {
         return getEntry(appointmentId, "feedback");
@@ -460,7 +398,8 @@ public class AppointmentService {
         return getEntry(appointmentId, "comment");
     }
 
-    private static final String FEEDBACK_FILE = "src" + java.io.File.separator + "TxtFile" + java.io.File.separator + "feedback.txt";
+    private static final String FEEDBACK_FILE = "src" + java.io.File.separator
+            + "TxtFile" + java.io.File.separator + "feedback.txt";
 
     private List<String> loadFeedbackLines() {
         List<String> lines = new java.util.ArrayList<>();
@@ -480,18 +419,26 @@ public class AppointmentService {
         String prefix = appointmentId + "," + type + ",";
         boolean found = false;
         for (int i = 0; i < lines.size(); i++) {
-            if (lines.get(i).startsWith(prefix)) { lines.set(i, prefix + text); found = true; break; }
+            if (lines.get(i).startsWith(prefix)) {
+                lines.set(i, prefix + text);
+                found = true;
+                break;
+            }
         }
         if (!found) lines.add(prefix + text);
         java.io.File file = new java.io.File(FEEDBACK_FILE);
         try {
             java.io.File parent = file.getParentFile();
             if (parent != null && !parent.exists()) parent.mkdirs();
-            try (java.io.BufferedWriter bw = new java.io.BufferedWriter(new java.io.FileWriter(file, false))) {
+            try (java.io.BufferedWriter bw = new java.io.BufferedWriter(
+                    new java.io.FileWriter(file, false))) {
                 for (String l : lines) { bw.write(l); bw.newLine(); }
             }
             return true;
-        } catch (java.io.IOException e) { e.printStackTrace(); return false; }
+        } catch (java.io.IOException e) {
+            e.printStackTrace();
+            return false;
+        }
     }
 
     private String getEntry(String appointmentId, String type) {
@@ -500,5 +447,28 @@ public class AppointmentService {
             if (line.startsWith(prefix)) return line.substring(prefix.length());
         }
         return null;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // saveAll() — rewrites appointments.txt with an updated list
+    // ─────────────────────────────────────────────────────────────
+    private boolean saveAll(List<Appointment> list) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(FILE_PATH, false))) {
+            for (Appointment a : list) {
+                writer.write(a.getId()           + ","
+                           + a.getCustomerId()   + ","
+                           + a.getVehicleId()    + ","
+                           + a.getTechnicianId() + ","
+                           + a.getServiceType()  + ","
+                           + a.getStatus()       + ","
+                           + a.getDateTime()     + ","
+                           + a.getDurationHours());
+                writer.newLine();
+            }
+            return true;
+        } catch (IOException e) {
+            e.printStackTrace();
+            return false;
+        }
     }
 }

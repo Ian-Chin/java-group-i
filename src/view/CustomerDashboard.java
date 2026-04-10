@@ -239,16 +239,25 @@ public class CustomerDashboard extends JPanel {
 
     // ─────────────────────────────────────────────────────────────
     // refreshUser()
+    //
+    // CHANGE: Removed the autoCompleteExpired() call.
+    //         Expired appointments are now hidden automatically by
+    //         AppointmentService.getPendingAppointments() which checks
+    //         the end time of each appointment without touching the file.
     // ─────────────────────────────────────────────────────────────
     public void refreshUser() {
         resetDashboardState();
 
-        User user = app.getLoggedInUserObj();
-        if (user != null) appointmentController.autoCompleteExpired();
+        // NOTE: autoCompleteExpired() has been removed from here.
+        //       Previously it changed appointment statuses in the file.
+        //       Now, getPendingAppointments() simply skips appointments
+        //       whose end time has already passed — no file changes needed.
 
         String name = app.getLoggedInUser();
         if (name == null || name.isEmpty()) name = "Customer";
         if (profileLabel != null) profileLabel.setText(name);
+
+        User user = app.getLoggedInUserObj();
 
         if (user != null) selectedAvatarIndex = user.getProfilePicture();
         if (avatarLabel != null) {
@@ -271,12 +280,12 @@ public class CustomerDashboard extends JPanel {
         }
 
         vehicleController.refreshList();
-        
-     // ── Fix: update StaffReviewPage with the current logged-in user ──
+
+        // Update StaffReviewPage and MyFeedbackPage with the current logged-in user
         if (staffReviewPage != null) {
             staffReviewPage.setUser(app.getLoggedInUserObj());
         }
-        
+
         if (myFeedbackPage != null) {
             myFeedbackPage.setUser(app.getLoggedInUserObj());
         }
@@ -294,34 +303,30 @@ public class CustomerDashboard extends JPanel {
     // ─────────────────────────────────────────────────────────────
     // rebuildVehicleList()
     //
-    // FIXED: The add form is now inserted directly after the last
-    // vehicle row inside vehicleListPanel, so it always appears
-    // right below the last vehicle entry (e.g. Toyota Vios).
+    // The add form is inserted directly after the last vehicle row
+    // inside vehicleListPanel, so it always appears right below the
+    // last vehicle entry.
     //
     // Layout order inside vehicleListPanel:
     //   [vehicle row 1]
     //   [gap]
-    //   [vehicle row 2]   ← last vehicle
+    //   [vehicle row 2]   <- last vehicle
     //   [gap]
-    //   [add form]        ← appears right here when visible
-    //   [view all row]    ← only when vehicles > MAX_VISIBLE
+    //   [add form]        <- appears right here when visible
+    //   [view all row]    <- only when vehicles > MAX_VISIBLE
     // ─────────────────────────────────────────────────────────────
     private void rebuildVehicleList(List<String[]> vehicles) {
         if (vehicleListPanel == null) return;
 
-        // Remember if the add form was open before we rebuild,
-        // so we can restore it after rebuilding.
+        // Remember if the add form was open before we rebuild
         boolean addFormWasVisible = (vehicleAddPanel != null) && vehicleAddPanel.isVisible();
 
-        // Clear everything out of the list panel
         vehicleListPanel.removeAll();
 
         if (vehicles.isEmpty()) {
-            // No vehicles — show empty message
             JLabel empty = makeEmptyLabel("No vehicles registered.");
             vehicleListPanel.add(empty);
         } else {
-            // Show up to MAX_VISIBLE vehicle rows
             int show = Math.min(MAX_VISIBLE, vehicles.size());
             for (int i = 0; i < show; i++) {
                 String[] v = vehicles.get(i);
@@ -334,21 +339,14 @@ public class CustomerDashboard extends JPanel {
             }
         }
 
-        // ── KEY FIX ──────────────────────────────────────────────
-        // Add the add form HERE, right after the last vehicle row.
-        // This means clicking "+ Add" always shows the form directly
-        // below Toyota Vios (or whatever the last vehicle is),
-        // not floating at the bottom of the whole card.
+        // Add the add form right after the last vehicle row
         if (vehicleAddPanel != null) {
             vehicleListPanel.add(Box.createVerticalStrut(8));
             vehicleListPanel.add(vehicleAddPanel);
-            // Restore visibility so if the form was open during a
-            // refresh (e.g. after editing another vehicle), it stays open.
             vehicleAddPanel.setVisible(addFormWasVisible);
         }
 
-        // ── "View All" button ─────────────────────────────────────
-        // Only shown when there are more than MAX_VISIBLE vehicles.
+        // "View All" button — only shown when there are more than MAX_VISIBLE vehicles
         if (vehicles.size() > MAX_VISIBLE) {
             vehicleListPanel.add(Box.createVerticalStrut(4));
             JPanel viewAllRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
@@ -726,17 +724,12 @@ public class CustomerDashboard extends JPanel {
 
     // ═══════════════════════════════════════════════════════════════
     // MY VEHICLE CARD
-    //
-    // FIXED: vehicleAddPanel is no longer added here.
-    // It is now added inside rebuildVehicleList() so it always
-    // appears directly below the last vehicle row.
     // ═══════════════════════════════════════════════════════════════
     private JPanel buildVehicleCard() {
         vehicleCard = createCard();
         vehicleCard.setLayout(new BoxLayout(vehicleCard, BoxLayout.Y_AXIS));
         vehicleCard.setBorder(new EmptyBorder(18, 20, 18, 20));
 
-        // ── Title row with "+ Add" button ─────────────────────────
         JPanel titleRow = new JPanel(new BorderLayout());
         titleRow.setOpaque(false);
         titleRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
@@ -755,9 +748,6 @@ public class CustomerDashboard extends JPanel {
         vehicleCard.add(makeSeparator());
         vehicleCard.add(Box.createVerticalStrut(8));
 
-        // ── Vehicle list panel ────────────────────────────────────
-        // This panel holds: vehicle rows + add form + view all row.
-        // All three are inserted dynamically inside rebuildVehicleList().
         vehicleListPanel = new JPanel();
         vehicleListPanel.setLayout(new BoxLayout(vehicleListPanel, BoxLayout.Y_AXIS));
         vehicleListPanel.setOpaque(false);
@@ -765,14 +755,9 @@ public class CustomerDashboard extends JPanel {
         vehicleListPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
         vehicleCard.add(vehicleListPanel);
 
-        // ── Build the add form once and keep a reference ──────────
-        // Do NOT add it to vehicleCard here.
-        // rebuildVehicleList() will insert it at the correct position
-        // (right after the last vehicle row) every time the list refreshes.
         vehicleAddPanel = buildVehicleAddForm();
         vehicleAddPanel.setVisible(false);
 
-        // ── The "+ Add" button toggles the form ───────────────────
         addButton.addActionListener(e -> {
             boolean nowVisible = !vehicleAddPanel.isVisible();
             vehicleAddPanel.setVisible(nowVisible);
@@ -905,7 +890,6 @@ public class CustomerDashboard extends JPanel {
     private JPanel buildVehicleRow(String vehicleType, String plate,
                                    String brand, String year, String colour) {
 
-        // ── DISPLAY CARD ──────────────────────────────────────────
         JPanel displayCard = new JPanel(new BorderLayout(0, 0));
         displayCard.setOpaque(false);
         displayCard.setBorder(new EmptyBorder(10, 12, 10, 8));
@@ -952,7 +936,6 @@ public class CustomerDashboard extends JPanel {
         btnPanel.add(removeBtn_);
         displayCard.add(btnPanel, BorderLayout.EAST);
 
-        // ── EDIT CARD ─────────────────────────────────────────────
         JPanel editCard = new JPanel(new BorderLayout(6, 0));
         editCard.setOpaque(false);
         editCard.setBorder(new EmptyBorder(6, 10, 6, 10));
@@ -1008,7 +991,6 @@ public class CustomerDashboard extends JPanel {
         editBtns.add(cancelVBtn, ebc);
         editCard.add(editBtns, BorderLayout.EAST);
 
-        // ── SWITCHER ─────────────────────────────────────────────
         CardLayout switcher = new CardLayout();
         JPanel switcherPanel = new JPanel(switcher);
         switcherPanel.setOpaque(false);
@@ -1019,7 +1001,6 @@ public class CustomerDashboard extends JPanel {
         switcherPanel.add(editCard,    "edit");
         switcher.show(switcherPanel, "display");
 
-        // ── ROW WRAPPER ───────────────────────────────────────────
         JPanel rowWrapper = new JPanel(new BorderLayout());
         rowWrapper.setOpaque(false);
         rowWrapper.setBorder(BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1));
@@ -1028,7 +1009,6 @@ public class CustomerDashboard extends JPanel {
         rowWrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
         rowWrapper.add(switcherPanel, BorderLayout.CENTER);
 
-        // ── Button listeners ──────────────────────────────────────
         editBtn_.addActionListener(e -> {
             editTypeCombo.setSelectedItem(vehicleType);
             editPlate.setText(plate);
@@ -1239,7 +1219,6 @@ public class CustomerDashboard extends JPanel {
         String year        = v[4];
         String colour      = v[5];
 
-        // ── DISPLAY CARD ──────────────────────────────────────────
         JPanel displayCard = new JPanel(new BorderLayout(0, 0));
         displayCard.setOpaque(false);
         displayCard.setBorder(new EmptyBorder(10, 12, 10, 8));
@@ -1286,7 +1265,6 @@ public class CustomerDashboard extends JPanel {
         btnPanel.add(removeButton);
         displayCard.add(btnPanel, BorderLayout.EAST);
 
-        // ── EDIT CARD ─────────────────────────────────────────────
         JPanel editCard = new JPanel(new BorderLayout(6, 0));
         editCard.setOpaque(false);
         editCard.setBorder(new EmptyBorder(6, 10, 6, 10));
@@ -1342,7 +1320,6 @@ public class CustomerDashboard extends JPanel {
         editBtns.add(cancelVBtn, ebGbc);
         editCard.add(editBtns, BorderLayout.EAST);
 
-        // ── SWITCHER ─────────────────────────────────────────────
         CardLayout switcher = new CardLayout();
         JPanel switcherPanel = new JPanel(switcher);
         switcherPanel.setOpaque(false);
@@ -1353,7 +1330,6 @@ public class CustomerDashboard extends JPanel {
         switcherPanel.add(editCard,    "edit");
         switcher.show(switcherPanel, "display");
 
-        // ── ROW WRAPPER ───────────────────────────────────────────
         JPanel rowWrapper = new JPanel(new BorderLayout());
         rowWrapper.setOpaque(false);
         rowWrapper.setBorder(BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1));
@@ -1537,6 +1513,8 @@ public class CustomerDashboard extends JPanel {
         card.add(makeSeparator());
         card.add(Box.createVerticalStrut(8));
 
+        // This now only returns appointments whose end time is in the future.
+        // Expired appointments are filtered out inside getPendingAppointments().
         List<String[]> all = appointmentController.getPendingAppointments();
 
         if (all.isEmpty()) {

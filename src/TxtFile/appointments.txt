@@ -15,8 +15,8 @@ AP14,C1,V1,T2,Normal Service,Completed,2026-03-28 09:00,1
 AP15,C2,V2,T4,Major Service,Completed,2026-03-28 14:00,3
 AP16,C3,V6,T1,Normal Service,Completed,2026-03-30 10:00,1
 AP17,C4,V9,T3,Normal Service,Completed,2026-03-22 14:00,1
-AP18,C5,V10,T2,Major Service,Pending,2026-04-02 09:00,3
-AP19,C6,V11,T1,Normal Service,Pending,2026-04-05 11:00,1
+AP18,C5,V10,T2,Major Service,Completed,2026-04-02 09:00,3
+AP19,C6,V11,T1,Normal Service,Completed,2026-04-05 11:00,1
 AP20,C1,V1,T4,Major Service,Pending,2026-04-10 13:00,3
 AP21,C3,V7,T4,Normal Service,Pending,2026-04-30 15:00,1
 AP22,C3,V8,T3,Normal Service,Pending,2026-05-20 10:00,1

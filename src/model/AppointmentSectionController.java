@@ -17,6 +17,11 @@ import java.util.Set;
  *                     without knowing how data is read from files
  *  - Separation of  : business logic (this class) is separate from UI (CustomerDashboard)
  *    Concerns
+ *
+ * CHANGE: autoCompleteExpired() has been emptied out.
+ *         Expired appointments are now simply hidden from the Upcoming section
+ *         by checking the end time inside getPendingAppointments().
+ *         The file is never modified just because time has passed.
  */
 public class AppointmentSectionController {
 
@@ -65,17 +70,26 @@ public class AppointmentSectionController {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // AUTO-COMPLETE EXPIRED APPOINTMENTS
+    // AUTO-COMPLETE EXPIRED APPOINTMENTS — DISABLED
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Checks all appointments and auto-completes any that have passed
-     * their end time. Called once when the customer logs in.
+     * Previously this method changed expired appointment statuses to
+     * "Completed" in the file. This behaviour has been removed.
      *
-     * Delegates to AppointmentService which contains the actual logic.
+     * Expired appointments are now simply hidden from the Upcoming
+     * Appointments card by checking the end time inside
+     * getPendingAppointments(). The file is never modified here.
+     *
+     * This method is kept so that any existing calls to it (e.g. in
+     * CustomerDashboard.refreshUser) compile without errors — it just
+     * does nothing now.
      */
     public void autoCompleteExpired() {
-        appointmentService.autoCompleteExpiredAppointments(serviceHistoryService);
+        // Intentionally left empty.
+        // No longer auto-completing expired appointments.
+        // getPendingAppointments() in AppointmentService already hides
+        // any appointment whose end time has passed.
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -85,6 +99,12 @@ public class AppointmentSectionController {
     /**
      * Returns upcoming (Pending or In Progress) appointments for the
      * currently logged-in customer.
+     *
+     * HOW IT WORKS (beginner-friendly):
+     *   - Calls AppointmentService.getPendingAppointments()
+     *   - That method checks whether each appointment's end time has
+     *     already passed. If it has, the appointment is hidden.
+     *   - The appointments.txt file is NEVER changed here.
      *
      * Each String[] in the returned list has 7 elements:
      *   [0] appointmentID  [1] vehicleID  [2] technicianID
@@ -139,18 +159,23 @@ public class AppointmentSectionController {
      * Calculates the payment amount for a given service type and duration.
      *
      * Pricing rules:
-     *   Major Service = RM 350.00 per hour
-     *   Normal Service (or anything else) = RM 150.00 per hour
+     *   Major Service  = RM 350.00 per hour
+     *   Normal Service = RM 150.00 per hour
      *
      * @param serviceType  e.g. "Major Service" or "Normal Service"
      * @param durationStr  duration as a string, e.g. "3"
      * @return total amount as a formatted string e.g. "1050.00"
      */
     public String calculateAmount(String serviceType, String durationStr) {
+        // Choose price per hour based on service type
         double pricePerHour = serviceType.equalsIgnoreCase("Major Service") ? 350.00 : 150.00;
+
+        // Parse the duration; default to 1 hour if the value is not a valid number
         int hours = 1;
-        try { hours = Integer.parseInt(durationStr.trim()); }
-        catch (NumberFormatException ignored) {}
+        try {
+            hours = Integer.parseInt(durationStr.trim());
+        } catch (NumberFormatException ignored) {}
+
         return String.format("%.2f", pricePerHour * hours);
     }
 
@@ -205,6 +230,7 @@ public class AppointmentSectionController {
                 return u.getName();
             }
         }
-        return userId; // safe fallback if user not found
+        // Safe fallback: return the raw ID if the user is not found
+        return userId;
     }
 }
