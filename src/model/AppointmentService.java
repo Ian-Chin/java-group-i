@@ -348,6 +348,31 @@ public class AppointmentService {
         return result;
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // getAllAppointmentsForUser — for dashboard chart totals
+    // ═══════════════════════════════════════════════════════════════
+    /**
+     * Returns every appointment belonging to the given customer,
+     * regardless of status. Used for total count, total spent,
+     * and average-per-visit calculations in the dashboard charts.
+     *
+     * Returned array has 7 elements:
+     *   [0] appointmentID  [1] vehicleID  [2] technicianID
+     *   [3] serviceType    [4] status     [5] dateTime     [6] duration
+     *
+     * @param userId  the customer's user ID e.g. "C3"
+     * @return list of all appointment rows for that customer
+     */
+    public List<String[]> getAllAppointmentsForUser(String userId) {
+        List<String[]> result = new ArrayList<>();
+        for (Appointment a : getAll()) {
+            if (a.getCustomerId().equalsIgnoreCase(userId)) {
+                result.add(toRow(a));
+            }
+        }
+        return result;
+    }
+
     // ─────────────────────────────────────────────────────────────
     // toRow() — converts an Appointment to a String[] for the UI
     // ─────────────────────────────────────────────────────────────

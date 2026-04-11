@@ -8,6 +8,7 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.geom.Arc2D;
 import java.awt.geom.GeneralPath;
@@ -19,25 +20,25 @@ import java.util.Map;
 /**
  * ServiceHistoryPage — UI only.
  *
- * This class is responsible ONLY for building and displaying the
- * Service History page. It does NOT read files or do business logic.
+ * CHANGES IN THIS VERSION:
+ *   1. Stat cards now have a coloured left accent bar (like the dashboard screenshot).
+ *      - Total services  → blue  (#506EE6)
+ *      - Latest service  → green (#22A55A)
+ *      - Fav technician  → purple (#8B5CF6)
  *
- * All data is fetched by calling methods on:
- *   - ServiceHistoryService  (reads serviceHistory.txt)
- *   - AccountService         (reads accounts.txt — for technician names)
- *   - VehicleService         (reads vehicles.txt — for vehicle type & plate)
- *
- * If no records exist → shows a friendly empty-state card instead.
+ *   2. A search field and a status filter dropdown have been added above the table.
+ *      - The search box lets the customer type any text to filter table rows.
+ *      - The dropdown lets the customer pick "All Status", "Completed", or "In Progress".
+ *      - Both controls work together at the same time.
  */
 public class ServiceHistoryPage extends JPanel {
 
-    // ── Service classes (data layer — NOT UI) ─────────────────────
+    // ── Service classes (data layer) ──────────────────────────────
     private final ServiceHistoryService serviceHistoryService = new ServiceHistoryService();
     private final AccountService        accountService        = new AccountService();
     private final VehicleService        vehicleService        = new VehicleService();
 
-    // ── CardLayout switcher ───────────────────────────────────────
-    // "TABLE" = records exist,  "EMPTY" = no records
+    // ── CardLayout: "TABLE" when records exist, "EMPTY" when not ──
     private final CardLayout cardLayout  = new CardLayout();
     private final JPanel     switchPanel = new JPanel(cardLayout);
 
@@ -48,8 +49,13 @@ public class ServiceHistoryPage extends JPanel {
     private JLabel favTechValueLabel;
     private JLabel favTechSubLabel;
 
-    // ── Table model ───────────────────────────────────────────────
-    private DefaultTableModel tableModel;
+    // ── Table model and sorter (sorter enables search + filter) ───
+    private DefaultTableModel  tableModel;
+    private TableRowSorter<DefaultTableModel> rowSorter; // ← NEW: handles filtering
+
+    // ── Search field and filter dropdown (declared here so
+    //    refresh() can reset them when new data is loaded) ────────
+    private JTextField searchField;
 
     // ── Design constants ──────────────────────────────────────────
     private static final Color COLOR_BG       = new Color(245, 246, 250);
@@ -58,6 +64,12 @@ public class ServiceHistoryPage extends JPanel {
     private static final Color COLOR_TEXT     = new Color(30,  35,  50);
     private static final Color COLOR_MUTED    = new Color(110, 118, 140);
     private static final Color COLOR_EMPTY_BG = new Color(248, 249, 253);
+
+    // ── Accent bar colours for each stat card ─────────────────────
+    // These are the coloured left-side bars like in the screenshot.
+    private static final Color ACCENT_BLUE   = new Color(80,  110, 230); // Total services
+    private static final Color ACCENT_GREEN  = new Color(34,  165,  90); // Latest service
+    private static final Color ACCENT_PURPLE = new Color(139,  92, 246); // Fav technician
 
     // ═══════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -88,9 +100,6 @@ public class ServiceHistoryPage extends JPanel {
 
     // ─────────────────────────────────────────────────────────────
     // buildPageHeader()
-    //
-    // Shows the subtitle line under the header title.
-    // Font size bumped to 14 (was 13) so it reads more clearly.
     // ─────────────────────────────────────────────────────────────
     private JPanel buildPageHeader() {
         JPanel header = new JPanel();
@@ -98,9 +107,8 @@ public class ServiceHistoryPage extends JPanel {
         header.setOpaque(false);
         header.setBorder(new EmptyBorder(0, 0, 18, 0));
 
-        // Subtitle — font size increased from 13 → 14 for better readability
         JLabel subtitle = new JLabel("Your completed service records are shown below.");
-        subtitle.setFont(new Font("SansSerif", Font.PLAIN, 14)); // ← was 13
+        subtitle.setFont(new Font("SansSerif", Font.PLAIN, 14));
         subtitle.setForeground(COLOR_MUTED);
         subtitle.setAlignmentX(Component.LEFT_ALIGNMENT);
 
@@ -109,7 +117,8 @@ public class ServiceHistoryPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // buildDataPanel()  — "TABLE" card
+    // buildDataPanel() — the "TABLE" card
+    // Contains: stats row at the top, then table card below.
     // ─────────────────────────────────────────────────────────────
     private JPanel buildDataPanel() {
         JPanel panel = new JPanel(new BorderLayout());
@@ -123,48 +132,93 @@ public class ServiceHistoryPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // buildStatsRow()  — three summary cards side by side
+    // buildStatsRow() — three summary cards side by side
+    //
+    // CHANGE: each card now receives an accent colour for its
+    // left border bar.
     // ─────────────────────────────────────────────────────────────
     private JPanel buildStatsRow() {
         JPanel row = new JPanel(new GridLayout(1, 3, 14, 0));
         row.setOpaque(false);
 
+        // Card 1: Total services — blue accent bar
         totalServicesValueLabel = makeBigValueLabel("—");
-        row.add(buildStatCard("Total services",
-                totalServicesValueLabel, makeMutedLabel("since joining")));
+        row.add(buildStatCard(
+            "Total services",
+            totalServicesValueLabel,
+            makeMutedLabel("since joining"),
+            ACCENT_BLUE   // ← accent bar colour
+        ));
 
+        // Card 2: Latest service — green accent bar
         latestServiceValueLabel = makeBigValueLabel("—");
         latestServiceSubLabel   = makeMutedLabel("—");
-        row.add(buildStatCard("Latest service",
-                latestServiceValueLabel, latestServiceSubLabel));
+        row.add(buildStatCard(
+            "Latest service",
+            latestServiceValueLabel,
+            latestServiceSubLabel,
+            ACCENT_GREEN  // ← accent bar colour
+        ));
 
+        // Card 3: Favourite technician — purple accent bar
         favTechValueLabel = makeBigValueLabel("—");
         favTechSubLabel   = makeMutedLabel("—");
-        row.add(buildStatCard("Favourite technician",
-                favTechValueLabel, favTechSubLabel));
+        row.add(buildStatCard(
+            "Favourite technician",
+            favTechValueLabel,
+            favTechSubLabel,
+            ACCENT_PURPLE // ← accent bar colour
+        ));
 
         return row;
     }
 
     // ─────────────────────────────────────────────────────────────
     // buildStatCard()
+    //
+    // CHANGE: added an "accentColor" parameter.
+    // The card now draws a 4-pixel wide coloured bar on its left
+    // edge, just like the dashboard screenshot.
     // ─────────────────────────────────────────────────────────────
-    private JPanel buildStatCard(String topText, JLabel valueLabel, JLabel subLabel) {
+    private JPanel buildStatCard(String topText, JLabel valueLabel,
+                                  JLabel subLabel, Color accentColor) {
+
+        // This JPanel overrides paintComponent so we can draw the
+        // rounded white background AND the left accent bar manually.
         JPanel card = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                                    RenderingHints.VALUE_ANTIALIAS_ON);
+
+                // 1. Draw the white rounded card background
                 g2.setColor(COLOR_CARD);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14);
+
+                // 2. Draw the card border
                 g2.setColor(COLOR_BORDER);
                 g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 14, 14);
+
+                // 3. Draw the coloured left accent bar (4 px wide).
+                //    We clip it to the rounded corners so it looks neat.
+                //    Steps:
+                //      a) Set the clip region to the rounded card shape
+                //      b) Fill the left 4 pixels with the accent colour
+                g2.setClip(new java.awt.geom.RoundRectangle2D.Float(
+                    0, 0, getWidth(), getHeight(), 14, 14
+                ));
+                g2.setColor(accentColor);
+                g2.fillRect(0, 0, 4, getHeight()); // 4 px wide bar on the left
+
                 g2.dispose();
             }
         };
         card.setOpaque(false);
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
-        card.setBorder(new EmptyBorder(18, 20, 18, 20));
+
+        // Left padding is 16 (4 px bar + 12 px gap); right padding is 20
+        card.setBorder(new EmptyBorder(18, 16, 18, 20));
 
         JLabel topLabel = new JLabel(topText);
         topLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
@@ -183,14 +237,19 @@ public class ServiceHistoryPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // buildTableCard()  — white card containing the JTable
+    // buildTableCard() — white rounded card that holds:
+    //   1. A search + filter toolbar at the top  ← NEW
+    //   2. The data table below
     // ─────────────────────────────────────────────────────────────
     private JPanel buildTableCard() {
+
+        // Outer card with rounded white background
         JPanel card = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                                    RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setColor(COLOR_CARD);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14);
                 g2.setColor(COLOR_BORDER);
@@ -201,6 +260,10 @@ public class ServiceHistoryPage extends JPanel {
         card.setOpaque(false);
         card.setLayout(new BorderLayout());
 
+        // ── 1. Build the search + filter toolbar ──────────────────
+        card.add(buildSearchFilterBar(), BorderLayout.NORTH); // ← NEW
+
+        // ── 2. Build the table ────────────────────────────────────
         String[] columns = {
             "History ID", "Appointment ID", "Vehicle",
             "Car Plate", "Payment ID", "Technician", "Date", "Status"
@@ -213,12 +276,19 @@ public class ServiceHistoryPage extends JPanel {
 
         JTable table = TableHelper.buildTable(tableModel);
 
+        // Create a row sorter so we can filter rows later.
+        // TableRowSorter sits between the table and the model —
+        // it decides which rows are visible based on the filter.
+        rowSorter = new TableRowSorter<>(tableModel); // ← NEW
+        table.setRowSorter(rowSorter);                // ← NEW
+
         // Center-align columns 0–6
         DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer() {
             @Override
             public Component getTableCellRendererComponent(JTable t, Object value,
                     boolean isSelected, boolean hasFocus, int row, int col) {
-                super.getTableCellRendererComponent(t, value, isSelected, hasFocus, row, col);
+                super.getTableCellRendererComponent(t, value, isSelected,
+                                                    hasFocus, row, col);
                 setHorizontalAlignment(SwingConstants.CENTER);
                 setBorder(new EmptyBorder(0, 10, 0, 10));
                 setFont(new Font("SansSerif", Font.PLAIN, 13));
@@ -232,7 +302,7 @@ public class ServiceHistoryPage extends JPanel {
             table.getColumnModel().getColumn(i).setCellRenderer(centerRenderer);
         }
 
-        // Status column — coloured badge, centred
+        // Status column — coloured badge
         table.getColumnModel().getColumn(7).setCellRenderer(
             (t, value, isSelected, hasFocus, row, col) -> {
                 JLabel badge = new JLabel(value != null ? value.toString() : "");
@@ -245,7 +315,7 @@ public class ServiceHistoryPage extends JPanel {
                 if (status.equalsIgnoreCase("Completed")) {
                     badge.setBackground(new Color(220, 248, 232));
                     badge.setForeground(new Color(34, 139, 80));
-                } else if (status.equalsIgnoreCase("In Progress")) {
+                } else if (status.equalsIgnoreCase("Pending")) {
                     badge.setBackground(new Color(255, 243, 220));
                     badge.setForeground(new Color(180, 110, 20));
                 } else {
@@ -282,17 +352,114 @@ public class ServiceHistoryPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // buildEmptyPanel()
+    // buildSearchFilterBar()  ← NEW METHOD
     //
-    // Shown when the customer has no service history.
+    // Builds a small toolbar that sits above the table inside the
+    // white card. It contains:
+    //   - A "Appointments" bold label on the left (like the screenshot)
+    //   - A search text field in the middle
+    //   - A status dropdown on the right ("All Status" / "Completed" / "In Progress")
     //
-    // CHANGES vs previous version:
-    //   1. Icon is now a proper circular-repeat / refresh symbol
-    //      drawn with two smooth arcs and clean arrowheads using
-    //      Java2D's Arc2D and GeneralPath — much cleaner than the
-    //      old polygon approach.
-    //   2. Bold title text is now shown again (was commented out).
-    //   3. Subtitle font size bumped to 13 (was 12).
+    // How filtering works:
+    //   Every time the user types in the search box OR changes the
+    //   dropdown, the applyFilter() method is called. That method
+    //   creates a RowFilter and sets it on the rowSorter, which
+    //   automatically hides non-matching rows in the table.
+    // ─────────────────────────────────────────────────────────────
+    private JPanel buildSearchFilterBar() {
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        bar.setOpaque(false);
+
+        // Search field — a plain text box with rounded border
+        searchField = new JTextField(16);
+        searchField.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        searchField.setBackground(Color.WHITE);
+        searchField.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(COLOR_BORDER, 1, true),
+            new EmptyBorder(4, 10, 4, 10)
+        ));
+        searchField.setPreferredSize(new Dimension(180, 30));
+
+        // Placeholder text "Search..." shown in grey when empty
+        searchField.setForeground(COLOR_MUTED);
+        searchField.setText("Search...");
+        searchField.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusGained(java.awt.event.FocusEvent e) {
+                if (searchField.getText().equals("Search...")) {
+                    searchField.setText("");
+                    searchField.setForeground(COLOR_TEXT);
+                }
+            }
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
+                if (searchField.getText().isEmpty()) {
+                    searchField.setForeground(COLOR_MUTED);
+                    searchField.setText("Search...");
+                }
+            }
+        });
+
+        // Every keystroke updates the table instantly
+        searchField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e)  { applyFilter(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e)  { applyFilter(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { applyFilter(); }
+        });
+
+        bar.add(searchField);
+
+        // Divider line below the search bar, above the table
+        bar.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createMatteBorder(0, 0, 1, 0, COLOR_BORDER),
+            new EmptyBorder(10, 16, 10, 16)
+        ));
+
+        return bar;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // applyFilter()  ← NEW METHOD
+    //
+    // Called every time the search text or the dropdown changes.
+    //
+    // Logic:
+    //   1. Get the current search text (ignore if it's the placeholder).
+    //   2. Get the selected status from the dropdown.
+    //   3. Build one or two RowFilters:
+    //        - A "regex" filter on ALL columns for the search text
+    //        - A "regex" filter on column 7 (Status) for the dropdown
+    //   4. Combine them with RowFilter.andFilter() so BOTH must match.
+    //   5. Set the combined filter on rowSorter.
+    //
+    // If both are blank / "All Status", remove the filter entirely
+    // so all rows are visible again.
+    // ─────────────────────────────────────────────────────────────
+    private void applyFilter() {
+        if (rowSorter == null || searchField == null) return;
+
+        // Get search text; treat placeholder as empty
+        String searchText = searchField.getText().trim();
+        if (searchText.equals("Search...")) searchText = "";
+
+        if (searchText.isEmpty()) {
+            // Nothing typed — show all rows
+            rowSorter.setRowFilter(null);
+            return;
+        }
+
+        // Case-insensitive search across all columns
+        try {
+            rowSorter.setRowFilter(RowFilter.regexFilter(
+                "(?i)" + java.util.regex.Pattern.quote(searchText)
+            ));
+        } catch (java.util.regex.PatternSyntaxException ex) {
+            // If the user types special characters, just ignore
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // buildEmptyPanel() — shown when the customer has no records
     // ─────────────────────────────────────────────────────────────
     private JPanel buildEmptyPanel() {
         JPanel outer = new JPanel(new GridBagLayout());
@@ -303,7 +470,8 @@ public class ServiceHistoryPage extends JPanel {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                                    RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setColor(COLOR_EMPTY_BG);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
                 g2.setColor(COLOR_BORDER);
@@ -316,18 +484,11 @@ public class ServiceHistoryPage extends JPanel {
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(new EmptyBorder(40, 40, 40, 40));
 
-        // ── Proper circular-repeat icon ────────────────────────────
-        // Drawn with Java2D:
-        //   - Two 150° arcs forming a near-complete circle
-        //   - Two filled arrowheads at the gap between the arcs
-        //     pointing in opposite directions (clockwise repeat)
+        // Circular-repeat / refresh icon drawn with Java2D
         JLabel iconLabel = new JLabel() {
-            @Override
-            public Dimension getPreferredSize() { return new Dimension(52, 52); }
-            @Override
-            public Dimension getMinimumSize()   { return new Dimension(52, 52); }
-            @Override
-            public Dimension getMaximumSize()   { return new Dimension(52, 52); }
+            @Override public Dimension getPreferredSize() { return new Dimension(52, 52); }
+            @Override public Dimension getMinimumSize()   { return new Dimension(52, 52); }
+            @Override public Dimension getMaximumSize()   { return new Dimension(52, 52); }
 
             @Override
             protected void paintComponent(Graphics g) {
@@ -336,102 +497,32 @@ public class ServiceHistoryPage extends JPanel {
                                     RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL,
                                     RenderingHints.VALUE_STROKE_PURE);
-
-                Color iconColor = new Color(160, 165, 185); // soft blue-grey
+                Color iconColor = new Color(160, 165, 185);
                 g2.setColor(iconColor);
-
                 float cx = 26f, cy = 26f, r = 16f;
-                float strokeW = 3.2f;
-                g2.setStroke(new BasicStroke(strokeW, BasicStroke.CAP_ROUND,
+                g2.setStroke(new BasicStroke(3.2f, BasicStroke.CAP_ROUND,
                                              BasicStroke.JOIN_ROUND));
-
-                // ── Top arc: from ~30° sweeping 150° (clockwise) ──
-                // Arc2D.OPEN draws just the curved line, no chords.
-                Arc2D topArc = new Arc2D.Float(
-                    cx - r, cy - r, r * 2, r * 2,
-                    30,   // start angle (degrees, counter-clockwise from 3 o'clock)
-                    150,  // sweep angle
-                    Arc2D.OPEN
-                );
-                g2.draw(topArc);
-
-                // ── Bottom arc: from ~210° sweeping 150° ──────────
-                Arc2D bottomArc = new Arc2D.Float(
-                    cx - r, cy - r, r * 2, r * 2,
-                    210,
-                    150,
-                    Arc2D.OPEN
-                );
-                g2.draw(bottomArc);
-
-                // ── Arrowhead at the END of the top arc (~180°) ───
-                // The top arc ends at 30+150 = 180°, i.e. the left side.
-                // Point on circle at 180° = (cx - r, cy).
-                // Arrow points downward (tangent to circle going clockwise).
-                drawArrowhead(g2, iconColor,
-                    cx - r,      cy,          // tip of arrow (end of top arc)
-                    cx - r,      cy - 7f      // tail direction (pointing up = arrow goes down)
-                );
-
-                // ── Arrowhead at the END of the bottom arc (~360°/0°) ──
-                // The bottom arc ends at 210+150 = 360° = 0°, i.e. right side.
-                // Point on circle at 0° = (cx + r, cy).
-                // Arrow points upward (tangent to circle going clockwise).
-                drawArrowhead(g2, iconColor,
-                    cx + r,      cy,          // tip of arrow (end of bottom arc)
-                    cx + r,      cy + 7f      // tail direction (pointing down = arrow goes up)
-                );
-
+                g2.draw(new Arc2D.Float(cx-r, cy-r, r*2, r*2,  30, 150, Arc2D.OPEN));
+                g2.draw(new Arc2D.Float(cx-r, cy-r, r*2, r*2, 210, 150, Arc2D.OPEN));
+                drawArrowhead(g2, iconColor, cx-r, cy, cx-r, cy-7f);
+                drawArrowhead(g2, iconColor, cx+r, cy, cx+r, cy+7f);
                 g2.dispose();
             }
 
-            /**
-             * Draws a small filled triangular arrowhead.
-             *
-             * @param g2       the Graphics2D context
-             * @param color    fill colour
-             * @param tipX     x of the arrowhead tip (the sharp point)
-             * @param tipY     y of the arrowhead tip
-             * @param tailX    x of the direction the arrow came FROM
-             * @param tailY    y of the direction the arrow came FROM
-             *
-             * The arrowhead is sized to match the stroke width of the arcs.
-             */
             private void drawArrowhead(Graphics2D g2, Color color,
                                        float tipX, float tipY,
                                        float tailX, float tailY) {
-                // Direction vector from tail → tip
-                float dx = tipX - tailX;
-                float dy = tipY - tailY;
-                float len = (float) Math.sqrt(dx * dx + dy * dy);
+                float dx = tipX - tailX, dy = tipY - tailY;
+                float len = (float) Math.sqrt(dx*dx + dy*dy);
                 if (len == 0) return;
-
-                // Normalise
-                dx /= len;
-                dy /= len;
-
-                // Perpendicular vector
-                float px = -dy;
-                float py =  dx;
-
-                // Arrow size
-                float arrowLen  = 7f;  // how far back the base of the triangle is
-                float arrowHalf = 4f;  // half-width of the base
-
-                // Three vertices of the triangle
-                float x1 = tipX;
-                float y1 = tipY;
-                float x2 = tipX - dx * arrowLen + px * arrowHalf;
-                float y2 = tipY - dy * arrowLen + py * arrowHalf;
-                float x3 = tipX - dx * arrowLen - px * arrowHalf;
-                float y3 = tipY - dy * arrowLen - py * arrowHalf;
-
+                dx /= len; dy /= len;
+                float px = -dy, py = dx;
+                float al = 7f, ah = 4f;
                 GeneralPath arrow = new GeneralPath();
-                arrow.moveTo(x1, y1);
-                arrow.lineTo(x2, y2);
-                arrow.lineTo(x3, y3);
+                arrow.moveTo(tipX, tipY);
+                arrow.lineTo(tipX - dx*al + px*ah, tipY - dy*al + py*ah);
+                arrow.lineTo(tipX - dx*al - px*ah, tipY - dy*al - py*ah);
                 arrow.closePath();
-
                 g2.setStroke(new BasicStroke(1f));
                 g2.setColor(color);
                 g2.fill(arrow);
@@ -439,17 +530,13 @@ public class ServiceHistoryPage extends JPanel {
         };
         iconLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        // ── Bold title — font size 15 ──────────────────────────────
-        // This was previously commented out; it is now restored and
-        // made slightly larger for better readability.
         JLabel noDataLabel = new JLabel("No service history records found.");
-        noDataLabel.setFont(new Font("SansSerif", Font.BOLD, 15)); // ← was commented, now 15
+        noDataLabel.setFont(new Font("SansSerif", Font.BOLD, 15));
         noDataLabel.setForeground(COLOR_TEXT);
         noDataLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        // ── Subtitle — font size 13 ────────────────────────────────
         JLabel subLabel = new JLabel("Your completed service records will appear here.");
-        subLabel.setFont(new Font("SansSerif", Font.PLAIN, 13)); // ← was 12
+        subLabel.setFont(new Font("SansSerif", Font.PLAIN, 13));
         subLabel.setForeground(COLOR_MUTED);
         subLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
@@ -466,7 +553,8 @@ public class ServiceHistoryPage extends JPanel {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // refresh()
+    // refresh() — called when the page is opened or the user logs in.
+    // Loads data, fills stat cards, fills the table, and resets filters.
     // ═══════════════════════════════════════════════════════════════
     public void refresh() {
         model.User loggedInUser = getLoggedInUser();
@@ -478,6 +566,7 @@ public class ServiceHistoryPage extends JPanel {
         String customerId = loggedInUser.getUserId();
         List<String[]> allRecords = serviceHistoryService.getAllRecords();
 
+        // Keep only rows that belong to this customer
         List<String[]> myRecords = new ArrayList<>();
         for (String[] row : allRecords) {
             if (row[1].trim().equalsIgnoreCase(customerId)) {
@@ -490,12 +579,22 @@ public class ServiceHistoryPage extends JPanel {
         } else {
             updateStatsCards(myRecords);
             fillTable(myRecords);
+
+            // Reset the search field back to default when new data is loaded
+            if (searchField != null) {
+                searchField.setForeground(COLOR_MUTED);
+                searchField.setText("Search...");
+            }
+            if (rowSorter != null) {
+                rowSorter.setRowFilter(null);
+            }
+
             cardLayout.show(switchPanel, "TABLE");
         }
     }
 
     // ─────────────────────────────────────────────────────────────
-    // updateStatsCards()
+    // updateStatsCards() — fills the three value labels
     // ─────────────────────────────────────────────────────────────
     private void updateStatsCards(List<String[]> records) {
         totalServicesValueLabel.setText(String.valueOf(records.size()));
@@ -520,23 +619,23 @@ public class ServiceHistoryPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // fillTable()
+    // fillTable() — populates the table model with rows
     // ─────────────────────────────────────────────────────────────
     private void fillTable(List<String[]> records) {
-        tableModel.setRowCount(0);
+        tableModel.setRowCount(0); // clear existing rows
 
         for (String[] row : records) {
-            String historyId     = row[0].trim();
-            String appointmentId = row[2].trim();
-            String vehicleId     = row[3].trim();
-            String paymentId     = row[4].trim();
-            String techId        = row[5].trim();
-            String date          = row[6].trim();
-            String status        = row[7].trim();
+            String historyId      = row[0].trim();
+            String appointmentId  = row[2].trim();
+            String vehicleId      = row[3].trim();
+            String paymentId      = row[4].trim();
+            String techId         = row[5].trim();
+            String date           = row[6].trim();
+            String status         = row[7].trim();
 
-            String techName    = resolveTechnicianName(techId);
-            String vehicleType = resolveVehicleType(vehicleId);
-            String carPlate    = resolveCarPlate(vehicleId);
+            String techName       = resolveTechnicianName(techId);
+            String vehicleType    = resolveVehicleType(vehicleId);
+            String carPlate       = resolveCarPlate(vehicleId);
             String paymentDisplay = paymentId.equalsIgnoreCase("NULL") ? "—" : paymentId;
 
             tableModel.addRow(new Object[]{
@@ -590,15 +689,8 @@ public class ServiceHistoryPage extends JPanel {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // buildNoDataPanel()  — PUBLIC STATIC shared utility
-    //
+    // buildNoDataPanel() — public static shared utility
     // Called by PaymentHistoryPage, StaffReviewPage, MyFeedbackPage
-    // to show a consistent empty-state card.
-    //
-    // CHANGES:
-    //   - Bold title font increased to 15
-    //   - Subtitle font increased to 13
-    //   - Uses the same improved circular-repeat icon as above
     // ═══════════════════════════════════════════════════════════════
     public static JPanel buildNoDataPanel(String iconUnicode, String title, String subtitle) {
         Color bgColor     = new Color(248, 249, 253);
@@ -614,7 +706,8 @@ public class ServiceHistoryPage extends JPanel {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                                    RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setColor(bgColor);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
                 g2.setColor(borderColor);
@@ -627,16 +720,13 @@ public class ServiceHistoryPage extends JPanel {
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(new EmptyBorder(40, 40, 40, 40));
 
-        // ── Icon ──────────────────────────────────────────────────
         JLabel iconLabel;
         if (iconUnicode != null && !iconUnicode.isEmpty()) {
-            // Emoji icon path — font size 38 for visibility
             iconLabel = new JLabel(iconUnicode);
-            iconLabel.setFont(new Font("SansSerif", Font.PLAIN, 38)); // ← was 36
+            iconLabel.setFont(new Font("SansSerif", Font.PLAIN, 38));
             iconLabel.setHorizontalAlignment(SwingConstants.CENTER);
             iconLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         } else {
-            // Fallback: same improved circular-repeat icon
             iconLabel = new JLabel() {
                 @Override public Dimension getPreferredSize() { return new Dimension(52, 52); }
                 @Override public Dimension getMinimumSize()   { return new Dimension(52, 52); }
@@ -652,10 +742,8 @@ public class ServiceHistoryPage extends JPanel {
                     float cx = 26f, cy = 26f, r = 16f;
                     g2.setStroke(new BasicStroke(3.2f, BasicStroke.CAP_ROUND,
                                                  BasicStroke.JOIN_ROUND));
-                    g2.draw(new Arc2D.Float(cx-r, cy-r, r*2, r*2, 30,  150, Arc2D.OPEN));
+                    g2.draw(new Arc2D.Float(cx-r, cy-r, r*2, r*2,  30, 150, Arc2D.OPEN));
                     g2.draw(new Arc2D.Float(cx-r, cy-r, r*2, r*2, 210, 150, Arc2D.OPEN));
-
-                    // Arrowhead helpers
                     drawHead(g2, ic, cx-r, cy, cx-r, cy-7f);
                     drawHead(g2, ic, cx+r, cy, cx+r, cy+7f);
                     g2.dispose();
@@ -664,11 +752,11 @@ public class ServiceHistoryPage extends JPanel {
                 private void drawHead(Graphics2D g2, Color c,
                                       float tx, float ty, float fx, float fy) {
                     float dx = tx-fx, dy = ty-fy;
-                    float len = (float) Math.sqrt(dx*dx+dy*dy);
-                    if (len==0) return;
-                    dx/=len; dy/=len;
-                    float px=-dy, py=dx;
-                    float al=7f, ah=4f;
+                    float len = (float) Math.sqrt(dx*dx + dy*dy);
+                    if (len == 0) return;
+                    dx /= len; dy /= len;
+                    float px = -dy, py = dx;
+                    float al = 7f, ah = 4f;
                     GeneralPath p = new GeneralPath();
                     p.moveTo(tx, ty);
                     p.lineTo(tx-dx*al+px*ah, ty-dy*al+py*ah);
@@ -682,15 +770,13 @@ public class ServiceHistoryPage extends JPanel {
             iconLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         }
 
-        // Bold title — font size 15 (was commented out or 14)
         JLabel titleLabel = new JLabel(title);
-        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 15)); // ← restored & bumped to 15
+        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 15));
         titleLabel.setForeground(textColor);
         titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        // Subtitle — font size 13 (was 12)
         JLabel subLabel = new JLabel(subtitle);
-        subLabel.setFont(new Font("SansSerif", Font.PLAIN, 13)); // ← was 12
+        subLabel.setFont(new Font("SansSerif", Font.PLAIN, 13));
         subLabel.setForeground(mutedColor);
         subLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 

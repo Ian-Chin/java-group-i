@@ -152,6 +152,27 @@ public class AppointmentSectionController {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // ALL APPOINTMENTS — for dashboard stats / charts
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Returns ALL appointments (any status) for the currently logged-in customer.
+     * Used by the Service Activity bar chart and Service Breakdown donut chart
+     * to calculate total services, total spent, and average per visit.
+     *
+     * Each String[] has 7 elements:
+     *   [0] appointmentID  [1] vehicleID  [2] technicianID
+     *   [3] serviceType    [4] status     [5] dateTime     [6] duration
+     *
+     * @return list of all appointment rows, or empty list if not logged in
+     */
+    public List<String[]> getAllAppointmentsForUser() {
+        User user = sessionView.getLoggedInUserObj();
+        if (user == null) return new java.util.ArrayList<>();
+        return appointmentService.getAllAppointmentsForUser(user.getUserId());
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // PAYMENT
     // ═══════════════════════════════════════════════════════════════
 
@@ -232,5 +253,119 @@ public class AppointmentSectionController {
         }
         // Safe fallback: return the raw ID if the user is not found
         return userId;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // ★ NEW — PROFILE STATS (added for ViewProfile.java)
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * ★ NEW METHOD — Returns the TOTAL number of appointments for the
+     * logged-in customer. Used by ViewProfile to display the
+     * "Total appointments" stat.
+     *
+     * Counts ALL appointments regardless of status:
+     *   Pending + In Progress + Completed are all included.
+     *
+     * HOW IT WORKS (beginner-friendly):
+     *   1. Get the logged-in user from the session.
+     *   2. If no user is logged in, return 0 safely.
+     *   3. Ask AppointmentService for every appointment for that user.
+     *   4. Return how many there are (.size()).
+     *
+     * Example for Zhi Lin (C3):
+     *   Appointments: AP3, AP4, AP5, AP16, AP21, AP22, AP23, AP24, AP25
+     *   → returns 9
+     *
+     * @return total appointment count, or 0 if no user is logged in
+     */
+    public int getTotalAppointments() {
+        // Step 1: Get the logged-in user
+        User user = sessionView.getLoggedInUserObj();
+
+        // Step 2: Nobody logged in → return 0 safely
+        if (user == null) return 0;
+
+        // Step 3: Get ALL appointments for this user (any status)
+        // getAllAppointmentsForUser() reads appointments.txt and filters by userId
+        List<String[]> allAppointments = appointmentService.getAllAppointmentsForUser(user.getUserId());
+
+        // Step 4: Return the count
+        return allAppointments.size();
+    }
+
+    /**
+     * ★ NEW METHOD — Returns the TOTAL amount (in RM) the logged-in
+     * customer has spent. Used by ViewProfile to display the
+     * "Total spent" stat.
+     *
+     * Only "Paid" payment records are counted — unpaid ones are excluded.
+     *
+     * HOW IT WORKS (beginner-friendly):
+     *   1. Get the logged-in user from the session.
+     *   2. If no user is logged in, return "0.00" safely.
+     *   3. Ask PaymentService for every row in payments.txt.
+     *   4. For each row:
+     *        - Column [1] = CustomerID — must match the logged-in user.
+     *        - Column [8] = Status     — must be "Paid".
+     *        - Column [5] = Amount     — add this to the running total.
+     *   5. Return the total as a string with 2 decimal places e.g. "150.00".
+     *
+     * payments.txt column layout (9 columns):
+     *   [0] paymentID     [1] customerID    [2] serviceHistoryID
+     *   [3] appointmentID [4] vehicleID     [5] amount
+     *   [6] paymentDate   [7] method        [8] status
+     *
+     * Example for Zhi Lin (C3):
+     *   PY8,C3,SH3,AP3,V3,150.00,2026-03-30,Online,Paid
+     *   → returns "150.00"
+     *
+     * @return total spent formatted to 2 decimal places, or "0.00" if nothing paid
+     */
+    public String getTotalSpent() {
+        // Step 1: Get the logged-in user
+        User user = sessionView.getLoggedInUserObj();
+
+        // Step 2: Nobody logged in → return "0.00" safely
+        if (user == null) return "0.00";
+
+        // Running total — add each matching paid amount to this
+        double total = 0.0;
+
+        // Step 3: Get every payment row from payments.txt
+        // getAllPayments() returns each line as a String[] with 9 elements
+        List<String[]> allPayments = paymentService.getAllPayments();
+
+        // Step 4: Loop through every payment row
+        for (String[] row : allPayments) {
+
+            // Safety check: skip any row that does not have all 9 columns
+            // (protects against blank lines or malformed data in payments.txt)
+            if (row.length < 9) continue;
+
+            String customerIdInFile = row[1].trim(); // [1] CustomerID  e.g. "C3"
+            String amountStr        = row[5].trim(); // [5] Amount      e.g. "150.00"
+            String status           = row[8].trim(); // [8] Status      e.g. "Paid"
+
+            // Does this payment belong to the logged-in user?
+            boolean isThisCustomer = customerIdInFile.equalsIgnoreCase(user.getUserId());
+
+            // Has the payment actually been completed?
+            boolean isPaid = status.equalsIgnoreCase("Paid");
+
+            // Only add to the total if BOTH conditions are true
+            if (isThisCustomer && isPaid) {
+                try {
+                    total += Double.parseDouble(amountStr); // add the amount
+                } catch (NumberFormatException e) {
+                    // Amount was not a valid number — skip this row safely
+                    System.out.println("[getTotalSpent] Skipping bad amount: " + amountStr);
+                }
+            }
+        }
+
+        // Step 5: Format to 2 decimal places before returning
+        // e.g. 150.0 → "150.00"  |  0.0 → "0.00"
+        return String.format("%.2f", total);
     }
 }

@@ -8,6 +8,9 @@ import javax.swing.*;
 import javax.swing.border.*;
 import javax.swing.table.*;
 import java.awt.*;
+import java.awt.event.*;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -15,50 +18,77 @@ import java.util.List;
  *
  * Shows the logged-in customer's staff reviews.
  *
+ * FEATURES:
+ *   1. Left colour bar on summary cards
+ *        - Average rating card   -> BLUE bar
+ *        - Rating breakdown card -> YELLOW bar (same as star colour)
+ *
+ *   2. Search box + Rating filter dropdown
+ *        - Right-aligned directly above the table (no separate card/panel)
+ *        - Transparent background, no title label
+ *        - Matches screenshot: [text field]  [All Ratings dropdown]
+ *
+ *   3. Sort by column header
+ *        - Click any column header to sort ascending
+ *        - Click again to reverse to descending
+ *        - A triangle arrow (up/down) appears in the sorted header
+ *
  * Layout:
- *   - Average rating card (LEFT) + Rating breakdown card (RIGHT) side by side
- *   - Review table below with columns:
- *       Comment ID | Staff Name | Technician Name | Appointment ID |
- *       Vehicle Type | Car Plate | Rating | Feedback | Date
- *   - Empty-state panel exactly matches PaymentHistoryPage size and style
- *   - Stars in the average card are YELLOW
- *   - Rating column in the table shows only the number e.g. "4.0" (no stars)
+ *   - Two summary cards side by side (top)
+ *   - [search field] [All Ratings dropdown] right-aligned above table
+ *   - Review table below
+ *   - Empty-state panel when no reviews exist
  */
 public class StaffReviewPage extends JPanel {
 
-    // ── Colours — exactly matching PaymentHistoryPage ─────────────
+    // ── Colours ───────────────────────────────────────────────────
     private static final Color COLOR_BG     = new Color(245, 246, 250);
     private static final Color COLOR_CARD   = Color.WHITE;
     private static final Color COLOR_BORDER = new Color(225, 228, 235);
     private static final Color COLOR_TEXT   = new Color(30,  35,  50);
     private static final Color COLOR_MUTED  = new Color(110, 118, 140);
 
-    // Blue accent — same colour as the APU ASC logo
-    private static final Color BLUE_ACCENT   = new Color(80, 110, 230);
+    // Blue — logo accent colour, used for rating number + bar fills
+    private static final Color BLUE_ACCENT = new Color(80, 110, 230);
 
-    // Yellow — used for the star icons in the average rating card
-    private static final Color YELLOW_STAR   = new Color(255, 193, 7);
+    // Yellow — star icons AND the breakdown card's left bar
+    private static final Color YELLOW_STAR = new Color(255, 193, 7);
 
-    // ── The service that reads comments.txt, accounts.txt, vehicles.txt
+    // Left bar colours for the two summary cards
+    private static final Color BAR_COLOR_AVERAGE   = BLUE_ACCENT;  // blue
+    private static final Color BAR_COLOR_BREAKDOWN = YELLOW_STAR;  // yellow (was teal)
+
+    // ── Service + user ────────────────────────────────────────────
     private final StaffReviewService service = new StaffReviewService();
-
-    // ── The currently logged-in customer ─────────────────────────
     private User loggedInUser;
 
-    // ── CardLayout switches between "DATA" and "EMPTY" views ─────
+    // ── CardLayout: "DATA" or "EMPTY" view ───────────────────────
     private final CardLayout cardLayout  = new CardLayout();
     private final JPanel     switchPanel = new JPanel(cardLayout);
 
-    // ── Table model — rows filled in fillTable() ──────────────────
+    // ── Full unfiltered list — kept in memory so search/filter work
+    //    without re-reading the file each time ─────────────────────
     private DefaultTableModel tableModel;
+    private List<StaffReview> allReviews = new ArrayList<>();
 
-    // ── Summary card labels — updated in updateAverageCard() ──────
-    private JLabel avgNumberLabel;  // big blue "4.4" number
-    private JLabel avgStarsLabel;   // yellow star icons e.g. "★★★★½"
-    private JLabel avgCountLabel;   // "average rating from N reviews"
+    // ── Average card labels — updated by updateAverageCard() ──────
+    private JLabel avgNumberLabel;   // e.g. "4.4"
+    private JLabel avgStarsLabel;    // e.g. "★★★★½"
+    private JLabel avgCountLabel;    // e.g. "average rating from 2 reviews"
 
-    // ── Breakdown bars panel — rebuilt in fillBreakdownBars() ─────
+    // ── Breakdown bars panel — rebuilt by fillBreakdownBars() ─────
     private JPanel barsPanel;
+
+    // ── Search + filter controls ──────────────────────────────────
+    private JTextField        searchField;   // keyword search
+    private JComboBox<String> ratingFilter;  // star-level filter
+
+    // ── Sort state ────────────────────────────────────────────────
+    private int     sortColumnIndex = -1;   // -1 means no sort active
+    private boolean sortAscending   = true;
+
+    // ── Table reference — needed for column header click listener ──
+    private JTable table;
 
     // ─────────────────────────────────────────────────────────────
     // Constructor
@@ -69,21 +99,17 @@ public class StaffReviewPage extends JPanel {
         setLayout(new BorderLayout());
         setBackground(COLOR_BG);
 
-        // Main content panel with the same padding as PaymentHistoryPage
         JPanel pageContent = new JPanel(new BorderLayout());
         pageContent.setBackground(COLOR_BG);
         pageContent.setBorder(new EmptyBorder(24, 28, 28, 28));
 
-        // Subtitle row at the top (no big heading — heading is in the sidebar/header)
         pageContent.add(buildSubtitleRow(), BorderLayout.NORTH);
 
-        // The switchPanel holds TWO cards — only one is visible at a time
         switchPanel.setOpaque(false);
-        switchPanel.add(buildDataPanel(),  "DATA");   // shown when reviews exist
-        switchPanel.add(buildEmptyPanel(), "EMPTY");  // shown when no reviews
+        switchPanel.add(buildDataPanel(),  "DATA");
+        switchPanel.add(buildEmptyPanel(), "EMPTY");
         pageContent.add(switchPanel, BorderLayout.CENTER);
 
-        // Outer scroll pane so the whole page scrolls on small windows
         JScrollPane outerScroll = new JScrollPane(pageContent);
         outerScroll.setBorder(null);
         outerScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
@@ -92,63 +118,58 @@ public class StaffReviewPage extends JPanel {
         outerScroll.getViewport().setBackground(COLOR_BG);
         add(outerScroll, BorderLayout.CENTER);
 
-        // Default view is the empty state until refresh() is called
         cardLayout.show(switchPanel, "EMPTY");
     }
 
     // ─────────────────────────────────────────────────────────────
-    // setUser()
-    // Call this in CustomerDashboard.refreshUser() BEFORE calling refresh()
-    // so the page knows which customer is logged in.
+    // setUser() — call this before refresh()
     // ─────────────────────────────────────────────────────────────
     public void setUser(User user) {
         this.loggedInUser = user;
     }
 
     // ─────────────────────────────────────────────────────────────
-    // refresh()
-    // Called every time the user clicks "Staff Review" in the sidebar.
-    // Reads comments.txt and updates the whole UI.
+    // refresh() — reload data and redraw the whole page
     // ─────────────────────────────────────────────────────────────
     public void refresh() {
         String customerId = (loggedInUser != null) ? loggedInUser.getUserId() : null;
         System.out.println("[StaffReviewPage] refresh() — customer: " + customerId);
 
-        // Load reviews for this customer (empty list if not logged in)
-        List<StaffReview> reviews;
         if (customerId != null) {
-            reviews = service.getReviewsByCustomer(customerId);
+            allReviews = service.getReviewsByCustomer(customerId);
         } else {
-            reviews = new java.util.ArrayList<>();
+            allReviews = new ArrayList<>();
         }
 
-        System.out.println("[StaffReviewPage] Reviews found: " + reviews.size());
+        System.out.println("[StaffReviewPage] Reviews found: " + allReviews.size());
 
-        if (reviews.isEmpty()) {
-            // No data — show the empty state card
+        if (allReviews.isEmpty()) {
             cardLayout.show(switchPanel, "EMPTY");
         } else {
-            // Update the average card and fill the table, then show data view
-            updateAverageCard(reviews);
-            fillTable(reviews);
+            updateAverageCard(allReviews);
+
+            // Reset search and filter back to default
+            if (searchField  != null) searchField.setText("");
+            if (ratingFilter != null) ratingFilter.setSelectedIndex(0);
+            sortColumnIndex = -1;
+            sortAscending   = true;
+
+            fillTable(allReviews);
             cardLayout.show(switchPanel, "DATA");
         }
     }
 
-    // ═════════════════════════════════════════════════════════════
-    // PAGE STRUCTURE BUILDERS
-    // ═════════════════════════════════════════════════════════════
+    // =========================================================
+    // PAGE STRUCTURE
+    // =========================================================
 
     // ─────────────────────────────────────────────────────────────
-    // buildSubtitleRow()
-    // Small muted subtitle text shown below the page heading.
-    // Same style and spacing as PaymentHistoryPage.
+    // buildSubtitleRow() — muted description below the heading
     // ─────────────────────────────────────────────────────────────
     private JPanel buildSubtitleRow() {
         JPanel header = new JPanel();
         header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
         header.setOpaque(false);
-        // Same bottom gap as PaymentHistoryPage uses
         header.setBorder(new EmptyBorder(0, 0, 18, 0));
 
         JLabel subtitle = new JLabel(
@@ -156,200 +177,176 @@ public class StaffReviewPage extends JPanel {
         subtitle.setFont(new Font("SansSerif", Font.PLAIN, 14));
         subtitle.setForeground(COLOR_MUTED);
         subtitle.setAlignmentX(Component.LEFT_ALIGNMENT);
-
         header.add(subtitle);
+
         return header;
     }
 
     // ─────────────────────────────────────────────────────────────
     // buildDataPanel()
-    // The "DATA" card:
-    //   - Top row: average rating card (left) + rating breakdown card (right)
-    //   - Below: review table
+    //   NORTH  — two summary cards side by side
+    //   CENTER — table card (which has the inline controls + table)
     // ─────────────────────────────────────────────────────────────
     private JPanel buildDataPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setOpaque(false);
 
-        // Top row of two side-by-side cards with a gap below
         JPanel topRow = buildTopCardsRow();
         topRow.setBorder(new EmptyBorder(0, 0, 18, 0));
         panel.add(topRow, BorderLayout.NORTH);
 
-        // Review table below the top cards
         panel.add(buildTableCard(), BorderLayout.CENTER);
+
         return panel;
     }
 
     // ─────────────────────────────────────────────────────────────
-    // buildTopCardsRow()
-    // Two cards placed side by side using a GridLayout with a gap.
-    // Left card = average rating   Right card = rating breakdown
+    // buildTopCardsRow() — average card left, breakdown card right
     // ─────────────────────────────────────────────────────────────
     private JPanel buildTopCardsRow() {
-        // GridLayout(1 row, 2 columns, 16px horizontal gap, 0 vertical gap)
         JPanel row = new JPanel(new GridLayout(1, 2, 16, 0));
         row.setOpaque(false);
-
         row.add(buildAverageCard());
         row.add(buildBreakdownCard());
-
         return row;
     }
 
     // ─────────────────────────────────────────────────────────────
-    // buildAverageCard()
-    // Left card: big blue number + YELLOW star icons + review count text.
-    //
-    // Stars are now YELLOW (not blue) as requested.
+    // buildAverageCard() — white card with BLUE left bar
+    //   Shows: big number, yellow stars, review count
     // ─────────────────────────────────────────────────────────────
     private JPanel buildAverageCard() {
-        JPanel card = makeRoundedCard();
+        JPanel card = makeRoundedCardWithLeftBar(BAR_COLOR_AVERAGE);
 
-        // GridBagLayout centres everything inside the card
-        card.setLayout(new GridBagLayout());
+        // GridBagLayout centres the inner panel inside the card
+        JPanel content = new JPanel(new GridBagLayout());
+        content.setOpaque(false);
 
-        // Inner panel stacks items vertically and is centred by GridBagLayout
         JPanel inner = new JPanel();
         inner.setLayout(new BoxLayout(inner, BoxLayout.Y_AXIS));
-        inner.setBackground(COLOR_CARD);
+        inner.setOpaque(false);
 
-        // Big blue rating number — placeholder until updateAverageCard() is called
-        avgNumberLabel = new JLabel("—");
+        // Big blue number — placeholder until updateAverageCard() runs
+        avgNumberLabel = new JLabel("--");
         avgNumberLabel.setFont(new Font("SansSerif", Font.BOLD, 52));
-        avgNumberLabel.setForeground(BLUE_ACCENT);  // blue number
+        avgNumberLabel.setForeground(BLUE_ACCENT);
         avgNumberLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        // Star icons row — now YELLOW colour
-        avgStarsLabel = new JLabel("☆☆☆☆☆");
+        // Yellow star row
+        avgStarsLabel = new JLabel("\u2606\u2606\u2606\u2606\u2606"); // 5 empty stars
         avgStarsLabel.setFont(new Font("SansSerif", Font.PLAIN, 22));
-        avgStarsLabel.setForeground(YELLOW_STAR);   // ← YELLOW stars
+        avgStarsLabel.setForeground(YELLOW_STAR);
         avgStarsLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        // "average rating from N reviews" text
+        // Count text
         avgCountLabel = new JLabel("average rating from 0 reviews");
         avgCountLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
         avgCountLabel.setForeground(COLOR_MUTED);
         avgCountLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        // Stack items with small gaps between them
         inner.add(avgNumberLabel);
         inner.add(Box.createVerticalStrut(4));
         inner.add(avgStarsLabel);
         inner.add(Box.createVerticalStrut(6));
         inner.add(avgCountLabel);
 
-        card.add(inner);
+        content.add(inner);
+        card.add(content, BorderLayout.CENTER);
+
         return card;
     }
 
     // ─────────────────────────────────────────────────────────────
-    // updateAverageCard()
-    // Fills the left card with real data after reviews are loaded.
-    // Called inside refresh() when reviews are found.
+    // updateAverageCard() — fill the average card with real data
     // ─────────────────────────────────────────────────────────────
     private void updateAverageCard(List<StaffReview> reviews) {
-        // Calculate average rating using the service
         double avg   = service.calculateAverageRating(reviews);
         int    total = reviews.size();
 
-        // Update the big number e.g. "4.4"
         avgNumberLabel.setText(String.format("%.1f", avg));
-
-        // Update star icons using the helper below
         avgStarsLabel.setText(buildStarString(avg));
 
-        // Update the count text e.g. "average rating from 2 reviews"
         String word = (total == 1) ? "review" : "reviews";
         avgCountLabel.setText("average rating from " + total + " " + word);
     }
 
     // ─────────────────────────────────────────────────────────────
-    // buildBreakdownCard()
-    // Right card: "Rating breakdown" heading + 5 horizontal bar rows.
+    // buildBreakdownCard() — white card with YELLOW left bar
+    //   Shows: "Rating breakdown" heading + 5 bar rows
     // ─────────────────────────────────────────────────────────────
     private JPanel buildBreakdownCard() {
-        JPanel card = makeRoundedCard();
-        card.setLayout(new BorderLayout());
+        // YELLOW bar — changed from teal/green
+        JPanel card = makeRoundedCardWithLeftBar(BAR_COLOR_BREAKDOWN);
 
-        // Heading at the top of the card
+        JPanel content = new JPanel(new BorderLayout());
+        content.setOpaque(false);
+
         JLabel heading = new JLabel("Rating breakdown");
         heading.setFont(new Font("SansSerif", Font.BOLD, 14));
         heading.setForeground(COLOR_TEXT);
         heading.setBorder(new EmptyBorder(0, 0, 12, 0));
-        card.add(heading, BorderLayout.NORTH);
+        content.add(heading, BorderLayout.NORTH);
 
-        // Bars panel — filled with placeholder bars now, real data in fillBreakdownBars()
         barsPanel = new JPanel();
         barsPanel.setLayout(new BoxLayout(barsPanel, BoxLayout.Y_AXIS));
-        barsPanel.setBackground(COLOR_CARD);
+        barsPanel.setOpaque(false);
 
-        // Draw 5 empty bars (count=0) so the card looks correct before refresh()
+        // Placeholder empty bars shown before refresh() is called
         for (int star = 5; star >= 1; star--) {
             barsPanel.add(buildOneBarRow(star, 0, 1));
             barsPanel.add(Box.createVerticalStrut(6));
         }
 
-        card.add(barsPanel, BorderLayout.CENTER);
+        content.add(barsPanel, BorderLayout.CENTER);
+        card.add(content, BorderLayout.CENTER);
+
         return card;
     }
 
     // ─────────────────────────────────────────────────────────────
-    // fillBreakdownBars()
-    // Rebuilds the five bar rows with real data from the reviews list.
-    // Called from fillTable() after reviews are loaded.
+    // fillBreakdownBars() — rebuild the 5 bar rows with real counts
     // ─────────────────────────────────────────────────────────────
     private void fillBreakdownBars(List<StaffReview> reviews) {
         if (barsPanel == null) return;
 
-        // Remove old bars
         barsPanel.removeAll();
-
         int total = reviews.size();
 
-        // Add one bar row per star level (5 down to 1)
         for (int star = 5; star >= 1; star--) {
             int count = service.countByStarLevel(reviews, star);
             barsPanel.add(buildOneBarRow(star, count, total));
             barsPanel.add(Box.createVerticalStrut(6));
         }
 
-        // Tell Swing to redraw the panel
         barsPanel.revalidate();
         barsPanel.repaint();
     }
 
     // ─────────────────────────────────────────────────────────────
-    // buildOneBarRow()
-    // One horizontal bar row:  "5★  [===blue bar===]  1"
+    // buildOneBarRow() — "5★  [====blue fill====]  1"
     // ─────────────────────────────────────────────────────────────
     private JPanel buildOneBarRow(int star, int count, int max) {
         JPanel row = new JPanel(new BorderLayout(8, 0));
-        row.setBackground(COLOR_CARD);
+        row.setOpaque(false);
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 22));
 
-        // Left side: star label e.g. "5★"
         JLabel starLabel = new JLabel(star + "\u2605");
         starLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
         starLabel.setForeground(COLOR_TEXT);
         starLabel.setPreferredSize(new Dimension(28, 16));
         row.add(starLabel, BorderLayout.WEST);
 
-        // Middle: light grey track with a blue fill bar inside
         JPanel track = new JPanel(new BorderLayout());
-        track.setBackground(new Color(230, 230, 235)); // light grey track background
+        track.setBackground(new Color(230, 230, 235));
         track.setBorder(new EmptyBorder(4, 0, 4, 0));
 
         JPanel fill = new JPanel();
-        fill.setBackground(BLUE_ACCENT); // blue fill bar
-
-        // Calculate how wide the fill bar should be (0 to 200 pixels)
+        fill.setBackground(BLUE_ACCENT);
         double ratio = (max == 0) ? 0.0 : (double) count / max;
         fill.setPreferredSize(new Dimension((int) (200 * ratio), 8));
         track.add(fill, BorderLayout.WEST);
         row.add(track, BorderLayout.CENTER);
 
-        // Right side: count number e.g. "1"
         JLabel countLabel = new JLabel(String.valueOf(count));
         countLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
         countLabel.setForeground(COLOR_MUTED);
@@ -359,42 +356,75 @@ public class StaffReviewPage extends JPanel {
         return row;
     }
 
+    // =========================================================
+    // TABLE CARD — contains inline controls + the review table
+    // =========================================================
+
     // ─────────────────────────────────────────────────────────────
     // buildTableCard()
-    // Rounded white card holding the review table.
     //
-    // Columns:
-    //   Comment ID | Staff Name | Technician Name | Appointment ID |
-    //   Vehicle Type | Car Plate | Rating | Feedback | Date
+    // A plain white rounded card.  Inside it:
     //
-    // Rating column shows only the number e.g. "4.0" (no stars).
-    // Feedback column wraps long text automatically.
+    //   NORTH  — buildInlineControlsRow()
+    //            Right-aligned transparent row:
+    //              (empty space)  [search text field]  [All Ratings v]
+    //            No card background, no title label.
+    //
+    //   CENTER — the review table with clickable column headers for sort
+    //
+    // HOW SORT WORKS:
+    //   Click a column header -> sort that column ascending (shows ▲)
+    //   Click the same header -> reverse to descending          (shows ▼)
+    //   Click a different header -> sort that column ascending
     // ─────────────────────────────────────────────────────────────
     private JPanel buildTableCard() {
         JPanel card = makeRoundedCard();
         card.setLayout(new BorderLayout());
 
-        // ── Column headers ────────────────────────────────────────
+        // Column names array — also used by updateColumnHeaderArrows()
         String[] columns = {
                 "Comment ID", "Staff Name", "Technician Name",
                 "Appointment ID", "Vehicle Type", "Car Plate",
                 "Rating", "Feedback", "Date"
         };
 
-        // Non-editable table model — user cannot type inside cells
+        // Add the inline search + filter row at the top of the card
+        // It is right-aligned and has a transparent background
+        card.add(buildInlineControlsRow(), BorderLayout.NORTH);
+
+        // Non-editable table model
         tableModel = new DefaultTableModel(columns, 0) {
             @Override
             public boolean isCellEditable(int row, int col) {
-                return false;
+                return false; // customers cannot edit rows
             }
         };
 
-        // Build using the shared TableHelper for a consistent header style
-        JTable table = TableHelper.buildTable(tableModel);
-        table.setRowHeight(40); // default row height; auto-grows for long feedback
+        table = TableHelper.buildTable(tableModel);
+        table.setRowHeight(40);
 
-        // ── Centre renderer — applied to all columns EXCEPT Feedback (index 7) ──
-        // This renderer centres text and applies alternating row background colours.
+        // Attach click listener to column headers for sort
+        table.getTableHeader().addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                int clickedColumn = table.columnAtPoint(e.getPoint());
+                if (clickedColumn < 0) return;
+
+                if (sortColumnIndex == clickedColumn) {
+                    // Same column clicked again — flip direction
+                    sortAscending = !sortAscending;
+                } else {
+                    // New column — sort ascending
+                    sortColumnIndex = clickedColumn;
+                    sortAscending   = true;
+                }
+
+                applyFilters();                    // re-sort + re-filter
+                updateColumnHeaderArrows(columns); // show arrow in header
+            }
+        });
+
+        // Centre renderer for all columns except Feedback (index 7)
         DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer() {
             @Override
             public Component getTableCellRendererComponent(JTable t, Object value,
@@ -405,73 +435,63 @@ public class StaffReviewPage extends JPanel {
                 setBorder(new EmptyBorder(0, 10, 0, 10));
                 setFont(new Font("SansSerif", Font.PLAIN, 13));
                 if (!isSelected) {
-                    // Even rows = white, odd rows = very light grey
                     setBackground(row % 2 == 0 ? Color.WHITE : new Color(248, 249, 253));
                 }
                 return this;
             }
         };
 
-        // Apply the centre renderer to every column except Feedback (index 7)
         for (int i = 0; i < columns.length; i++) {
-            if (i != 7) { // index 7 = Feedback
+            if (i != 7) {
                 table.getColumnModel().getColumn(i).setCellRenderer(centerRenderer);
             }
         }
 
-        // ── Feedback column (index 7) — wrapping multi-line text area ────────
-        // Long feedback text wraps inside a JTextArea, and the row grows taller.
+        // Feedback column (index 7) — multi-line wrapping text area
         table.getColumnModel().getColumn(7).setCellRenderer(
                 (t, value, isSelected, hasFocus, row, col) -> {
-
-                    JTextArea textArea = new JTextArea();
-                    textArea.setText(value != null ? value.toString() : "");
-                    textArea.setLineWrap(true);
-                    textArea.setWrapStyleWord(true);
-                    textArea.setOpaque(true);
-                    textArea.setFont(new Font("SansSerif", Font.PLAIN, 13));
-                    textArea.setBorder(new EmptyBorder(8, 14, 8, 14));
+                    JTextArea ta = new JTextArea();
+                    ta.setText(value != null ? value.toString() : "");
+                    ta.setLineWrap(true);
+                    ta.setWrapStyleWord(true);
+                    ta.setOpaque(true);
+                    ta.setFont(new Font("SansSerif", Font.PLAIN, 13));
+                    ta.setBorder(new EmptyBorder(8, 14, 8, 14));
 
                     if (isSelected) {
-                        textArea.setBackground(new Color(80, 110, 230, 60));
-                        textArea.setForeground(COLOR_TEXT);
+                        ta.setBackground(new Color(80, 110, 230, 60));
+                        ta.setForeground(COLOR_TEXT);
                     } else {
-                        textArea.setBackground(
-                                row % 2 == 0 ? Color.WHITE : new Color(248, 249, 253));
-                        textArea.setForeground(COLOR_TEXT);
+                        ta.setBackground(row % 2 == 0 ? Color.WHITE : new Color(248, 249, 253));
+                        ta.setForeground(COLOR_TEXT);
                     }
 
-                    // Automatically resize the row height to fit wrapped text
+                    // Auto-resize row height to fit wrapped text
                     int colWidth = t.getColumnModel().getColumn(col).getWidth();
-                    textArea.setSize(new Dimension(colWidth, Short.MAX_VALUE));
-                    int preferredHeight = textArea.getPreferredSize().height;
-                    int newHeight       = Math.max(40, preferredHeight);
-
+                    ta.setSize(new Dimension(colWidth, Short.MAX_VALUE));
+                    int newHeight = Math.max(40, ta.getPreferredSize().height);
                     if (t.getRowHeight(row) != newHeight) {
                         final int fh = newHeight;
                         SwingUtilities.invokeLater(() -> t.setRowHeight(row, fh));
                     }
-
-                    return textArea;
+                    return ta;
                 }
         );
 
-        // ── Column widths — Feedback gets the most space ──────────
+        // Column widths
         TableColumnModel colModel = table.getColumnModel();
-        colModel.getColumn(0).setPreferredWidth(90);   // Comment ID
-        colModel.getColumn(1).setPreferredWidth(110);  // Staff Name
-        colModel.getColumn(2).setPreferredWidth(120);  // Technician Name
-        colModel.getColumn(3).setPreferredWidth(110);  // Appointment ID
-        colModel.getColumn(4).setPreferredWidth(90);   // Vehicle Type
-        colModel.getColumn(5).setPreferredWidth(90);   // Car Plate
-        colModel.getColumn(6).setPreferredWidth(70);   // Rating
-        colModel.getColumn(7).setPreferredWidth(260);  // Feedback — widest
-        colModel.getColumn(8).setPreferredWidth(100);  // Date
+        colModel.getColumn(0).setPreferredWidth(90);
+        colModel.getColumn(1).setPreferredWidth(110);
+        colModel.getColumn(2).setPreferredWidth(120);
+        colModel.getColumn(3).setPreferredWidth(110);
+        colModel.getColumn(4).setPreferredWidth(90);
+        colModel.getColumn(5).setPreferredWidth(90);
+        colModel.getColumn(6).setPreferredWidth(70);
+        colModel.getColumn(7).setPreferredWidth(260);
+        colModel.getColumn(8).setPreferredWidth(100);
 
-        // Prevent the user from reordering columns by dragging
         table.getTableHeader().setReorderingAllowed(false);
 
-        // ── Scroll pane — same fixed height as PaymentHistoryPage ─
         JScrollPane tableScroll = new JScrollPane(table);
         tableScroll.setBorder(null);
         tableScroll.setBackground(COLOR_CARD);
@@ -479,7 +499,7 @@ public class StaffReviewPage extends JPanel {
         tableScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         tableScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         tableScroll.getVerticalScrollBar().setUnitIncrement(16);
-        tableScroll.setPreferredSize(new Dimension(0, 420)); // same as PaymentHistoryPage
+        tableScroll.setPreferredSize(new Dimension(0, 420));
         tableScroll.setMinimumSize(new Dimension(0, 200));
 
         card.add(tableScroll, BorderLayout.CENTER);
@@ -487,103 +507,347 @@ public class StaffReviewPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // buildEmptyPanel()
+    // buildInlineControlsRow()
     //
-    // Shown when no review records are found.
+    // Builds the right-aligned search + filter row that sits directly
+    // above the table — no background panel, no title, no border.
     //
-    // This now uses ServiceHistoryPage.buildNoDataPanel() in EXACTLY
-    // the same way that PaymentHistoryPage does, so the size, position,
-    // and style are identical.
+    // Looks like this (right side of the row):
+    //   (empty)  ... [___search field___]  [All Ratings  v]
+    //
+    // This matches the screenshot style exactly.
+    // ─────────────────────────────────────────────────────────────
+    private JPanel buildInlineControlsRow() {
+
+        // FlowLayout.RIGHT pushes everything to the right
+        // The panel is opaque=false so it blends into the card background
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        row.setOpaque(false);
+        row.setBorder(new EmptyBorder(0, 0, 8, 0)); // small gap above the table
+
+        // Search text field — plain box, no label
+        searchField = new JTextField(16);
+        searchField.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        searchField.setPreferredSize(new Dimension(180, 28));
+        searchField.setBorder(BorderFactory.createCompoundBorder(
+                new LineBorder(COLOR_BORDER, 1, true),
+                new EmptyBorder(2, 8, 2, 8)
+        ));
+        searchField.setToolTipText("Search by any column");
+
+        // Fire applyFilters() on every keystroke (live search)
+        searchField.getDocument().addDocumentListener(
+                new javax.swing.event.DocumentListener() {
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e)  { applyFilters(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e)  { applyFilters(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { applyFilters(); }
+        });
+
+        // Rating filter dropdown
+        // "All Ratings" is the default — selecting a band filters the table
+        String[] ratingOptions = {
+                "All Ratings",
+                "5 Stars (4.5 - 5.0)",
+                "4 Stars (3.5 - 4.4)",
+                "3 Stars (2.5 - 3.4)",
+                "2 Stars (1.5 - 2.4)",
+                "1 Star  (1.0 - 1.4)"
+        };
+        ratingFilter = new JComboBox<>(ratingOptions);
+        ratingFilter.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        ratingFilter.setPreferredSize(new Dimension(190, 28));
+        ratingFilter.setBackground(Color.WHITE);
+        ratingFilter.setToolTipText("Filter by star rating");
+
+        // Fire applyFilters() whenever the selection changes
+        ratingFilter.addActionListener(e -> applyFilters());
+
+        row.add(searchField);
+        row.add(ratingFilter);
+
+        return row;
+    }
+
+    // =========================================================
+    // FILTER + SORT LOGIC
+    // =========================================================
+
+    // ─────────────────────────────────────────────────────────────
+    // applyFilters()
+    //
+    // Called whenever the search text changes, the dropdown changes,
+    // or a column header is clicked.
+    //
+    // Steps:
+    //   1. Read current keyword and selected rating band
+    //   2. Loop through allReviews, keep rows that match BOTH
+    //   3. Sort the matching rows (if a column header was clicked)
+    //   4. Put the result into the table
+    // ─────────────────────────────────────────────────────────────
+    private void applyFilters() {
+
+        // Step 1: read keyword (lowercase for case-insensitive search)
+        String keyword = (searchField != null)
+                ? searchField.getText().trim().toLowerCase()
+                : "";
+
+        // Step 2: read rating band index
+        //   0 = All Ratings (no filter)
+        //   1 = 5 Stars  rating >= 4.5
+        //   2 = 4 Stars  3.5 <= rating < 4.5
+        //   3 = 3 Stars  2.5 <= rating < 3.5
+        //   4 = 2 Stars  1.5 <= rating < 2.5
+        //   5 = 1 Star   rating < 1.5
+        int ratingIndex = (ratingFilter != null)
+                ? ratingFilter.getSelectedIndex()
+                : 0;
+
+        // Step 3: build filtered list
+        List<StaffReview> filtered = new ArrayList<>();
+
+        for (StaffReview review : allReviews) {
+
+            // Keyword match — true if the keyword appears in ANY column
+            boolean keywordMatch = keyword.isEmpty()
+                    || review.commentId      .toLowerCase().contains(keyword)
+                    || review.staffName      .toLowerCase().contains(keyword)
+                    || review.technicianName .toLowerCase().contains(keyword)
+                    || review.appointmentId  .toLowerCase().contains(keyword)
+                    || review.vehicleType    .toLowerCase().contains(keyword)
+                    || review.carPlate       .toLowerCase().contains(keyword)
+                    || review.feedbackText   .toLowerCase().contains(keyword)
+                    || review.date           .toLowerCase().contains(keyword)
+                    || String.valueOf(review.rating).contains(keyword);
+
+            // Rating band match
+            boolean ratingMatch;
+            switch (ratingIndex) {
+                case 1:  ratingMatch = (review.rating >= 4.5);                        break;
+                case 2:  ratingMatch = (review.rating >= 3.5 && review.rating < 4.5); break;
+                case 3:  ratingMatch = (review.rating >= 2.5 && review.rating < 3.5); break;
+                case 4:  ratingMatch = (review.rating >= 1.5 && review.rating < 2.5); break;
+                case 5:  ratingMatch = (review.rating  < 1.5);                        break;
+                default: ratingMatch = true; break; // "All Ratings" — no filter
+            }
+
+            if (keywordMatch && ratingMatch) {
+                filtered.add(review);
+            }
+        }
+
+        // Step 4: sort the filtered list
+        applySortToList(filtered);
+
+        // Step 5: put the filtered + sorted rows into the table
+        fillTableFromList(filtered);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // applySortToList()
+    //
+    // Sorts the list in place using sortColumnIndex and sortAscending.
+    // Does nothing if no column is selected (sortColumnIndex == -1).
+    //
+    // Column-to-field mapping:
+    //   0=Comment ID  1=Staff Name  2=Technician Name  3=Appointment ID
+    //   4=Vehicle Type  5=Car Plate  6=Rating (number)  7=Feedback  8=Date
+    // ─────────────────────────────────────────────────────────────
+    private void applySortToList(List<StaffReview> list) {
+        if (sortColumnIndex < 0) return; // no column selected
+
+        Comparator<StaffReview> comparator;
+
+        switch (sortColumnIndex) {
+            case 0:  comparator = Comparator.comparing(r -> r.commentId);      break;
+            case 1:  comparator = Comparator.comparing(r -> r.staffName);      break;
+            case 2:  comparator = Comparator.comparing(r -> r.technicianName); break;
+            case 3:  comparator = Comparator.comparing(r -> r.appointmentId);  break;
+            case 4:  comparator = Comparator.comparing(r -> r.vehicleType);    break;
+            case 5:  comparator = Comparator.comparing(r -> r.carPlate);       break;
+            case 6:  comparator = Comparator.comparingDouble(r -> r.rating);   break;
+            case 7:  comparator = Comparator.comparing(r -> r.feedbackText);   break;
+            case 8:  comparator = Comparator.comparing(r -> r.date);           break;
+            default: comparator = Comparator.comparing(r -> r.commentId);      break;
+        }
+
+        if (!sortAscending) {
+            comparator = comparator.reversed(); // flip to descending
+        }
+
+        list.sort(comparator);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // updateColumnHeaderArrows()
+    //
+    // Shows a triangle arrow in the header of the sorted column:
+    //   ascending  -> "Rating ▲"
+    //   descending -> "Rating ▼"
+    // All other columns show their plain name with no arrow.
+    // ─────────────────────────────────────────────────────────────
+    private void updateColumnHeaderArrows(String[] baseColumnNames) {
+        if (table == null) return;
+
+        TableColumnModel colModel = table.getColumnModel();
+        for (int i = 0; i < baseColumnNames.length; i++) {
+            String text;
+            if (i == sortColumnIndex) {
+                // Unicode 25B2 = ▲ (up arrow), 25BC = ▼ (down arrow)
+                text = baseColumnNames[i] + (sortAscending ? " \u25B2" : " \u25BC");
+            } else {
+                text = baseColumnNames[i];
+            }
+            colModel.getColumn(i).setHeaderValue(text);
+        }
+        table.getTableHeader().repaint();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // buildEmptyPanel() — shown when no reviews are found
     // ─────────────────────────────────────────────────────────────
     private JPanel buildEmptyPanel() {
-        // Use the same shared helper as PaymentHistoryPage
         return ServiceHistoryPage.buildNoDataPanel(
-                "\u2605",                                        // ★ star icon
+                "\u2605",
                 "No staff review records found.",
                 "Reviews from technicians will appear here."
         );
     }
 
-    // ═════════════════════════════════════════════════════════════
+    // =========================================================
     // DATA HELPERS
-    // ═════════════════════════════════════════════════════════════
+    // =========================================================
 
     // ─────────────────────────────────────────────────────────────
-    // fillTable()
-    // Clears the table, adds one row per review, and rebuilds bars.
+    // fillTable() — called by refresh() with the full review list
+    // Fills the table AND rebuilds the breakdown bars.
     // ─────────────────────────────────────────────────────────────
     private void fillTable(List<StaffReview> reviews) {
-        tableModel.setRowCount(0); // clear old rows first
-
-        for (StaffReview review : reviews) {
-
-            // Rating: show only the number e.g. "4.0" — NO stars in the table
-            String ratingDisplay = String.format("%.1f", review.rating);
-
-            tableModel.addRow(new Object[]{
-                    review.commentId,       // Comment ID
-                    review.staffName,       // Staff Name
-                    review.technicianName,  // Technician Name
-                    review.appointmentId,   // Appointment ID
-                    review.vehicleType,     // Vehicle Type  e.g. "Car"
-                    review.carPlate,        // Car Plate     e.g. "WXY1234"
-                    ratingDisplay,          // Rating        e.g. "4.0"
-                    review.feedbackText,    // Feedback      (wraps automatically)
-                    review.date             // Date
-            });
-        }
-
-        // Rebuild the breakdown bars with real data
-        fillBreakdownBars(reviews);
+        fillTableFromList(reviews);
+        fillBreakdownBars(reviews); // bars always reflect ALL reviews
     }
 
     // ─────────────────────────────────────────────────────────────
-    // buildStarString()
-    // Converts a numeric rating into star symbols.
-    // e.g. 4.4 → "★★★★½"
-    // Used for the average rating card only (NOT the table).
+    // fillTableFromList()
+    //
+    // Puts any list of reviews into the table model.
+    // Used by both fillTable() and applyFilters().
+    // Does NOT rebuild the breakdown bars.
+    // ─────────────────────────────────────────────────────────────
+    private void fillTableFromList(List<StaffReview> reviews) {
+        tableModel.setRowCount(0); // clear existing rows first
+
+        for (StaffReview review : reviews) {
+            String ratingDisplay = String.format("%.1f", review.rating);
+
+            tableModel.addRow(new Object[]{
+                    review.commentId,
+                    review.staffName,
+                    review.technicianName,
+                    review.appointmentId,
+                    review.vehicleType,
+                    review.carPlate,
+                    ratingDisplay,   // e.g. "4.0" — no star symbols in the table
+                    review.feedbackText,
+                    review.date
+            });
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // buildStarString() — converts a number to star Unicode symbols
+    // e.g. 4.4 -> "★★★★½"    used in the average card only
     // ─────────────────────────────────────────────────────────────
     private String buildStarString(double rating) {
         StringBuilder sb = new StringBuilder();
         for (int i = 1; i <= 5; i++) {
-            if      (rating >= i)       sb.append("\u2605"); // ★ full star
-            else if (rating >= i - 0.5) sb.append("\u00BD"); // ½ half star
-            else                        sb.append("\u2606"); // ☆ empty star
+            if      (rating >= i)       sb.append("\u2605"); // full star ★
+            else if (rating >= i - 0.5) sb.append("\u00BD"); // half star ½
+            else                        sb.append("\u2606"); // empty star ☆
         }
         return sb.toString();
     }
 
-    // ═════════════════════════════════════════════════════════════
-    // UI HELPER
-    // ═════════════════════════════════════════════════════════════
+    // =========================================================
+    // UI HELPER METHODS
+    // =========================================================
+
+    // ─────────────────────────────────────────────────────────────
+    // makeRoundedCardWithLeftBar()
+    //
+    // White rounded card with a 5px coloured bar on the left edge.
+    //
+    // HOW IT WORKS (inside paintComponent):
+    //   1. Draw a white filled rounded rectangle for the background
+    //   2. Draw the grey border on top
+    //   3. Paint a wider rounded rect using the bar colour on the left
+    //   4. Cover the right portion of that coloured rect with white
+    //      -> only the leftmost ~5px strip remains as the colour bar
+    //
+    // The card uses BorderLayout.
+    // Callers must add their content panels to BorderLayout.CENTER.
+    // ─────────────────────────────────────────────────────────────
+    private JPanel makeRoundedCardWithLeftBar(Color barColor) {
+
+        JPanel card = new JPanel(new BorderLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                        RenderingHints.VALUE_ANTIALIAS_ON);
+
+                // 1. White rounded background
+                g2.setColor(COLOR_CARD);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14);
+
+                // 2. Grey border
+                g2.setColor(COLOR_BORDER);
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 14, 14);
+
+                // 3. Coloured rounded rect on the left (10px wide)
+                g2.setColor(barColor);
+                g2.fillRoundRect(0, 0, 10, getHeight(), 14, 14);
+
+                // 4. White cover on right half of that coloured area
+                //    so only the leftmost 5px stays visible
+                g2.setColor(COLOR_CARD);
+                g2.fillRect(5, 0, 10, getHeight());
+
+                g2.dispose();
+            }
+        };
+
+        card.setOpaque(false);
+        // Left padding = 22px (5px bar + 17px gap to content)
+        card.setBorder(new EmptyBorder(18, 22, 18, 20));
+
+        return card;
+    }
 
     // ─────────────────────────────────────────────────────────────
     // makeRoundedCard()
-    // Creates a white rounded card with a light border.
-    // Identical to the card style used in PaymentHistoryPage.
+    //
+    // Plain white rounded card with no left colour bar.
+    // Used for the table card.
     // ─────────────────────────────────────────────────────────────
     private JPanel makeRoundedCard() {
         JPanel card = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
-                // Use Graphics2D so we can turn on anti-aliasing for smooth corners
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
                         RenderingHints.VALUE_ANTIALIAS_ON);
 
-                // Fill the rounded rectangle with white
                 g2.setColor(COLOR_CARD);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14);
 
-                // Draw the border (one pixel smaller so the border is not clipped)
                 g2.setColor(COLOR_BORDER);
                 g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 14, 14);
 
                 g2.dispose();
             }
         };
-        card.setOpaque(false); // let paintComponent handle drawing
-        card.setBorder(new EmptyBorder(18, 20, 18, 20)); // padding inside the card
+        card.setOpaque(false);
+        card.setBorder(new EmptyBorder(18, 20, 18, 20));
         return card;
     }
 }
