@@ -16,9 +16,7 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.geom.Arc2D;
 import java.awt.geom.Ellipse2D;
-import java.awt.geom.GeneralPath;
 import java.awt.image.BufferedImage;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -30,58 +28,22 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * CustomerDashboard — the main screen a customer sees after logging in.
- *
- * Changes in this version:
- *
- *   CHANGE 1: Sidebar brand name changed from "APU ASC" to "APU".
- *             The APU logo image is now shown at 55x55 pixels (smaller) in the
- *             sidebar logo area, loaded from /Image/apu-logo.png.
- *             If the image is missing, a wrench+gear icon is drawn instead.
- *
- *   CHANGE 2: "Upcoming appointments" and "Pending payments" card title fonts
- *             are now BIGGER (13 → 16 pt bold).
- *             Row text inside those cards is also bigger (12 → 14 pt).
- *
- *   CHANGE 3: Bar chart bottom stats row now has:
- *             (a) a 22px gap at the top so the stats don't touch the bars,
- *             (b) "Average Per Visit" written in full (not abbreviated).
- *
- *   CHANGE 4: Nav button icons updated:
- *               0 = Dashboard       → HOME icon (house shape)
- *               1 = Service History → circular repeat / refresh arrow
- *               2 = Payment History → MONEY/DOLLAR icon (circle with $ sign)
- *               3 = Staff Review    → filled star
- *               4 = My Feedback     → CHAT BUBBLE icon (rounded rectangle with tail)
- *
- *   CHANGE 5: Stat card accent colour bar now covers the FULL left edge of the
- *             card (flush to the left, full height, 5 px wide).
- *
- *   CHANGE 6: Payment invoice dialog is BIGGER (560 wide x 700 tall).
- *             The APU logo inside the invoice is also bigger (120x120 px).
- *
- *   CHANGE 7: Charts row (bar chart + donut chart) is now TALLER (300 → 370 px).
- *             Bottom row (Upcoming Appointments + Pending Payments) is now
- *             SHORTER — capped at 220 px max height — so the extra space goes
- *             to the charts above.
- */
 public class CustomerDashboard extends JPanel {
 
-    // ── Reference to the main application window ──────────────────────────────
+    // ── Reference to the main application window ──────────────────
     private final AppFrame app;
 
-    // ── Used to switch between Dashboard / Service History / etc. pages ───────
+    // ── Used to switch between pages ──────────────────────────────
     private CardLayout contentLayout;
     private JPanel     contentPanel;
-    private String     activeNav = "Dashboard"; // tracks which nav item is active
+    private String     activeNav = "Dashboard";
 
-    // ── Labels shown in the top header bar ───────────────────────────────────
-    private JLabel profileLabel; // shows logged-in user's name
-    private JLabel avatarLabel;  // shows the user's avatar circle
-    private JLabel headerTitle;  // shows the current page name
+    // ── Labels shown in the top header bar ────────────────────────
+    private JLabel profileLabel;
+    private JLabel avatarLabel;
+    private JLabel headerTitle;
 
-    // ── Colours for the user avatar circle background ─────────────────────────
+    // ── Avatar colours ────────────────────────────────────────────
     private static final Color[] AVATAR_COLORS = {
             new Color(80, 110, 230), new Color(230, 80, 80),
             new Color(80, 190, 110), new Color(230, 160, 40),
@@ -91,17 +53,17 @@ public class CustomerDashboard extends JPanel {
     private int           selectedAvatarIndex = 0;
     private BufferedImage profileImage        = null;
 
-    // ── The row of navigation buttons in the sidebar ─────────────────────────
+    // ── Navigation buttons ────────────────────────────────────────
     private JButton[] navButtons;
 
-    // ── References to each section page panel ────────────────────────────────
+    // ── Page panels ───────────────────────────────────────────────
     private ServiceHistoryPage serviceHistoryPage;
     private PaymentHistoryPage paymentHistoryPage;
     private StaffReviewPage    staffReviewPage;
     private MyFeedbackPage     myFeedbackPage;
     private ViewProfile        viewProfilePage;
 
-    // ── Business logic / data service objects ────────────────────────────────
+    // ── Services ──────────────────────────────────────────────────
     private final CustomerProfileController    profileController;
     private final VehicleSectionController     vehicleController;
     private final AppointmentSectionController appointmentController;
@@ -112,27 +74,43 @@ public class CustomerDashboard extends JPanel {
     private final PaymentService               paymentService        = new PaymentService();
     private final ServiceHistoryService        serviceHistoryService = new ServiceHistoryService();
 
-    // ── The dashboard home panel — rebuilt fresh on every login ──────────────
+    // ── Dashboard home panel ──────────────────────────────────────
     private JPanel dashboardPanel;
 
-    // ── Shared accent colours used across the dashboard ───────────────────────
+    // ── Colours ───────────────────────────────────────────────────
     private static final Color BRAND_BLUE  = new Color(80, 110, 230);
     private static final Color COLOR_GREEN = new Color(80, 190, 110);
     private static final Color COLOR_AMBER = new Color(230, 160, 40);
     private static final Color COLOR_TEAL  = new Color(40, 180, 200);
 
-    // ── The navigation section names — order matches icon index ──────────────
+    // ── Nav items — same order as NAV_ICONS below ─────────────────
     private static final String[] NAV_ITEMS = {
             "Dashboard", "Service History", "Payment History", "Staff Review", "My Feedback"
     };
 
-    // ── Date format used to parse appointment date/time strings ──────────────
+    // ── Unicode icons for the left sidebar navigation ─────────────
+    //
+    //   CHANGES MADE:
+    //   • Service History : changed from ♻ (\u267B) to ↺ (\u21BA)  — a repeat/refresh arrow
+    //   • Payment History : changed from ⚖ (\u2696) to $  (\u0024) — a dollar / money sign
+    //   • My Feedback     : changed from ✉ (\u2709) to 💬 (emoji)  — a chat speech bubble
+    //
+    //   Dashboard  and Staff Review icons are unchanged.
+    //
+    private static final String[] NAV_ICONS = {
+            "\u2302",			// 	⌂    Dashboard			— house symbol
+            "\uD83D\uDD04",		//  🔄   Service History		— circular arrows
+            "\uD83D\uDCB5",		// 	💵   Payment History		— banknote with dollar sign
+            "\u2605",			// 	★   Staff Review		— star
+            "\uD83D\uDCAC"		// 	💬   My Feedback			— chat speech bubble
+    };
+
     private static final DateTimeFormatter DATE_TIME_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     // CONSTRUCTOR
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     public CustomerDashboard(AppFrame app) {
         this.app = app;
 
@@ -150,7 +128,7 @@ public class CustomerDashboard extends JPanel {
                 vehicleService,
                 new VehicleSectionController.SectionView() {
                     @Override public User getLoggedInUser()             { return app.getLoggedInUserObj(); }
-                    @Override public void rebuildList(List<String[]> v) { /* handled by ViewProfile */ }
+                    @Override public void rebuildList(List<String[]> v) { }
                     @Override public void showMessage(String msg, String title, int type) {
                         JOptionPane.showMessageDialog(app, msg, title, type);
                     }
@@ -242,9 +220,9 @@ public class CustomerDashboard extends JPanel {
         dashboardPanel.repaint();
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     // buildDashboardInner()
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     private JPanel buildDashboardInner() {
         User user = app.getLoggedInUserObj();
 
@@ -281,13 +259,11 @@ public class CustomerDashboard extends JPanel {
         outer.add(row1);
         outer.add(Box.createVerticalStrut(14));
 
-        // CHANGE 7: Charts row is now taller — see buildChartsRow()
         JPanel row2 = buildChartsRow(allAppts, paidIds);
         row2.setAlignmentX(Component.LEFT_ALIGNMENT);
         outer.add(row2);
         outer.add(Box.createVerticalStrut(14));
 
-        // CHANGE 7: Bottom row is now shorter — see buildBottomRow()
         JPanel row3 = buildBottomRow(upcoming, unpaid);
         row3.setAlignmentX(Component.LEFT_ALIGNMENT);
         outer.add(row3);
@@ -295,9 +271,9 @@ public class CustomerDashboard extends JPanel {
         return outer;
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     // ROW 1 — FOUR STAT CARDS
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     private JPanel buildStatCardsRow(int totalAppts, double pendingAmount,
                                      int pendingCount, int vehicleCount,
                                      List<String[]> vehicles,
@@ -332,10 +308,6 @@ public class CustomerDashboard extends JPanel {
         return row;
     }
 
-    /**
-     * Builds a single stat card panel.
-     * CHANGE 5: The coloured accent bar runs flush to the LEFT edge, full height, 5px wide.
-     */
     private JPanel buildStatCard(String title, String value,
                                   String subtitle, Color subColor,
                                   Color accentColor) {
@@ -347,12 +319,15 @@ public class CustomerDashboard extends JPanel {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
                         RenderingHints.VALUE_ANTIALIAS_ON);
 
+                // White rounded background
                 g2.setColor(UIConstants.BG_CARD);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14);
 
-                int barWidth = 5;
+                // Coloured left accent bar, clipped to rounded shape
+                g2.setClip(new java.awt.geom.RoundRectangle2D.Float(
+                        0, 0, getWidth(), getHeight(), 14, 14));
                 g2.setColor(accentColor);
-                g2.fillRoundRect(0, 0, barWidth, getHeight(), 6, 6);
+                g2.fillRect(0, 0, 5, getHeight());
 
                 g2.dispose();
             }
@@ -364,36 +339,32 @@ public class CustomerDashboard extends JPanel {
         int textW = 180;
 
         JLabel titleLbl = new JLabel(title);
-        titleLbl.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        titleLbl.setFont(new Font("SansSerif", Font.PLAIN, 12));
         titleLbl.setForeground(UIConstants.TEXT_MUTED);
         titleLbl.setBounds(textX, 12, textW, 18);
         card.add(titleLbl);
 
         JLabel valueLbl = new JLabel(value);
-        valueLbl.setFont(new Font("SansSerif", Font.BOLD, 30));
+        valueLbl.setFont(new Font("SansSerif", Font.BOLD, 22));
         valueLbl.setForeground(UIConstants.TEXT_PRIMARY);
-        valueLbl.setBounds(textX, 30, textW, 40);
+        valueLbl.setBounds(textX, 32, textW, 34);
         card.add(valueLbl);
 
         JLabel subLbl = new JLabel(subtitle);
-        subLbl.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        subLbl.setFont(new Font("SansSerif", Font.PLAIN, 11));
         subLbl.setForeground(subColor);
-        subLbl.setBounds(textX, 74, textW, 16);
+        subLbl.setBounds(textX, 72, textW, 16);
         card.add(subLbl);
 
         return card;
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     // ROW 2 — CHARTS ROW
-    // CHANGE 7: Both maxSize and preferredSize raised from 300 → 370 px so the
-    //           bar chart and donut chart have noticeably more vertical room.
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     private JPanel buildChartsRow(List<String[]> allAppts, Set<String> paidIds) {
         JPanel row = new JPanel(new BorderLayout(12, 0));
         row.setOpaque(false);
-
-        // CHANGE 7: Was 300, now 370 — gives charts more breathing room
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 370));
         row.setPreferredSize(new Dimension(Integer.MAX_VALUE, 370));
 
@@ -402,61 +373,33 @@ public class CustomerDashboard extends JPanel {
         return row;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Bar chart card
-    // ─────────────────────────────────────────────────────────────────────────
     private JPanel buildActivityChartCard(List<String[]> allAppts, Set<String> paidIds) {
         JPanel card = createCard();
         card.setLayout(new BorderLayout());
         card.setBorder(new EmptyBorder(14, 16, 12, 16));
 
-        JPanel topRow = new JPanel(new BorderLayout());
-        topRow.setOpaque(false);
-        topRow.setPreferredSize(new Dimension(0, 24));
-
         JLabel title = new JLabel("Service activity \u2014 last 6 months");
         title.setFont(new Font("SansSerif", Font.BOLD, 13));
         title.setForeground(UIConstants.TEXT_PRIMARY);
-        topRow.add(title, BorderLayout.WEST);
-
-        JButton detailsBtn = new JButton("Details");
-        detailsBtn.setFont(new Font("SansSerif", Font.PLAIN, 11));
-        detailsBtn.setForeground(BRAND_BLUE);
-        detailsBtn.setContentAreaFilled(false);
-        detailsBtn.setBorderPainted(false);
-        detailsBtn.setFocusPainted(false);
-        detailsBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        detailsBtn.addActionListener(e -> {
-            activeNav = "Service History";
-            headerTitle.setText("Service History");
-            contentLayout.show(contentPanel, "Service History");
-            for (int j = 0; j < navButtons.length; j++) {
-                updateNavButtonStyle(navButtons[j], NAV_ITEMS[j].equals("Service History"));
-            }
-            if (serviceHistoryPage != null) serviceHistoryPage.refresh();
-        });
-        topRow.add(detailsBtn, BorderLayout.EAST);
-        card.add(topRow, BorderLayout.NORTH);
+        title.setBorder(new EmptyBorder(0, 0, 6, 0));
+        card.add(title, BorderLayout.NORTH);
 
         Map<String, Integer> monthlyCounts = buildMonthlyCounts(allAppts, 6);
         BarChartPanel chartPanel = new BarChartPanel(monthlyCounts);
         chartPanel.setOpaque(false);
         card.add(chartPanel, BorderLayout.CENTER);
 
-        // ── CHANGE 3: Stats row below the bar chart ───────────────────────────
-        // Top padding increased to 22px for clear visual separation from bars.
         double totalSpent  = calcTotalSpent(allAppts, paidIds);
         double avgPerVisit = allAppts.isEmpty() ? 0 : totalSpent / allAppts.size();
 
         JPanel statsRow = new JPanel(new GridLayout(1, 3, 0, 0));
         statsRow.setOpaque(false);
-        // CHANGE 3a: EmptyBorder top=22 creates clear breathing room above the stats
         statsRow.setBorder(new EmptyBorder(22, 0, 0, 0));
-        statsRow.setPreferredSize(new Dimension(0, 66)); // taller to fit bigger text
+        statsRow.setPreferredSize(new Dimension(0, 66));
 
-        statsRow.add(buildSmallStat("Total Services",   String.valueOf(allAppts.size())));
-        statsRow.add(buildSmallStat("Total Spent",       String.format("RM %,.0f", totalSpent)));
-        statsRow.add(buildSmallStat("Average Per Visit", String.format("RM %,.0f", avgPerVisit)));
+        statsRow.add(buildSmallStat("Total Services",    String.valueOf(allAppts.size())));
+        statsRow.add(buildSmallStat("Total Spent",        String.format("RM %,.0f", totalSpent)));
+        statsRow.add(buildSmallStat("Average Per Visit",  String.format("RM %,.0f", avgPerVisit)));
         card.add(statsRow, BorderLayout.SOUTH);
 
         return card;
@@ -485,15 +428,13 @@ public class CustomerDashboard extends JPanel {
         return p;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────
     // Donut chart card
-    // ─────────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────
     private JPanel buildBreakdownCard(List<String[]> allAppts) {
         JPanel card = createCard();
         card.setLayout(new BorderLayout());
         card.setBorder(new EmptyBorder(14, 16, 14, 16));
-
-        // CHANGE 7: Height raised from 300 → 370 to match the taller charts row
         card.setPreferredSize(new Dimension(300, 370));
         card.setMinimumSize(new Dimension(300, 260));
         card.setMaximumSize(new Dimension(300, Integer.MAX_VALUE));
@@ -563,17 +504,12 @@ public class CustomerDashboard extends JPanel {
         return row;
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     // ROW 3 — UPCOMING APPOINTMENTS + PENDING PAYMENTS
-    // CHANGE 7: setMaximumSize added to cap this row at 220 px.
-    //           This stops the bottom cards from growing too tall and stealing
-    //           vertical space that now belongs to the charts row above.
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     private JPanel buildBottomRow(List<String[]> upcoming, List<String[]> unpaid) {
         JPanel row = new JPanel(new GridLayout(1, 2, 12, 0));
         row.setOpaque(false);
-
-        // CHANGE 7: Cap the bottom row so it stays compact
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 220));
 
         row.add(buildUpcomingCard(upcoming));
@@ -581,7 +517,6 @@ public class CustomerDashboard extends JPanel {
         return row;
     }
 
-    // CHANGE 2: Card title font 16pt bold
     private JPanel buildUpcomingCard(List<String[]> upcoming) {
         JPanel card = createCard();
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
@@ -619,7 +554,6 @@ public class CustomerDashboard extends JPanel {
         return card;
     }
 
-    // CHANGE 2: Card title font 16pt bold
     private JPanel buildPendingPaymentsCard(List<String[]> unpaid) {
         JPanel card = createCard();
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
@@ -657,7 +591,6 @@ public class CustomerDashboard extends JPanel {
         return card;
     }
 
-    // CHANGE 2: Row text bigger (14pt title, 13pt subtitle)
     private JPanel buildUpcomingRow(String[] row) {
         String apptId      = row[0];
         String vehicleId   = row[1];
@@ -749,7 +682,6 @@ public class CustomerDashboard extends JPanel {
         return panel;
     }
 
-    // CHANGE 2: Row text bigger (14pt title, 13pt subtitle, 14pt amount)
     private JPanel buildPaymentRow(String[] row, JDialog parentDialog) {
         String apptId      = row[0];
         String vehicleId   = row[1];
@@ -837,7 +769,6 @@ public class CustomerDashboard extends JPanel {
         payBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         payBtn.setPreferredSize(new Dimension(60, 28));
         payBtn.setMaximumSize(new Dimension(60, 28));
-        payBtn.setAlignmentX(Component.RIGHT_ALIGNMENT);
         payBtn.addActionListener(e -> showPaymentInvoiceDialog(
                 apptId, vehicleId, serviceType, duration, amountStr, row, parentDialog));
 
@@ -849,11 +780,9 @@ public class CustomerDashboard extends JPanel {
         return panel;
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     // PAYMENT INVOICE DIALOG
-    // Fixed: uses GridBagLayout for the inner form so the JComboBox is properly
-    // constrained and doesn't stretch. All elements now display correctly.
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     private void showPaymentInvoiceDialog(String apptId, String vehicleId,
             String serviceType, String duration, String amountStr,
             String[] row, JDialog parentDialog) {
@@ -873,7 +802,6 @@ public class CustomerDashboard extends JPanel {
         try { totalAmount = Double.parseDouble(amountStr); }
         catch (NumberFormatException e) { totalAmount = 150.00; }
 
-        // Dialog: fixed width 520, height 680 — matches target screenshot proportions
         JDialog dialog = new JDialog(
                 (Frame) SwingUtilities.getWindowAncestor(this),
                 "Payment Invoice \u2014 " + apptId, true);
@@ -882,26 +810,20 @@ public class CustomerDashboard extends JPanel {
         dialog.setLocationRelativeTo(this);
         dialog.setLayout(new BorderLayout());
 
-        // ── Outer wrapper: white background, scrollable ───────────────────────
-        // We use a single JPanel with GridBagLayout as the root so every child
-        // is given the correct width without stretching or clipping.
         JPanel root = new JPanel();
         root.setBackground(Color.WHITE);
         root.setLayout(new GridBagLayout());
 
-        // All children share this constraint: fill full width, stack vertically
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridx   = 0;
-        gbc.gridy   = GridBagConstraints.RELATIVE; // auto-increment row
+        gbc.gridy   = GridBagConstraints.RELATIVE;
         gbc.fill    = GridBagConstraints.HORIZONTAL;
         gbc.weightx = 1.0;
         gbc.insets  = new Insets(0, 0, 0, 0);
 
-        // ── Logo area ─────────────────────────────────────────────────────────
         JPanel logoArea = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         logoArea.setBackground(Color.WHITE);
         logoArea.setBorder(new EmptyBorder(22, 30, 10, 30));
-
         try {
             java.net.URL logoUrl = getClass().getResource("/Image/apu-logo.png");
             if (logoUrl != null) {
@@ -915,26 +837,21 @@ public class CustomerDashboard extends JPanel {
         } catch (Exception ignored) {}
         root.add(logoArea, gbc);
 
-        // ── Org name + subtitle ───────────────────────────────────────────────
         JPanel orgPanel = new JPanel();
         orgPanel.setLayout(new BoxLayout(orgPanel, BoxLayout.Y_AXIS));
         orgPanel.setBackground(Color.WHITE);
         orgPanel.setBorder(new EmptyBorder(0, 30, 10, 30));
-
         JLabel orgName = new JLabel("APU Automotive Service Centre");
         orgName.setFont(new Font("SansSerif", Font.BOLD, 15));
         orgName.setForeground(UIConstants.PRIMARY);
         orgPanel.add(orgName);
-
         JLabel orgSub = new JLabel("Official Payment Invoice");
         orgSub.setFont(new Font("SansSerif", Font.PLAIN, 12));
         orgSub.setForeground(UIConstants.TEXT_MUTED);
         orgPanel.add(orgSub);
         root.add(orgPanel, gbc);
 
-        // ── Separator + data rows ─────────────────────────────────────────────
-        JPanel sep1 = makePaddedSeparator(30);
-        root.add(sep1, gbc);
+        root.add(makePaddedSeparator(30), gbc);
 
         root.add(makeInvoiceRowPanel("Appointment ID", apptId,             false, 30), gbc);
         root.add(makeInvoiceRowPanel("Customer",        customerName,       true,  30), gbc);
@@ -948,58 +865,44 @@ public class CustomerDashboard extends JPanel {
         sep2.setBorder(new EmptyBorder(8, 30, 0, 30));
         root.add(sep2, gbc);
 
-        // ── Payment type row — label left, constrained combo box right ────────
-        // Using a fixed-layout JPanel so the combo box stays at a sane width.
-        JPanel payTypePanel = new JPanel(null); // null layout for exact positioning
+        JPanel payTypePanel = new JPanel(null);
         payTypePanel.setBackground(Color.WHITE);
         payTypePanel.setPreferredSize(new Dimension(460, 44));
         payTypePanel.setBorder(new EmptyBorder(0, 30, 0, 30));
-
         JLabel payTypeLbl = new JLabel("Payment Type");
         payTypeLbl.setFont(new Font("SansSerif", Font.BOLD, 12));
         payTypeLbl.setForeground(UIConstants.TEXT_MUTED);
         payTypeLbl.setBounds(0, 12, 120, 20);
         payTypePanel.add(payTypeLbl);
-
         JComboBox<String> methodCombo = new JComboBox<>(new String[]{"Cash", "Card", "Online"});
         methodCombo.setFont(new Font("SansSerif", Font.PLAIN, 13));
         methodCombo.setBackground(Color.WHITE);
-        // Combo box sits to the right of the label, fixed width 280px
         methodCombo.setBounds(125, 8, 280, 28);
         payTypePanel.add(methodCombo);
-
-        // Wrapper with insets so GridBagLayout respects horizontal padding
         JPanel payTypeWrapper = new JPanel(new BorderLayout());
         payTypeWrapper.setBackground(Color.WHITE);
         payTypeWrapper.setBorder(new EmptyBorder(8, 30, 8, 30));
         payTypeWrapper.add(payTypePanel, BorderLayout.CENTER);
         root.add(payTypeWrapper, gbc);
 
-        JPanel sep3 = makePaddedSeparator(30);
-        root.add(sep3, gbc);
+        root.add(makePaddedSeparator(30), gbc);
 
-        // ── Total Amount row ──────────────────────────────────────────────────
         JPanel totalPanel = new JPanel(new BorderLayout());
         totalPanel.setBackground(Color.WHITE);
         totalPanel.setBorder(new EmptyBorder(12, 30, 12, 30));
-
         JLabel tLabel = new JLabel("Total Amount");
         tLabel.setFont(new Font("SansSerif", Font.BOLD, 15));
         tLabel.setForeground(UIConstants.TEXT_PRIMARY);
-
         final double ta = totalAmount;
         JLabel tValue = new JLabel(String.format("RM %.2f", ta));
         tValue.setFont(new Font("SansSerif", Font.BOLD, 17));
         tValue.setForeground(new Color(40, 160, 80));
         tValue.setHorizontalAlignment(SwingConstants.RIGHT);
-
         totalPanel.add(tLabel, BorderLayout.WEST);
         totalPanel.add(tValue, BorderLayout.EAST);
         root.add(totalPanel, gbc);
 
-        // ── Confirm & Pay button ──────────────────────────────────────────────
         final String fas = String.format("%.2f", ta);
-
         JButton confirmBtn = new JButton("Confirm & Pay") {
             private boolean hov = false;
             {
@@ -1050,7 +953,6 @@ public class CustomerDashboard extends JPanel {
         btnWrapper.add(confirmBtn, BorderLayout.CENTER);
         root.add(btnWrapper, gbc);
 
-        // Push everything to the top — filler row at the bottom
         GridBagConstraints fillerGbc = new GridBagConstraints();
         fillerGbc.gridx   = 0;
         fillerGbc.gridy   = GridBagConstraints.RELATIVE;
@@ -1069,10 +971,6 @@ public class CustomerDashboard extends JPanel {
         dialog.setVisible(true);
     }
 
-    /**
-     * Creates a horizontal separator with symmetric left/right inset padding.
-     * Uses a JPanel wrapper so the separator respects the invoice's side margins.
-     */
     private JPanel makePaddedSeparator(int hInset) {
         JPanel wrapper = new JPanel(new BorderLayout());
         wrapper.setBackground(Color.WHITE);
@@ -1083,37 +981,25 @@ public class CustomerDashboard extends JPanel {
         return wrapper;
     }
 
-    /**
-     * Creates one label/value data row for the invoice.
-     * Uses a GridBagLayout-compatible JPanel with explicit side insets.
-     * The shaded parameter alternates the background for readability.
-     */
     private JPanel makeInvoiceRowPanel(String label, String value, boolean shaded, int hInset) {
         JPanel outer = new JPanel(new BorderLayout());
         outer.setBackground(shaded ? new Color(245, 246, 248) : Color.WHITE);
-
         JPanel inner = new JPanel(new BorderLayout(8, 0));
         inner.setOpaque(false);
         inner.setBorder(new EmptyBorder(7, hInset, 7, hInset));
-
         JLabel lbl = new JLabel(label);
         lbl.setFont(new Font("SansSerif", Font.PLAIN, 12));
         lbl.setForeground(UIConstants.TEXT_MUTED);
         lbl.setPreferredSize(new Dimension(120, 18));
-
         JLabel val = new JLabel(value);
         val.setFont(new Font("SansSerif", Font.BOLD, 12));
         val.setForeground(UIConstants.TEXT_PRIMARY);
-
         inner.add(lbl, BorderLayout.WEST);
         inner.add(val, BorderLayout.CENTER);
         outer.add(inner, BorderLayout.CENTER);
         return outer;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // showViewAllDialog
-    // ─────────────────────────────────────────────────────────────────────────
     private void showViewAllDialog(String dialogTitle,
                                    List<String[]> allRows,
                                    boolean isPayment) {
@@ -1165,9 +1051,9 @@ public class CustomerDashboard extends JPanel {
         dialog.setVisible(true);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     // HEADER
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     private JPanel buildHeader() {
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(UIConstants.BG_HEADER);
@@ -1180,7 +1066,6 @@ public class CustomerDashboard extends JPanel {
         headerTitle.setFont(new Font("SansSerif", Font.BOLD, 28));
         headerTitle.setForeground(UIConstants.TEXT_PRIMARY);
         header.add(headerTitle, BorderLayout.WEST);
-
         header.add(buildHeaderProfileArea(), BorderLayout.EAST);
         return header;
     }
@@ -1288,9 +1173,9 @@ public class CustomerDashboard extends JPanel {
         return profileArea;
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     // SIDEBAR
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     private JPanel buildSidebar() {
         JPanel sidebar = new JPanel();
         sidebar.setLayout(new BoxLayout(sidebar, BoxLayout.Y_AXIS));
@@ -1317,9 +1202,9 @@ public class CustomerDashboard extends JPanel {
         navButtons = new JButton[NAV_ITEMS.length];
         for (int i = 0; i < NAV_ITEMS.length; i++) {
             final String pageName = NAV_ITEMS[i];
-            final int    iconType = i;
+            final String icon     = NAV_ICONS[i];
 
-            navButtons[i] = buildNavButton(NAV_ITEMS[i], pageName.equals(activeNav), iconType);
+            navButtons[i] = buildNavButton(icon + "   " + pageName, pageName.equals(activeNav));
             navButtons[i].addActionListener(e -> {
                 activeNav = pageName;
                 for (int j = 0; j < navButtons.length; j++) {
@@ -1344,17 +1229,10 @@ public class CustomerDashboard extends JPanel {
         return sidebar;
     }
 
-    /**
-     * buildLogoArea() — the logo section at the very top of the sidebar.
-     *
-     * CHANGE 1: Brand name is "APU". APU logo now displayed at 55x55 px (smaller).
-     *           Logo area max height reduced to 100 to match the smaller logo.
-     */
     private JPanel buildLogoArea() {
         JPanel area = new JPanel();
         area.setLayout(new BoxLayout(area, BoxLayout.Y_AXIS));
         area.setBackground(UIConstants.SIDEBAR_BG);
-        // CHANGE 1: Reduced height to fit the smaller 55px logo
         area.setBorder(new EmptyBorder(14, 16, 10, 16));
         area.setMaximumSize(new Dimension(UIConstants.SIDEBAR_WIDTH, 100));
 
@@ -1364,7 +1242,6 @@ public class CustomerDashboard extends JPanel {
             if (logoUrl != null) {
                 ImageIcon rawIcon = new ImageIcon(logoUrl);
                 if (rawIcon.getIconWidth() > 0) {
-                    // CHANGE 1: Scale logo to 55x55 pixels — smaller, tidier sidebar
                     Image scaledLogo = rawIcon.getImage()
                             .getScaledInstance(55, 55, Image.SCALE_SMOOTH);
                     JLabel logoLabel = new JLabel(new ImageIcon(scaledLogo));
@@ -1376,48 +1253,18 @@ public class CustomerDashboard extends JPanel {
             }
         } catch (Exception ignored) {}
 
-        // Fallback: drawn wrench+gear icon if image not found
         if (!logoLoaded) {
-            JLabel iconLabel = new JLabel() {
-                @Override
-                protected void paintComponent(Graphics g) {
-                    Graphics2D g2 = (Graphics2D) g.create();
-                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                            RenderingHints.VALUE_ANTIALIAS_ON);
-
-                    g2.setColor(new Color(255, 255, 255, 200));
-                    int gearCX = 17, gearCY = 14, outerR = 7, innerR = 5;
-                    g2.fillOval(gearCX - innerR, gearCY - innerR, innerR * 2, innerR * 2);
-
-                    g2.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                    for (int t = 0; t < 6; t++) {
-                        double angle = Math.toRadians(t * 60.0);
-                        int x1 = (int) Math.round(gearCX + innerR * Math.cos(angle));
-                        int y1 = (int) Math.round(gearCY + innerR * Math.sin(angle));
-                        int x2 = (int) Math.round(gearCX + outerR * Math.cos(angle));
-                        int y2 = (int) Math.round(gearCY + outerR * Math.sin(angle));
-                        g2.drawLine(x1, y1, x2, y2);
-                    }
-                    g2.drawOval(gearCX - innerR, gearCY - innerR, innerR * 2, innerR * 2);
-                    g2.setColor(UIConstants.SIDEBAR_BG);
-                    g2.fillOval(gearCX - 2, gearCY - 2, 4, 4);
-
-                    g2.setColor(new Color(255, 255, 255, 200));
-                    g2.setStroke(new BasicStroke(2.2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                    g2.drawLine(4, 24, 14, 10);
-                    g2.drawArc(10, 5, 8, 8, 30, 230);
-
-                    g2.dispose();
-                }
-            };
-            iconLabel.setPreferredSize(new Dimension(28, 28));
-            iconLabel.setMaximumSize(new Dimension(28, 28));
-            iconLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-            area.add(iconLabel);
+            JLabel fallback = new JLabel("APU Customer");
+            fallback.setFont(new Font("SansSerif", Font.BOLD, 22));
+            fallback.setForeground(Color.WHITE);
+            fallback.setAlignmentX(Component.LEFT_ALIGNMENT);
+            area.add(fallback);
         }
 
-        // CHANGE 1: Brand name is "APU"
-        JLabel brandName = new JLabel("APU");
+        // ── CHANGE: "APU" → "APU Customer" ────────────────────────
+        // This label appears below the logo image in the sidebar header.
+        // We simply updated the text string from "APU" to "APU Customer".
+        JLabel brandName = new JLabel("APU Customer");
         brandName.setFont(UIConstants.FONT_SIDEBAR);
         brandName.setForeground(Color.WHITE);
         brandName.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -1427,210 +1274,50 @@ public class CustomerDashboard extends JPanel {
         return area;
     }
 
-    /**
-     * buildNavButton() — creates one sidebar navigation button.
-     *
-     * CHANGE 4 (updated icons):
-     *   iconType 0 = Dashboard       → HOME icon (house with roof + door)
-     *   iconType 1 = Service History → circular refresh/repeat arrows
-     *   iconType 2 = Payment History → MONEY icon (circle with $ sign inside)
-     *   iconType 3 = Staff Review    → filled 5-pointed star
-     *   iconType 4 = My Feedback     → CHAT BUBBLE (rounded rect + triangular tail)
-     */
-    private JButton buildNavButton(String label, boolean isActive, int iconType) {
-        JButton btn = new JButton() {
-            private boolean hovered = false;
-
-            {
-                setRolloverEnabled(true);
-                addMouseListener(new MouseAdapter() {
-                    public void mouseEntered(MouseEvent e) { hovered = true;  repaint(); }
-                    public void mouseExited (MouseEvent e) { hovered = false; repaint(); }
-                });
-            }
-
-            @Override
-            protected void paintComponent(Graphics g) {
+    private JButton buildNavButton(String text, boolean active) {
+        JButton btn = new JButton(text) {
+            @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
                         RenderingHints.VALUE_ANTIALIAS_ON);
-
-                boolean active = (getClientProperty("active") == Boolean.TRUE);
-
-                if (active) {
+                if (getClientProperty("active") == Boolean.TRUE) {
                     g2.setColor(UIConstants.SIDEBAR_ACTIVE);
                     g2.fillRoundRect(4, 0, getWidth() - 8, getHeight(), 8, 8);
-                } else if (hovered) {
+                } else if (getModel().isRollover()) {
                     g2.setColor(UIConstants.SIDEBAR_HOVER);
                     g2.fillRoundRect(4, 0, getWidth() - 8, getHeight(), 8, 8);
                 }
-
-                Color iconColor = active ? Color.WHITE : new Color(155, 165, 185);
-
-                int ix = 20;
-                int iy = (getHeight() - 14) / 2;
-
-                g2.setColor(iconColor);
-                g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-
-                switch (iconType) {
-
-                    case 0:
-                        // Dashboard → HOME icon
-                        // Roof: triangle on top
-                        int[] roofX = { ix + 7, ix,      ix + 14 };
-                        int[] roofY = { iy,      iy + 6,  iy + 6  };
-                        g2.fillPolygon(roofX, roofY, 3);
-                        // House body: rectangle below the roof
-                        g2.fillRect(ix + 1, iy + 6, 12, 8);
-                        // Door: small cutout in the centre bottom
-                        g2.setColor(active
-                                ? new Color(UIConstants.SIDEBAR_ACTIVE.getRed(),
-                                             UIConstants.SIDEBAR_ACTIVE.getGreen(),
-                                             UIConstants.SIDEBAR_ACTIVE.getBlue())
-                                : UIConstants.SIDEBAR_BG);
-                        g2.fillRect(ix + 4, iy + 9, 6, 5);
-                        // Redraw door outline in icon colour for definition
-                        g2.setColor(iconColor);
-                        g2.setStroke(new BasicStroke(1f));
-                        g2.drawRect(ix + 4, iy + 9, 5, 5);
-                        break;
-
-                    case 1:
-                        // Service History → circular refresh arrows
-                        {
-                            float cx = ix + 7f, cy = iy + 7f, r = 5.5f;
-                            g2.draw(new Arc2D.Float(cx - r, cy - r, r * 2, r * 2,
-                                    30, 150, Arc2D.OPEN));
-                            g2.draw(new Arc2D.Float(cx - r, cy - r, r * 2, r * 2,
-                                    210, 150, Arc2D.OPEN));
-                            drawNavArrowhead(g2, iconColor, cx - r, cy, cx - r, cy - 4f);
-                            drawNavArrowhead(g2, iconColor, cx + r, cy, cx + r, cy + 4f);
-                        }
-                        break;
-
-                    case 2:
-                        // Payment History → MONEY icon: circle with $ sign
-                        g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                        g2.drawOval(ix, iy, 14, 14);
-                        g2.setFont(new Font("SansSerif", Font.BOLD, 9));
-                        FontMetrics fmDollar = g2.getFontMetrics();
-                        String dollar = "$";
-                        int dx = ix + 7 - fmDollar.stringWidth(dollar) / 2;
-                        int dy = iy + 7 + fmDollar.getAscent() / 2 - 1;
-                        g2.drawString(dollar, dx, dy);
-                        break;
-
-                    case 3:
-                        // Staff Review → filled 5-pointed star
-                        {
-                            int[] starX = new int[10];
-                            int[] starY = new int[10];
-                            int scx = ix + 7, scy = iy + 7;
-                            int outerR = 7, innerR = 3;
-                            for (int p = 0; p < 10; p++) {
-                                double angle  = -Math.PI / 2 + p * Math.PI / 5;
-                                int    radius = (p % 2 == 0) ? outerR : innerR;
-                                starX[p] = (int) Math.round(scx + radius * Math.cos(angle));
-                                starY[p] = (int) Math.round(scy + radius * Math.sin(angle));
-                            }
-                            g2.fillPolygon(starX, starY, 10);
-                        }
-                        break;
-
-                    case 4:
-                        // My Feedback → CHAT BUBBLE icon
-                        g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                        g2.fillRoundRect(ix, iy, 14, 10, 4, 4);
-                        // Triangular tail pointing down-left
-                        int[] tailX = { ix + 2, ix + 1, ix + 6 };
-                        int[] tailY = { iy + 9,  iy + 14, iy + 9  };
-                        g2.fillPolygon(tailX, tailY, 3);
-                        // Three dots inside the bubble
-                        Color dotColor = active ? new Color(255, 255, 255, 180) : UIConstants.SIDEBAR_BG;
-                        g2.setColor(dotColor);
-                        g2.fillOval(ix + 2,  iy + 3, 2, 2);
-                        g2.fillOval(ix + 6,  iy + 3, 2, 2);
-                        g2.fillOval(ix + 10, iy + 3, 2, 2);
-                        break;
-
-                    default:
-                        break;
-                }
-
-                // Draw the button text label
-                g2.setFont(new Font("SansSerif", active ? Font.BOLD : Font.PLAIN, 13));
-                g2.setColor(active ? Color.WHITE : UIConstants.TEXT_SIDEBAR);
-                int textX = ix + 22;
-                FontMetrics fm = g2.getFontMetrics();
-                int textY = (getHeight() + fm.getAscent() - fm.getDescent()) / 2;
-                g2.drawString(label, textX, textY);
-
                 g2.dispose();
+                super.paintComponent(g);
             }
-
-            @Override public String getText() { return ""; }
         };
 
-        btn.setToolTipText(label);
-        btn.putClientProperty("active", isActive);
+        btn.putClientProperty("active", active);
         btn.setAlignmentX(Component.LEFT_ALIGNMENT);
         btn.setMaximumSize(new Dimension(UIConstants.SIDEBAR_WIDTH, 42));
         btn.setPreferredSize(new Dimension(UIConstants.SIDEBAR_WIDTH, 42));
+        btn.setFont(new Font("SansSerif", active ? Font.BOLD : Font.PLAIN, 14));
+        btn.setForeground(active ? Color.WHITE : UIConstants.TEXT_SIDEBAR);
+        btn.setHorizontalAlignment(SwingConstants.LEFT);
+        btn.setBorder(new EmptyBorder(0, 20, 0, 20));
         btn.setContentAreaFilled(false);
         btn.setBorderPainted(false);
         btn.setFocusPainted(false);
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btn.setRolloverEnabled(true);
         return btn;
-    }
-
-    /**
-     * drawNavArrowhead() — draws a tiny filled triangle arrowhead.
-     * Used by the Service History circular arrows icon.
-     */
-    private void drawNavArrowhead(Graphics2D g2, Color color,
-                                   float tipX, float tipY,
-                                   float tailX, float tailY) {
-        float dx = tipX - tailX;
-        float dy = tipY - tailY;
-        float len = (float) Math.sqrt(dx * dx + dy * dy);
-        if (len == 0) return;
-
-        dx /= len;
-        dy /= len;
-
-        float px = -dy;
-        float py =  dx;
-
-        float arrowLen  = 4f;
-        float arrowHalf = 2.5f;
-
-        float x1 = tipX;
-        float y1 = tipY;
-        float x2 = tipX - dx * arrowLen + px * arrowHalf;
-        float y2 = tipY - dy * arrowLen + py * arrowHalf;
-        float x3 = tipX - dx * arrowLen - px * arrowHalf;
-        float y3 = tipY - dy * arrowLen - py * arrowHalf;
-
-        GeneralPath arrow = new GeneralPath();
-        arrow.moveTo(x1, y1);
-        arrow.lineTo(x2, y2);
-        arrow.lineTo(x3, y3);
-        arrow.closePath();
-
-        g2.setStroke(new BasicStroke(1f));
-        g2.setColor(color);
-        g2.fill(arrow);
     }
 
     private void updateNavButtonStyle(JButton btn, boolean isActive) {
         btn.putClientProperty("active", isActive);
+        btn.setForeground(isActive ? Color.WHITE : UIConstants.TEXT_SIDEBAR);
+        btn.setFont(new Font("SansSerif", isActive ? Font.BOLD : Font.PLAIN, 14));
         btn.repaint();
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // DATA CALCULATION HELPERS
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
+    // DATA HELPERS
+    // ═══════════════════════════════════════════════════════════════
 
     private double calcPendingAmount(List<String[]> unpaid) {
         double total = 0;
@@ -1684,9 +1371,8 @@ public class CustomerDashboard extends JPanel {
         for (String[] row : appts) {
             try {
                 LocalDateTime ldt = LocalDateTime.parse(row[5], DATE_TIME_FORMAT);
-                if (ldt.getYear() == today.getYear() && ldt.getMonth() == today.getMonth()) {
+                if (ldt.getYear() == today.getYear() && ldt.getMonth() == today.getMonth())
                     count++;
-                }
             } catch (DateTimeParseException ignored) {}
         }
         return count;
@@ -1695,11 +1381,8 @@ public class CustomerDashboard extends JPanel {
     private Map<String, Integer> buildMonthlyCounts(List<String[]> appts, int months) {
         Map<String, Integer> counts = new LinkedHashMap<>();
         LocalDate today = LocalDate.now();
-
-        for (int i = months - 1; i >= 0; i--) {
+        for (int i = months - 1; i >= 0; i--)
             counts.put(today.minusMonths(i).format(DateTimeFormatter.ofPattern("MMM")), 0);
-        }
-
         for (String[] row : appts) {
             try {
                 LocalDateTime ldt = LocalDateTime.parse(row[5], DATE_TIME_FORMAT);
@@ -1718,10 +1401,7 @@ public class CustomerDashboard extends JPanel {
 
     private Map<String, Integer> buildServiceBreakdown(List<String[]> appts) {
         Map<String, Integer> raw = new LinkedHashMap<>();
-        for (String[] row : appts) {
-            raw.merge(row[3], 1, Integer::sum);
-        }
-
+        for (String[] row : appts) raw.merge(row[3], 1, Integer::sum);
         Map<String, Integer> result = new LinkedHashMap<>();
         int otherCount = 0, rank = 0;
         for (Map.Entry<String, Integer> e : raw.entrySet()) {
@@ -1747,54 +1427,39 @@ public class CustomerDashboard extends JPanel {
                 app.getAccountService().getAllUsers(), userId);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     // INNER CLASS — BarChartPanel
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     private static class BarChartPanel extends JPanel {
-
         private final Map<String, Integer> data;
-
         BarChartPanel(Map<String, Integer> data) {
             this.data = data;
             setOpaque(false);
             setMinimumSize(new Dimension(0, 80));
         }
-
         @Override
         protected void paintComponent(Graphics g) {
             super.paintComponent(g);
             if (data == null || data.isEmpty()) return;
-
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-            int w      = getWidth();
-            int h      = getHeight();
-            int labelH = 18;
-            int topPad = 8;
-            int chartH = h - labelH - topPad;
-            int n      = data.size();
-
+            int w = getWidth(), h = getHeight(), labelH = 18, topPad = 8;
+            int chartH = h - labelH - topPad, n = data.size();
             if (n == 0 || chartH <= 0) { g2.dispose(); return; }
-
             int maxVal = data.values().stream().mapToInt(Integer::intValue).max().orElse(1);
             if (maxVal == 0) maxVal = 1;
-
             int colW = (w - 16) / n;
             int barW = Math.max(6, colW * 2 / 5);
-
             List<Map.Entry<String, Integer>> entries = new ArrayList<>(data.entrySet());
             for (int i = 0; i < entries.size(); i++) {
                 int count = entries.get(i).getValue();
                 int colX  = 8 + i * colW;
                 int barX  = colX + (colW - barW) / 2;
-
                 if (count > 0) {
                     int barH = (int) ((double) count / maxVal * chartH);
                     int barY = topPad + chartH - barH;
                     g2.setColor(new Color(80, 110, 230, 180));
                     g2.fillRoundRect(barX, barY, barW, barH, 4, 4);
-
                     g2.setFont(new Font("SansSerif", Font.BOLD, 10));
                     g2.setColor(new Color(80, 110, 230));
                     FontMetrics fm = g2.getFontMetrics();
@@ -1805,7 +1470,6 @@ public class CustomerDashboard extends JPanel {
                     g2.setColor(new Color(80, 110, 230, 35));
                     g2.fillRoundRect(barX, topPad + chartH - 4, barW, 4, 2, 2);
                 }
-
                 g2.setFont(new Font("SansSerif", Font.PLAIN, 10));
                 g2.setColor(new Color(120, 130, 145));
                 FontMetrics fm = g2.getFontMetrics();
@@ -1817,52 +1481,37 @@ public class CustomerDashboard extends JPanel {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     // INNER CLASS — DonutChartPanel
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     static class DonutChartPanel extends JPanel {
-
         static final Color[] SEGMENT_COLORS = {
-                new Color(80, 110, 230),
-                new Color(80, 190, 110),
-                new Color(230, 160, 40),
-                new Color(200, 200, 210),
+                new Color(80, 110, 230), new Color(80, 190, 110),
+                new Color(230, 160, 40), new Color(200, 200, 210),
         };
-
         private final Map<String, Integer> data;
         private final int                  total;
-
         DonutChartPanel(Map<String, Integer> data, int total) {
-            this.data  = data;
-            this.total = total;
-            setOpaque(false);
+            this.data = data; this.total = total; setOpaque(false);
         }
-
         @Override
         protected void paintComponent(Graphics g) {
             super.paintComponent(g);
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-            int w    = getWidth();
-            int h    = getHeight();
+            int w = getWidth(), h = getHeight();
             int size = Math.min(w, h) - 6;
-            int ox   = (w - size) / 2;
-            int oy   = (h - size) / 2;
-
+            int ox = (w - size) / 2, oy = (h - size) / 2;
             int hole  = size * 52 / 100;
             int holeX = ox + (size - hole) / 2;
             int holeY = oy + (size - hole) / 2;
-
             if (total == 0 || data.isEmpty()) {
                 g2.setColor(new Color(220, 220, 230));
                 g2.fillOval(ox, oy, size, size);
                 g2.setColor(UIConstants.BG_CARD);
                 g2.fillOval(holeX, holeY, hole, hole);
-                g2.dispose();
-                return;
+                g2.dispose(); return;
             }
-
             double startAngle = -90.0;
             List<Map.Entry<String, Integer>> entries = new ArrayList<>(data.entrySet());
             for (int i = 0; i < entries.size(); i++) {
@@ -1871,37 +1520,29 @@ public class CustomerDashboard extends JPanel {
                 g2.fillArc(ox, oy, size, size, (int) startAngle, (int) sweep);
                 startAngle += sweep;
             }
-
             g2.setColor(UIConstants.BG_CARD);
             g2.fillOval(holeX, holeY, hole, hole);
-
             int cx = w / 2, cy = h / 2;
-            int bigFontSz   = Math.max(18, hole / 5);
-            int smallFontSz = Math.max(11, hole / 8);
-
+            int bigFontSz = Math.max(18, hole / 5), smallFontSz = Math.max(11, hole / 8);
             g2.setFont(new Font("SansSerif", Font.BOLD, bigFontSz));
             FontMetrics fm1 = g2.getFontMetrics();
             String totalStr = String.valueOf(total);
             g2.setColor(UIConstants.TEXT_PRIMARY);
-            g2.drawString(totalStr,
-                    cx - fm1.stringWidth(totalStr) / 2,
+            g2.drawString(totalStr, cx - fm1.stringWidth(totalStr) / 2,
                     cy + fm1.getAscent() / 2 - 3);
-
             g2.setFont(new Font("SansSerif", Font.PLAIN, smallFontSz));
             FontMetrics fm2 = g2.getFontMetrics();
             String sub = "services";
             g2.setColor(UIConstants.TEXT_MUTED);
-            g2.drawString(sub,
-                    cx - fm2.stringWidth(sub) / 2,
+            g2.drawString(sub, cx - fm2.stringWidth(sub) / 2,
                     cy + fm1.getAscent() / 2 + fm2.getHeight() - 1);
-
             g2.dispose();
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // SHARED UI HELPER METHODS
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
+    // SHARED UI HELPERS
+    // ═══════════════════════════════════════════════════════════════
 
     private JPanel createCard() {
         JPanel card = new JPanel() {
@@ -1981,35 +1622,5 @@ public class CustomerDashboard extends JPanel {
         item.setBorder(new EmptyBorder(8, 20, 8, 30));
         item.setCursor(new Cursor(Cursor.HAND_CURSOR));
         return item;
-    }
-
-    private JPanel makeInvoiceRow(String label, String value, boolean shaded) {
-        JPanel row = new JPanel(new BorderLayout(8, 0));
-        row.setOpaque(true);
-        row.setBackground(shaded ? new Color(245, 246, 248) : Color.WHITE);
-        row.setBorder(new EmptyBorder(6, 4, 6, 4));
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
-        row.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel lbl = new JLabel(label);
-        lbl.setFont(UIConstants.FONT_SMALL);
-        lbl.setForeground(UIConstants.TEXT_MUTED);
-        lbl.setPreferredSize(new Dimension(120, 18));
-
-        JLabel val = new JLabel(value);
-        val.setFont(UIConstants.FONT_SMALL_BOLD);
-        val.setForeground(UIConstants.TEXT_PRIMARY);
-
-        row.add(lbl, BorderLayout.WEST);
-        row.add(val, BorderLayout.CENTER);
-        return row;
-    }
-
-    private JSeparator makeInvoiceSeparator() {
-        JSeparator sep = new JSeparator();
-        sep.setForeground(new Color(220, 222, 228));
-        sep.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1));
-        sep.setAlignmentX(Component.LEFT_ALIGNMENT);
-        return sep;
     }
 }

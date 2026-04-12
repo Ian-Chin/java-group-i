@@ -14,32 +14,32 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.image.BufferedImage;
 import java.io.*;
-import javax.imageio.ImageIO;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.List;
-import util.PdfUtil;
-import java.io.IOException;
-
 
 /**
  * PaymentCollectionPanel — Counter Staff page for collecting payments
  * and generating receipts.
  *
- * Features:
- *   - 3 stat cards: Total Collected, Unpaid Appointments, Today's Collections
- *   - Two views: "All Payments" table and "Unpaid Appointments" table
- *   - Collect Payment: select an unpaid completed appointment, choose method, confirm
- *   - Generate Receipt: click any paid row to view a printable invoice popup
+ * CHANGES IN THIS VERSION:
+ *   1. showReceipt() is now PUBLIC STATIC so that PaymentHistoryPage
+ *      (the customer-side page) can call it to show the SAME invoice
+ *      popup. This means both the staff view and the customer view
+ *      display an identical, consistent receipt.
+ *
+ *      How to call it from PaymentHistoryPage:
+ *        PaymentCollectionPanel.showReceipt(parentComponent, rawPaymentRow, vehicleService, accountService);
+ *
+ *   2. Stat cards now have a coloured left accent bar (like the dashboard screenshot).
  */
 public class PaymentCollectionPanel extends JPanel {
 
-    private final AccountService accountService;
-    private final PaymentService paymentService = new PaymentService();
+    private final AccountService     accountService;
+    private final PaymentService     paymentService     = new PaymentService();
     private final AppointmentService appointmentService = new AppointmentService();
-    private final VehicleService vehicleService = new VehicleService();
+    private final VehicleService     vehicleService     = new VehicleService();
 
     // Stat labels
     private JLabel totalCollectedValue;
@@ -56,25 +56,29 @@ public class PaymentCollectionPanel extends JPanel {
     private JTable unpaidTable;
 
     // Data
-    private List<String[]> allPayments = new ArrayList<>();
+    private List<String[]>   allPayments         = new ArrayList<>();
     private List<Appointment> unpaidAppointments = new ArrayList<>();
 
     // Tab buttons
-    private JButton allPaymentsTabBtn;
-    private JButton unpaidTabBtn;
+    private JButton   allPaymentsTabBtn;
+    private JButton   unpaidTabBtn;
     private CardLayout tableCardLayout;
-    private JPanel tableCardPanel;
+    private JPanel     tableCardPanel;
 
-    // Prices: [0] = Normal Service, [1] = Major Service
+    // Service prices
     private double normalPrice = 50.0;
-    private double majorPrice = 200.0;
+    private double majorPrice  = 200.0;
 
+    // ── Design colours ────────────────────────────────────────────
     private static final Color COLOR_BG     = new Color(245, 246, 250);
     private static final Color COLOR_CARD   = Color.WHITE;
     private static final Color COLOR_BORDER = new Color(225, 228, 235);
-    private static final Color COLOR_TEXT   = new Color(30, 35, 50);
+    private static final Color COLOR_TEXT   = new Color(30,  35,  50);
     private static final Color COLOR_MUTED  = new Color(110, 118, 140);
 
+    // ══════════════════════════════════════════════════════════════
+    // CONSTRUCTOR
+    // ══════════════════════════════════════════════════════════════
     public PaymentCollectionPanel(AccountService accountService) {
         this.accountService = accountService;
         setLayout(new BorderLayout());
@@ -85,13 +89,13 @@ public class PaymentCollectionPanel extends JPanel {
         content.setBackground(COLOR_BG);
         content.setBorder(new EmptyBorder(24, 28, 28, 28));
 
-        // Header
+        // Header subtitle
         JPanel header = new JPanel();
         header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
         header.setOpaque(false);
         header.setBorder(new EmptyBorder(0, 0, 18, 0));
-
-        JLabel subtitle = new JLabel("Manage payment collection for completed appointments. Click any paid row to generate a receipt.");
+        JLabel subtitle = new JLabel(
+            "Manage payment collection for completed appointments. Click any paid row to generate a receipt.");
         subtitle.setFont(new Font("SansSerif", Font.PLAIN, 14));
         subtitle.setForeground(COLOR_MUTED);
         subtitle.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -102,13 +106,11 @@ public class PaymentCollectionPanel extends JPanel {
         JPanel center = new JPanel();
         center.setLayout(new BoxLayout(center, BoxLayout.Y_AXIS));
         center.setOpaque(false);
-
         center.add(buildStatsRow());
         center.add(Box.createVerticalStrut(18));
         center.add(buildTabBar());
         center.add(Box.createVerticalStrut(12));
         center.add(buildTableCards());
-
         content.add(center, BorderLayout.CENTER);
 
         JScrollPane scroll = new JScrollPane(content);
@@ -126,9 +128,12 @@ public class PaymentCollectionPanel extends JPanel {
         refresh();
     }
 
-    // ─── Load prices from prices.txt ────────────────────────────
+    // ─────────────────────────────────────────────────────────────
+    // loadPrices() — reads prices.txt to get service prices
+    // ─────────────────────────────────────────────────────────────
     private void loadPrices() {
-        File file = new File("src" + File.separator + "TxtFile" + File.separator + "prices.txt");
+        File file = new File("src" + File.separator + "TxtFile"
+                             + File.separator + "prices.txt");
         if (!file.exists()) return;
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             String line = reader.readLine();
@@ -136,13 +141,15 @@ public class PaymentCollectionPanel extends JPanel {
                 String[] parts = line.split(",");
                 if (parts.length >= 2) {
                     normalPrice = Double.parseDouble(parts[0].trim());
-                    majorPrice = Double.parseDouble(parts[1].trim());
+                    majorPrice  = Double.parseDouble(parts[1].trim());
                 }
             }
         } catch (Exception ignored) {}
     }
 
-    // ─── Stats row ──────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────
+    // buildStatsRow() — three summary cards with accent bars
+    // ─────────────────────────────────────────────────────────────
     private JPanel buildStatsRow() {
         JPanel row = new JPanel(new GridLayout(1, 3, 14, 0));
         row.setOpaque(false);
@@ -150,41 +157,51 @@ public class PaymentCollectionPanel extends JPanel {
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 110));
 
         totalCollectedValue = makeBigValueLabel("—");
-        totalCollectedSub = makeMutedLabel("from 0 payments");
-        row.add(buildStatCard("Total Collected", totalCollectedValue, totalCollectedSub,
-                new Color(40, 167, 69)));
+        totalCollectedSub   = makeMutedLabel("from 0 payments");
+        row.add(buildStatCard("Total Collected", totalCollectedValue,
+                totalCollectedSub, new Color(40, 167, 69)));
 
         unpaidCountValue = makeBigValueLabel("—");
-        unpaidCountSub = makeMutedLabel("awaiting collection");
-        row.add(buildStatCard("Unpaid Appointments", unpaidCountValue, unpaidCountSub,
-                new Color(255, 165, 0)));
+        unpaidCountSub   = makeMutedLabel("awaiting collection");
+        row.add(buildStatCard("Unpaid Appointments", unpaidCountValue,
+                unpaidCountSub, new Color(255, 165, 0)));
 
         todayCollectedValue = makeBigValueLabel("—");
-        todayCollectedSub = makeMutedLabel("collected today");
-        row.add(buildStatCard("Today's Collections", todayCollectedValue, todayCollectedSub,
-                new Color(80, 110, 230)));
+        todayCollectedSub   = makeMutedLabel("collected today");
+        row.add(buildStatCard("Today's Collections", todayCollectedValue,
+                todayCollectedSub, new Color(80, 110, 230)));
 
         return row;
     }
 
-    private JPanel buildStatCard(String topText, JLabel valueLabel, JLabel subLabel, Color accentColor) {
+    // ─────────────────────────────────────────────────────────────
+    // buildStatCard() — one stat card with a coloured left bar
+    // ─────────────────────────────────────────────────────────────
+    private JPanel buildStatCard(String topText, JLabel valueLabel,
+                                  JLabel subLabel, Color accentColor) {
         JPanel card = new JPanel() {
-            @Override protected void paintComponent(Graphics g) {
+            @Override
+            protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                                    RenderingHints.VALUE_ANTIALIAS_ON);
+                // White rounded background
                 g2.setColor(COLOR_CARD);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14);
+                // Border
                 g2.setColor(COLOR_BORDER);
                 g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 14, 14);
-                // Left accent
+                // Left accent bar — clip to rounded shape first
+                g2.setClip(new java.awt.geom.RoundRectangle2D.Float(
+                    0, 0, getWidth(), getHeight(), 14, 14));
                 g2.setColor(accentColor);
-                g2.fillRoundRect(0, 0, 5, getHeight(), 4, 4);
+                g2.fillRect(0, 0, 4, getHeight());
                 g2.dispose();
             }
         };
         card.setOpaque(false);
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
-        card.setBorder(new EmptyBorder(16, 20, 16, 20));
+        card.setBorder(new EmptyBorder(16, 16, 16, 20));
 
         JLabel topLabel = new JLabel(topText);
         topLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
@@ -202,15 +219,17 @@ public class PaymentCollectionPanel extends JPanel {
         return card;
     }
 
-    // ─── Tab bar ────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────
+    // buildTabBar() — "All Payments" and "Unpaid Appointments" tabs
+    // ─────────────────────────────────────────────────────────────
     private JPanel buildTabBar() {
         JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         bar.setOpaque(false);
         bar.setAlignmentX(Component.LEFT_ALIGNMENT);
         bar.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
 
-        allPaymentsTabBtn = makeTabButton("All Payments", true);
-        unpaidTabBtn = makeTabButton("Unpaid Appointments", false);
+        allPaymentsTabBtn = makeTabButton("All Payments",          true);
+        unpaidTabBtn      = makeTabButton("Unpaid Appointments",   false);
 
         allPaymentsTabBtn.addActionListener(e -> {
             styleTab(allPaymentsTabBtn, true);
@@ -252,20 +271,22 @@ public class PaymentCollectionPanel extends JPanel {
         btn.setOpaque(true);
     }
 
-    // ─── Table cards ────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────
+    // buildTableCards() — CardLayout holding both tables
+    // ─────────────────────────────────────────────────────────────
     private JPanel buildTableCards() {
         tableCardLayout = new CardLayout();
-        tableCardPanel = new JPanel(tableCardLayout);
+        tableCardPanel  = new JPanel(tableCardLayout);
         tableCardPanel.setOpaque(false);
         tableCardPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
         tableCardPanel.add(buildAllPaymentsCard(), "ALL");
-        tableCardPanel.add(buildUnpaidCard(), "UNPAID");
-
+        tableCardPanel.add(buildUnpaidCard(),       "UNPAID");
         return tableCardPanel;
     }
 
-    // ─── All Payments table ─────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────
+    // buildAllPaymentsCard() — table of all paid payments
+    // ─────────────────────────────────────────────────────────────
     private JPanel buildAllPaymentsCard() {
         JPanel card = makeRoundedCard();
         card.setLayout(new BorderLayout());
@@ -281,9 +302,9 @@ public class PaymentCollectionPanel extends JPanel {
 
         paymentsTable = TableHelper.buildTable(paymentsTableModel);
 
-        // Centre-align all columns except Status
         DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer() {
-            @Override public Component getTableCellRendererComponent(JTable t, Object value,
+            @Override
+            public Component getTableCellRendererComponent(JTable t, Object value,
                     boolean isSelected, boolean hasFocus, int row, int col) {
                 super.getTableCellRendererComponent(t, value, isSelected, hasFocus, row, col);
                 setHorizontalAlignment(SwingConstants.CENTER);
@@ -299,7 +320,7 @@ public class PaymentCollectionPanel extends JPanel {
             paymentsTable.getColumnModel().getColumn(i).setCellRenderer(centerRenderer);
         }
 
-        // Status badge renderer
+        // Status badge
         paymentsTable.getColumnModel().getColumn(7).setCellRenderer(
             (t, value, isSelected, hasFocus, row, col) -> {
                 JLabel badge = new JLabel(value != null ? value.toString() : "");
@@ -323,7 +344,7 @@ public class PaymentCollectionPanel extends JPanel {
             paymentsTable.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
         }
 
-        // Click row to generate receipt
+        // Click row → show receipt via the private showReceipt() method
         paymentsTable.addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) {
                 int row = paymentsTable.getSelectedRow();
@@ -354,11 +375,13 @@ public class PaymentCollectionPanel extends JPanel {
         hint.setBorder(new EmptyBorder(10, 16, 12, 16));
 
         card.add(scroll, BorderLayout.CENTER);
-        card.add(hint, BorderLayout.SOUTH);
+        card.add(hint,   BorderLayout.SOUTH);
         return card;
     }
 
-    // ─── Unpaid Appointments table ──────────────────────────────
+    // ─────────────────────────────────────────────────────────────
+    // buildUnpaidCard() — table of unpaid completed appointments
+    // ─────────────────────────────────────────────────────────────
     private JPanel buildUnpaidCard() {
         JPanel card = makeRoundedCard();
         card.setLayout(new BorderLayout());
@@ -374,9 +397,9 @@ public class PaymentCollectionPanel extends JPanel {
 
         unpaidTable = TableHelper.buildTable(unpaidTableModel);
 
-        // Centre-align columns 0-5
         DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer() {
-            @Override public Component getTableCellRendererComponent(JTable t, Object value,
+            @Override
+            public Component getTableCellRendererComponent(JTable t, Object value,
                     boolean isSelected, boolean hasFocus, int row, int col) {
                 super.getTableCellRendererComponent(t, value, isSelected, hasFocus, row, col);
                 setHorizontalAlignment(SwingConstants.CENTER);
@@ -392,7 +415,7 @@ public class PaymentCollectionPanel extends JPanel {
             unpaidTable.getColumnModel().getColumn(i).setCellRenderer(centerRenderer);
         }
 
-        // Action column: "Collect" button renderer + editor
+        // "Collect" button renderer
         unpaidTable.getColumnModel().getColumn(6).setCellRenderer(
             (t, value, isSelected, hasFocus, row, col) -> {
                 JButton btn = new JButton("Collect");
@@ -410,7 +433,6 @@ public class PaymentCollectionPanel extends JPanel {
             }
         );
 
-        // Button editor for the Action column
         unpaidTable.getColumnModel().getColumn(6).setCellEditor(new CollectButtonEditor());
 
         int[] widths = { 120, 130, 140, 120, 110, 100, 100 };
@@ -430,7 +452,9 @@ public class PaymentCollectionPanel extends JPanel {
         return card;
     }
 
-    // ─── Collect Button Editor ──────────────────────────────────
+    // ─────────────────────────────────────────────────────────────
+    // CollectButtonEditor — the clickable "Collect" button in the table
+    // ─────────────────────────────────────────────────────────────
     private class CollectButtonEditor extends DefaultCellEditor {
         private JButton button;
         private int currentRow;
@@ -465,16 +489,17 @@ public class PaymentCollectionPanel extends JPanel {
         @Override public Object getCellEditorValue() { return "Collect"; }
     }
 
-    // ─── Refresh all data ───────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────
+    // refresh() — reloads all data from files and updates the UI
+    // ─────────────────────────────────────────────────────────────
     public void refresh() {
         loadPrices();
         allPayments = paymentService.getAllPayments();
 
-        // Find completed appointments with no payment
         List<Appointment> allAppts = appointmentService.getAll();
         Set<String> paidApptIds = new HashSet<>();
         for (String[] p : allPayments) {
-            paidApptIds.add(p[3].trim()); // appointmentID
+            paidApptIds.add(p[3].trim());
         }
 
         unpaidAppointments = new ArrayList<>();
@@ -490,12 +515,11 @@ public class PaymentCollectionPanel extends JPanel {
     }
 
     private void updateStats() {
-        // Total collected
         double totalCollected = 0;
-        int paidCount = 0;
-        String today = LocalDate.now().toString();
-        double todayTotal = 0;
-        int todayCount = 0;
+        int    paidCount      = 0;
+        String today          = LocalDate.now().toString();
+        double todayTotal     = 0;
+        int    todayCount     = 0;
 
         for (String[] p : allPayments) {
             double amount = 0;
@@ -512,10 +536,8 @@ public class PaymentCollectionPanel extends JPanel {
 
         totalCollectedValue.setText(String.format("RM %.2f", totalCollected));
         totalCollectedSub.setText("from " + paidCount + " payment" + (paidCount != 1 ? "s" : ""));
-
         unpaidCountValue.setText(String.valueOf(unpaidAppointments.size()));
         unpaidCountSub.setText("awaiting collection");
-
         todayCollectedValue.setText(String.format("RM %.2f", todayTotal));
         todayCollectedSub.setText(todayCount + " collected today");
     }
@@ -531,16 +553,9 @@ public class PaymentCollectionPanel extends JPanel {
             } catch (NumberFormatException e) {
                 amountDisplay = p[5].trim();
             }
-
             paymentsTableModel.addRow(new Object[]{
-                p[0].trim(),       // Payment ID
-                customerName,      // Customer
-                p[3].trim(),       // Appointment ID
-                vehicleLabel,      // Vehicle
-                amountDisplay,     // Amount
-                p[6].trim(),       // Date
-                p[7].trim(),       // Method
-                p[8].trim()        // Status
+                p[0].trim(), customerName, p[3].trim(),
+                vehicleLabel, amountDisplay, p[6].trim(), p[7].trim(), p[8].trim()
             });
         }
     }
@@ -550,25 +565,22 @@ public class PaymentCollectionPanel extends JPanel {
         for (Appointment a : unpaidAppointments) {
             String customerName = resolveCustomerName(a.getCustomerId());
             String vehicleLabel = vehicleService.getVehiclePlate(a.getVehicleId());
-            double amount = getServicePrice(a.getServiceType());
-
+            double amount       = getServicePrice(a.getServiceType());
             unpaidTableModel.addRow(new Object[]{
-                a.getId(),                              // Appointment ID
-                customerName,                           // Customer
-                vehicleLabel,                           // Vehicle
-                a.getServiceType(),                     // Service Type
-                a.getDateTime().split(" ")[0],           // Date
-                String.format("%.2f", amount),          // Amount
-                "Collect"                               // Action
+                a.getId(), customerName, vehicleLabel,
+                a.getServiceType(), a.getDateTime().split(" ")[0],
+                String.format("%.2f", amount), "Collect"
             });
         }
     }
 
-    // ─── Collect Payment Dialog ─────────────────────────────────
+    // ─────────────────────────────────────────────────────────────
+    // showCollectPaymentDialog() — popup for the staff to collect payment
+    // ─────────────────────────────────────────────────────────────
     private void showCollectPaymentDialog(Appointment appt) {
         String customerName = resolveCustomerName(appt.getCustomerId());
         String vehicleLabel = vehicleService.getVehiclePlate(appt.getVehicleId());
-        double amount = getServicePrice(appt.getServiceType());
+        double amount       = getServicePrice(appt.getServiceType());
 
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
@@ -576,7 +588,6 @@ public class PaymentCollectionPanel extends JPanel {
         panel.setBorder(new EmptyBorder(20, 28, 20, 28));
         panel.setPreferredSize(new Dimension(400, 360));
 
-        // Title
         JLabel title = new JLabel("Collect Payment");
         title.setFont(new Font("SansSerif", Font.BOLD, 18));
         title.setForeground(COLOR_TEXT);
@@ -584,26 +595,23 @@ public class PaymentCollectionPanel extends JPanel {
         panel.add(title);
         panel.add(Box.createVerticalStrut(16));
 
-        // Details
         panel.add(makeDetailRow("Appointment", appt.getId()));
         panel.add(Box.createVerticalStrut(8));
-        panel.add(makeDetailRow("Customer", customerName));
+        panel.add(makeDetailRow("Customer",    customerName));
         panel.add(Box.createVerticalStrut(8));
-        panel.add(makeDetailRow("Vehicle", vehicleLabel));
+        panel.add(makeDetailRow("Vehicle",     vehicleLabel));
         panel.add(Box.createVerticalStrut(8));
-        panel.add(makeDetailRow("Service", appt.getServiceType()));
+        panel.add(makeDetailRow("Service",     appt.getServiceType()));
         panel.add(Box.createVerticalStrut(8));
-        panel.add(makeDetailRow("Date", appt.getDateTime()));
+        panel.add(makeDetailRow("Date",        appt.getDateTime()));
         panel.add(Box.createVerticalStrut(12));
 
-        // Separator
         JSeparator sep = new JSeparator();
         sep.setForeground(COLOR_BORDER);
         sep.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1));
         panel.add(sep);
         panel.add(Box.createVerticalStrut(12));
 
-        // Amount
         JPanel amountRow = new JPanel(new BorderLayout());
         amountRow.setOpaque(false);
         amountRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
@@ -619,7 +627,6 @@ public class PaymentCollectionPanel extends JPanel {
         panel.add(amountRow);
         panel.add(Box.createVerticalStrut(16));
 
-        // Payment method
         JLabel methodLabel = new JLabel("Payment Method");
         methodLabel.setFont(new Font("SansSerif", Font.BOLD, 13));
         methodLabel.setForeground(COLOR_TEXT);
@@ -642,26 +649,16 @@ public class PaymentCollectionPanel extends JPanel {
         );
 
         if (result == JOptionPane.OK_OPTION) {
-            String method = (String) methodCombo.getSelectedItem();
+            String method    = (String) methodCombo.getSelectedItem();
             String amountStr = String.format("%.2f", amount);
-
-            boolean success = paymentService.savePayment(
-                appt.getCustomerId(),
-                appt.getId(),
-                appt.getVehicleId(),
-                amountStr,
-                method
-            );
-
+            boolean success  = paymentService.savePayment(
+                appt.getCustomerId(), appt.getId(), appt.getVehicleId(), amountStr, method);
             if (success) {
                 JOptionPane.showMessageDialog(
                     SwingUtilities.getWindowAncestor(this),
-                    "Payment collected successfully!\nPayment ID: " + paymentService.generateNextPaymentId().replace("PY", "PY" + ""),
-                    "Success",
-                    JOptionPane.INFORMATION_MESSAGE
-                );
+                    "Payment collected successfully!",
+                    "Success", JOptionPane.INFORMATION_MESSAGE);
                 refresh();
-                // Switch to All Payments tab to show the new payment
                 styleTab(allPaymentsTabBtn, true);
                 styleTab(unpaidTabBtn, false);
                 tableCardLayout.show(tableCardPanel, "ALL");
@@ -669,232 +666,36 @@ public class PaymentCollectionPanel extends JPanel {
                 JOptionPane.showMessageDialog(
                     SwingUtilities.getWindowAncestor(this),
                     "Failed to save payment. Please try again.",
-                    "Error",
-                    JOptionPane.ERROR_MESSAGE
-                );
+                    "Error", JOptionPane.ERROR_MESSAGE);
             }
         }
     }
 
-    // ─── Generate Receipt (Invoice popup) ───────────────────────
+    // ═══════════════════════════════════════════════════════════════
+    // showReceipt() — PRIVATE
+    //
+    // Called when the staff clicks a row in the All Payments table.
+    // Delegates to ReceiptUtil.showReceipt() which lives in the same
+    // "view" package, so it can access the package-private method.
+    //
+    // WHY PRIVATE?
+    //   Receipt data is sensitive financial information. Keeping this
+    //   method private means no code outside this class can trigger a
+    //   receipt display through PaymentCollectionPanel. The shared
+    //   receipt logic lives in ReceiptUtil, not here.
+    // ═══════════════════════════════════════════════════════════════
     private void showReceipt(String[] payment) {
-        String paymentId     = payment[0].trim();
-        String customerId    = payment[1].trim();
-        String shId          = payment[2].trim();
-        String appointmentId = payment[3].trim();
-        String vehicleId     = payment[4].trim();
-        String amount        = payment[5].trim();
-        String date          = payment[6].trim();
-        String method        = payment[7].trim();
-        String status        = payment[8].trim();
-
-        String customerName = resolveCustomerName(customerId);
-        String vehicleLabel = vehicleService.getVehiclePlate(vehicleId);
-
-        String amountDisplay;
-        try {
-            amountDisplay = String.format("RM %.2f", Double.parseDouble(amount));
-        } catch (NumberFormatException e) {
-            amountDisplay = "RM " + amount;
-        }
-
-        // Receipt panel
-        JPanel receipt = new JPanel();
-        receipt.setLayout(new BoxLayout(receipt, BoxLayout.Y_AXIS));
-        receipt.setBackground(Color.WHITE);
-        receipt.setBorder(new EmptyBorder(28, 32, 28, 32));
-        receipt.setPreferredSize(new Dimension(460, 660));
-
-        // Logo
-        try {
-            java.awt.image.BufferedImage logoImg = ImageIO.read(new File("src" + File.separator + "Image" + File.separator + "apu-logo.png"));
-            if (logoImg != null) {
-                int logoWidth = 120;
-                int logoHeight = (int) ((double) logoImg.getHeight() / logoImg.getWidth() * logoWidth);
-                java.awt.Image scaled = logoImg.getScaledInstance(logoWidth, logoHeight, java.awt.Image.SCALE_SMOOTH);
-                JLabel logoLabel = new JLabel(new ImageIcon(scaled));
-                logoLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-                receipt.add(logoLabel);
-                receipt.add(Box.createVerticalStrut(10));
-            }
-        } catch (Exception ignored) {}
-
-        // Header
-        JLabel shopName = new JLabel("APU Automotive Service Centre");
-        shopName.setFont(new Font("SansSerif", Font.BOLD, 16));
-        shopName.setForeground(new Color(80, 110, 230));
-        shopName.setAlignmentX(Component.LEFT_ALIGNMENT);
-        receipt.add(shopName);
-        receipt.add(Box.createVerticalStrut(4));
-
-        JLabel receiptTitle = new JLabel("Official Payment Receipt");
-        receiptTitle.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        receiptTitle.setForeground(COLOR_MUTED);
-        receiptTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
-        receipt.add(receiptTitle);
-        receipt.add(Box.createVerticalStrut(18));
-
-        // Divider
-        receipt.add(makeDivider());
-        receipt.add(Box.createVerticalStrut(16));
-
-        // Details
-        receipt.add(makeReceiptRow("Receipt No.", paymentId));
-        receipt.add(Box.createVerticalStrut(10));
-        receipt.add(makeReceiptRow("Customer", customerName + " (" + customerId + ")"));
-        receipt.add(Box.createVerticalStrut(10));
-        receipt.add(makeReceiptRow("Service History ID", shId));
-        receipt.add(Box.createVerticalStrut(10));
-        receipt.add(makeReceiptRow("Appointment ID", appointmentId));
-        receipt.add(Box.createVerticalStrut(10));
-        receipt.add(makeReceiptRow("Vehicle", vehicleLabel));
-        receipt.add(Box.createVerticalStrut(10));
-        receipt.add(makeReceiptRow("Payment Date", date));
-        receipt.add(Box.createVerticalStrut(10));
-        receipt.add(makeReceiptRow("Payment Method", method));
-        receipt.add(Box.createVerticalStrut(10));
-
-        // Status with badge
-        JPanel statusRow = new JPanel(new BorderLayout());
-        statusRow.setOpaque(false);
-        statusRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
-        statusRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel statusLabel = new JLabel("Status");
-        statusLabel.setFont(new Font("SansSerif", Font.PLAIN, 13));
-        statusLabel.setForeground(COLOR_MUTED);
-        statusLabel.setPreferredSize(new Dimension(160, 22));
-        JLabel statusBadge = new JLabel(status);
-        statusBadge.setFont(new Font("SansSerif", Font.BOLD, 11));
-        statusBadge.setOpaque(true);
-        statusBadge.setBorder(new EmptyBorder(3, 10, 3, 10));
-        statusBadge.setBackground(new Color(220, 248, 232));
-        statusBadge.setForeground(new Color(34, 139, 80));
-        statusRow.add(statusLabel, BorderLayout.WEST);
-        statusRow.add(statusBadge, BorderLayout.CENTER);
-        receipt.add(statusRow);
-        receipt.add(Box.createVerticalStrut(16));
-
-        // Divider
-        receipt.add(makeDivider());
-        receipt.add(Box.createVerticalStrut(16));
-
-        // Total amount
-        JPanel totalRow = new JPanel(new BorderLayout());
-        totalRow.setOpaque(false);
-        totalRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
-        totalRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel totalLabel = new JLabel("Total Amount");
-        totalLabel.setFont(new Font("SansSerif", Font.BOLD, 16));
-        totalLabel.setForeground(COLOR_TEXT);
-        JLabel totalValue = new JLabel(amountDisplay);
-        totalValue.setFont(new Font("SansSerif", Font.BOLD, 16));
-        totalValue.setForeground(new Color(34, 139, 80));
-        totalRow.add(totalLabel, BorderLayout.WEST);
-        totalRow.add(totalValue, BorderLayout.EAST);
-        receipt.add(totalRow);
-        receipt.add(Box.createVerticalStrut(20));
-
-        // Footer
-        JLabel footer = new JLabel("Thank you for your patronage!");
-        footer.setFont(new Font("SansSerif", Font.ITALIC, 12));
-        footer.setForeground(COLOR_MUTED);
-        footer.setAlignmentX(Component.LEFT_ALIGNMENT);
-        receipt.add(footer);
-
-        receipt.add(Box.createVerticalStrut(18));
-
-        // Export PDF button
-        JButton exportPdfBtn = new JButton("Export PDF");
-        exportPdfBtn.setFont(new Font("SansSerif", Font.BOLD, 13));
-        exportPdfBtn.setForeground(Color.WHITE);
-        exportPdfBtn.setBackground(new Color(80, 110, 230));
-        exportPdfBtn.setBorderPainted(false);
-        exportPdfBtn.setFocusPainted(false);
-        exportPdfBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        exportPdfBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        exportPdfBtn.setMaximumSize(new Dimension(140, 36));
-
-        exportPdfBtn.addActionListener(e -> {
-            JFileChooser fileChooser = new JFileChooser();
-            fileChooser.setDialogTitle("Save Receipt as PDF");
-            fileChooser.setSelectedFile(new java.io.File("Receipt_" + paymentId + ".pdf"));
-
-            if (fileChooser.showSaveDialog(SwingUtilities.getWindowAncestor(this)) == JFileChooser.APPROVE_OPTION) {
-                String path = fileChooser.getSelectedFile().getAbsolutePath();
-                if (!path.toLowerCase().endsWith(".pdf")) {
-                    path += ".pdf";
-                }
-                try {
-                    // Hide the button so it doesn't appear in the PDF
-                    exportPdfBtn.setVisible(false);
-                    receipt.revalidate();
-                    receipt.repaint();
-                    // Paint after hiding
-                    exportReceiptToPdf(receipt, path);
-                    // Show the button again
-                    exportPdfBtn.setVisible(true);
-                    receipt.revalidate();
-                    receipt.repaint();
-
-                    // Auto-open the exported PDF
-                    File pdfFile = new File(path);
-                    if (Desktop.isDesktopSupported()) {
-                        Desktop.getDesktop().open(pdfFile);
-                    }
-
-                    JOptionPane.showMessageDialog(
-                        SwingUtilities.getWindowAncestor(this),
-                        "Receipt exported successfully!\n" + path,
-                        "Success",
-                        JOptionPane.INFORMATION_MESSAGE
-                    );
-                } catch (Exception ex) {
-                    exportPdfBtn.setVisible(true);
-                    ex.printStackTrace();
-                    JOptionPane.showMessageDialog(
-                        SwingUtilities.getWindowAncestor(this),
-                        "Error exporting PDF: " + ex.getMessage(),
-                        "Error",
-                        JOptionPane.ERROR_MESSAGE
-                    );
-                }
-            }
-        });
-
-        receipt.add(exportPdfBtn);
-
-        JOptionPane.showMessageDialog(
+        ReceiptUtil.showReceipt(
             SwingUtilities.getWindowAncestor(this),
-            receipt,
-            "Receipt — " + paymentId,
-            JOptionPane.PLAIN_MESSAGE
+            payment,
+            vehicleService,
+            accountService
         );
     }
 
-    // ─── Helpers ────────────────────────────────────────────────
-
-    private void exportReceiptToPdf(JPanel panelToExport, String path) throws Exception {
-        int w = panelToExport.getWidth();
-        int h = panelToExport.getHeight();
-        if (w == 0 || h == 0) {
-            w = panelToExport.getPreferredSize().width;
-            h = panelToExport.getPreferredSize().height;
-            panelToExport.setSize(w, h);
-            panelToExport.doLayout();
-        }
-
-        BufferedImage image = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g2 = image.createGraphics();
-        panelToExport.paint(g2);
-        g2.dispose();
-
-        // Use PdfUtil to write the image as a one-page PDF
-        try {
-            PdfUtil.writeImageAsPdf(image, new File(path));
-        } catch (IOException ioe) {
-            throw ioe;
-        }
-    }
+    // ─────────────────────────────────────────────────────────────
+    // Instance helper methods (only used inside this class)
+    // ─────────────────────────────────────────────────────────────
 
     private double getServicePrice(String serviceType) {
         if ("Major Service".equalsIgnoreCase(serviceType)) return majorPrice;
@@ -907,7 +708,7 @@ public class PaymentCollectionPanel extends JPanel {
                 return u.getName();
             }
         }
-        return customerId;
+        return customerId; // fallback: show raw ID if not found
     }
 
     private JPanel makeDetailRow(String label, String value) {
@@ -915,53 +716,25 @@ public class PaymentCollectionPanel extends JPanel {
         row.setOpaque(false);
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
-
         JLabel lbl = new JLabel(label);
         lbl.setFont(new Font("SansSerif", Font.PLAIN, 13));
         lbl.setForeground(COLOR_MUTED);
         lbl.setPreferredSize(new Dimension(120, 20));
-
         JLabel val = new JLabel(value);
         val.setFont(new Font("SansSerif", Font.BOLD, 13));
         val.setForeground(COLOR_TEXT);
-
         row.add(lbl, BorderLayout.WEST);
         row.add(val, BorderLayout.CENTER);
         return row;
-    }
-
-    private JPanel makeReceiptRow(String label, String value) {
-        JPanel row = new JPanel(new BorderLayout());
-        row.setOpaque(false);
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
-        row.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel lbl = new JLabel(label);
-        lbl.setFont(new Font("SansSerif", Font.PLAIN, 13));
-        lbl.setForeground(COLOR_MUTED);
-        lbl.setPreferredSize(new Dimension(160, 22));
-
-        JLabel val = new JLabel(value);
-        val.setFont(new Font("SansSerif", Font.BOLD, 13));
-        val.setForeground(COLOR_TEXT);
-
-        row.add(lbl, BorderLayout.WEST);
-        row.add(val, BorderLayout.CENTER);
-        return row;
-    }
-
-    private JSeparator makeDivider() {
-        JSeparator sep = new JSeparator();
-        sep.setForeground(COLOR_BORDER);
-        sep.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1));
-        return sep;
     }
 
     private JPanel makeRoundedCard() {
         JPanel card = new JPanel() {
-            @Override protected void paintComponent(Graphics g) {
+            @Override
+            protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                                    RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setColor(COLOR_CARD);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14);
                 g2.setColor(COLOR_BORDER);

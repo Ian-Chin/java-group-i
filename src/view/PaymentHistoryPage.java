@@ -1,67 +1,47 @@
 package view;
 
+import model.AccountService;
 import model.VehicleService;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * PaymentHistoryPage
- * ──────────────────
- * Shows the logged-in customer's payment history.
  *
- * This page reads payments.txt DIRECTLY — no PaymentService needed.
- * This fixes the "model.PaymentService cannot be resolved" error.
- *
- * payments.txt format (9 columns, comma-separated):
- *   [0] paymentID      [1] customerID      [2] serviceHistoryID
- *   [3] appointmentID  [4] vehicleID       [5] amount
- *   [6] paymentDate    [7] method          [8] status
- *
- * Example line:
- *   PY1,C1,SH1,AP1,V1,120.00,2026-03-05,Cash,Paid
- *
- * Table columns shown:
- *   Payment ID | SH ID | Appointment ID | Vehicle Type |
- *   Car Plate  | Amount (RM) | Date | Method | Status
- *
- * Features:
- *   - 3 stat cards: Total Paid, Payments Made, Preferred Method
- *   - ALL table columns are centre-aligned
- *   - Vertical scrollbar appears when rows overflow
- *   - Clickable rows → invoice popup
- *   - Empty-state card when no records found
+ * CHANGE FROM PREVIOUS VERSION:
+ *   - Removed the CardLayout / empty-state panel entirely.
+ *   - The page now ALWAYS shows the full layout:
+ *       three stat cards (showing "0" / "RM 0.00" / "—" when no data)
+ *       + the payments table (showing no rows when there is no data).
+ *   - This matches the Dashboard behaviour where 0 values are
+ *     displayed instead of a special "no data" card.
  */
 public class PaymentHistoryPage extends JPanel {
 
-    // ── Path to the payments data file ────────────────────────────
+    // ── File path and expected column count ───────────────────────
     private static final String PAYMENTS_FILE =
-            "src" + File.separator + "TxtFile" + File.separator + "payments.txt";
-
-    // ── Number of columns expected per line in payments.txt ───────
+        "src" + File.separator + "TxtFile" + File.separator + "payments.txt";
     private static final int EXPECTED_COLUMNS = 9;
 
-    // ── VehicleService: resolves vehicle type and car plate ───────
+    // ── Data-layer services ───────────────────────────────────────
     private final VehicleService vehicleService = new VehicleService();
+    private final AccountService accountService = new AccountService();
 
-    // ── CardLayout switches between "TABLE" and "EMPTY" views ─────
-    private final CardLayout cardLayout  = new CardLayout();
-    private final JPanel     switchPanel = new JPanel(cardLayout);
-
-    // ── Stat card value labels — updated in refresh() ─────────────
+    // ── Stat card value labels — updated by refresh() ─────────────
     private JLabel totalPaidValueLabel;
     private JLabel totalPaidSubLabel;
     private JLabel paymentCountValueLabel;
@@ -69,43 +49,43 @@ public class PaymentHistoryPage extends JPanel {
     private JLabel prefMethodValueLabel;
     private JLabel prefMethodSubLabel;
 
-    // ── Table model — rows are added in refresh() ─────────────────
+    // ── Table model, sorter, search and sort controls ─────────────
     private DefaultTableModel tableModel;
+    private TableRowSorter<DefaultTableModel> rowSorter;
+    private JTextField        searchField;
+    private JComboBox<String> sortCombo;
 
-    // ── Raw payment rows for the current user ─────────────────────
-    // Stored so the row-click listener can look up the full data.
+    // ── Raw payment rows kept in memory for the invoice popup ─────
     private List<String[]> currentRows = new ArrayList<>();
 
-    // ── Design colours (match ServiceHistoryPage exactly) ─────────
+    // ── Design colours ────────────────────────────────────────────
     private static final Color COLOR_BG     = new Color(245, 246, 250);
     private static final Color COLOR_CARD   = Color.WHITE;
     private static final Color COLOR_BORDER = new Color(225, 228, 235);
     private static final Color COLOR_TEXT   = new Color(30,  35,  50);
     private static final Color COLOR_MUTED  = new Color(110, 118, 140);
 
-    // ══════════════════════════════════════════════════════════════
+    // Left accent bar colours for each stat card
+    private static final Color ACCENT_GREEN  = new Color(34,  165,  90);
+    private static final Color ACCENT_BLUE   = new Color(80,  110, 230);
+    private static final Color ACCENT_PURPLE = new Color(139,  92, 246);
+
+    // ═══════════════════════════════════════════════════════════════
     // CONSTRUCTOR
-    // Builds the page skeleton once. refresh() fills the data.
-    // ══════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     public PaymentHistoryPage() {
         setLayout(new BorderLayout());
         setBackground(COLOR_BG);
 
-        // Main content panel with padding around all edges
         JPanel pageContent = new JPanel(new BorderLayout());
         pageContent.setBackground(COLOR_BG);
         pageContent.setBorder(new EmptyBorder(24, 28, 28, 28));
 
-        // Page subtitle at the top
         pageContent.add(buildPageHeader(), BorderLayout.NORTH);
 
-        // Switch between data view and empty-state view
-        switchPanel.setOpaque(false);
-        switchPanel.add(buildDataPanel(),  "TABLE");
-        switchPanel.add(buildEmptyPanel(), "EMPTY");
-        pageContent.add(switchPanel, BorderLayout.CENTER);
+        // The data panel is always shown — no switching between panels
+        pageContent.add(buildDataPanel(), BorderLayout.CENTER);
 
-        // Outer scroll pane so the whole page can scroll on small windows
         JScrollPane outerScroll = new JScrollPane(pageContent);
         outerScroll.setBorder(null);
         outerScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
@@ -116,8 +96,7 @@ public class PaymentHistoryPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // buildPageHeader()
-    // Small muted subtitle shown below the page title.
+    // buildPageHeader() — subtitle label
     // ─────────────────────────────────────────────────────────────
     private JPanel buildPageHeader() {
         JPanel header = new JPanel();
@@ -126,7 +105,7 @@ public class PaymentHistoryPage extends JPanel {
         header.setBorder(new EmptyBorder(0, 0, 18, 0));
 
         JLabel subtitle = new JLabel(
-            "Your payment transactions are listed below. Click any row to view the invoice.");
+                "Your payment transactions are listed below. Click any row to view the invoice.");
         subtitle.setFont(new Font("SansSerif", Font.PLAIN, 14));
         subtitle.setForeground(COLOR_MUTED);
         subtitle.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -136,8 +115,8 @@ public class PaymentHistoryPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // buildDataPanel()
-    // The "TABLE" card: 3 stat cards on top + table card below.
+    // buildDataPanel() — stat cards on top + table below
+    // Always visible, whether or not there is data.
     // ─────────────────────────────────────────────────────────────
     private JPanel buildDataPanel() {
         JPanel panel = new JPanel(new BorderLayout());
@@ -147,56 +126,69 @@ public class PaymentHistoryPage extends JPanel {
         statsRow.setBorder(new EmptyBorder(0, 0, 18, 0));
         panel.add(statsRow,         BorderLayout.NORTH);
         panel.add(buildTableCard(), BorderLayout.CENTER);
+
         return panel;
     }
 
     // ─────────────────────────────────────────────────────────────
-    // buildStatsRow()
-    // Three summary cards placed side by side.
+    // buildStatsRow() — three summary stat cards side by side
+    //
+    // Labels are stored in instance fields so refresh() can
+    // update them later with real data.
     // ─────────────────────────────────────────────────────────────
     private JPanel buildStatsRow() {
         JPanel row = new JPanel(new GridLayout(1, 3, 14, 0));
         row.setOpaque(false);
 
-        // Card 1: Total amount paid (RM)
-        totalPaidValueLabel = makeBigValueLabel("—");
+        // Card 1: Total amount paid — green bar
+        totalPaidValueLabel = makeBigValueLabel("RM 0.00");
         totalPaidSubLabel   = makeMutedLabel("across 0 payments");
-        row.add(buildStatCard("Total paid", totalPaidValueLabel, totalPaidSubLabel));
+        row.add(buildStatCard("Total paid", totalPaidValueLabel,
+                totalPaidSubLabel, ACCENT_GREEN));
 
-        // Card 2: Number of payment records
-        paymentCountValueLabel = makeBigValueLabel("—");
-        paymentCountSubLabel   = makeMutedLabel("—");
-        row.add(buildStatCard("Payments made", paymentCountValueLabel, paymentCountSubLabel));
+        // Card 2: Number of payment records — blue bar
+        paymentCountValueLabel = makeBigValueLabel("0");
+        paymentCountSubLabel   = makeMutedLabel("no records yet");
+        row.add(buildStatCard("Payments made", paymentCountValueLabel,
+                paymentCountSubLabel, ACCENT_BLUE));
 
-        // Card 3: Most-used payment method
+        // Card 3: Most-used payment method — purple bar
         prefMethodValueLabel = makeBigValueLabel("—");
         prefMethodSubLabel   = makeMutedLabel("used most frequently");
-        row.add(buildStatCard("Preferred method", prefMethodValueLabel, prefMethodSubLabel));
+        row.add(buildStatCard("Preferred method", prefMethodValueLabel,
+                prefMethodSubLabel, ACCENT_PURPLE));
 
         return row;
     }
 
     // ─────────────────────────────────────────────────────────────
-    // buildStatCard()
-    // One rounded white card: top label + big value + small sub-label.
+    // buildStatCard() — one white rounded card with coloured left bar
     // ─────────────────────────────────────────────────────────────
-    private JPanel buildStatCard(String topText, JLabel valueLabel, JLabel subLabel) {
+    private JPanel buildStatCard(String topText, JLabel valueLabel,
+                                  JLabel subLabel, Color accentColor) {
         JPanel card = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                                    RenderingHints.VALUE_ANTIALIAS_ON);
+                        RenderingHints.VALUE_ANTIALIAS_ON);
+                // White rounded background
                 g2.setColor(COLOR_CARD);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14);
+                // Grey border
                 g2.setColor(COLOR_BORDER);
                 g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 14, 14);
+                // Coloured left bar clipped to rounded corners
+                g2.setClip(new java.awt.geom.RoundRectangle2D.Float(
+                        0, 0, getWidth(), getHeight(), 14, 14));
+                g2.setColor(accentColor);
+                g2.fillRect(0, 0, 4, getHeight());
                 g2.dispose();
             }
         };
         card.setOpaque(false);
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
-        card.setBorder(new EmptyBorder(18, 20, 18, 20));
+        card.setBorder(new EmptyBorder(18, 16, 18, 20));
 
         JLabel topLabel = new JLabel(topText);
         topLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
@@ -211,13 +203,12 @@ public class PaymentHistoryPage extends JPanel {
         card.add(valueLabel);
         card.add(Box.createVerticalStrut(4));
         card.add(subLabel);
+
         return card;
     }
 
     // ─────────────────────────────────────────────────────────────
-    // buildTableCard()
-    // Rounded white card holding the payments table.
-    // Vertical scrollbar appears when rows overflow the fixed height.
+    // buildTableCard() — white card with search/sort bar + table
     // ─────────────────────────────────────────────────────────────
     private JPanel buildTableCard() {
         JPanel card = new JPanel() {
@@ -225,7 +216,7 @@ public class PaymentHistoryPage extends JPanel {
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                                    RenderingHints.VALUE_ANTIALIAS_ON);
+                        RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setColor(COLOR_CARD);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14);
                 g2.setColor(COLOR_BORDER);
@@ -236,49 +227,49 @@ public class PaymentHistoryPage extends JPanel {
         card.setOpaque(false);
         card.setLayout(new BorderLayout());
 
-        // Column headers
+        // Search + sort bar above the table
+        card.add(buildSearchSortBar(), BorderLayout.NORTH);
+
+        // Table column headers
         String[] columns = {
             "Payment ID", "SH ID", "Appointment ID",
             "Vehicle Type", "Car Plate",
             "Amount (RM)", "Date", "Method", "Status"
         };
 
-        // Non-editable table model
         tableModel = new DefaultTableModel(columns, 0) {
             @Override
             public boolean isCellEditable(int row, int col) {
-                return false; // user cannot type inside cells
+                return false;
             }
         };
 
-        // Base table style from the shared helper
         JTable table = TableHelper.buildTable(tableModel);
 
-        // ── Centre-align columns 0 to 7 ───────────────────────────
-        // This renderer centres text AND applies alternating row colours.
+        // Row sorter enables search filtering and column sorting
+        rowSorter = new TableRowSorter<>(tableModel);
+        table.setRowSorter(rowSorter);
+
+        // Centre-align columns 0 to 7
         DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer() {
             @Override
             public Component getTableCellRendererComponent(JTable t, Object value,
                     boolean isSelected, boolean hasFocus, int row, int col) {
-                super.getTableCellRendererComponent(
-                        t, value, isSelected, hasFocus, row, col);
-                setHorizontalAlignment(SwingConstants.CENTER); // ← centre the text
-                setBorder(new EmptyBorder(0, 10, 0, 10));      // left/right padding
+                super.getTableCellRendererComponent(t, value, isSelected, hasFocus, row, col);
+                setHorizontalAlignment(SwingConstants.CENTER);
+                setBorder(new EmptyBorder(0, 10, 0, 10));
                 setFont(new Font("SansSerif", Font.PLAIN, 13));
                 if (!isSelected) {
-                    // Alternate white and very-light-grey rows
                     setBackground(row % 2 == 0 ? Color.WHITE : new Color(248, 249, 253));
                 }
                 return this;
             }
         };
-
-        // Apply centre renderer to every column except the last (Status)
         for (int i = 0; i <= 7; i++) {
             table.getColumnModel().getColumn(i).setCellRenderer(centerRenderer);
         }
 
-        // ── Column 8 — Status: coloured badge, centred ────────────
+        // Status column (index 8) — coloured badge
         table.getColumnModel().getColumn(8).setCellRenderer(
             (t, value, isSelected, hasFocus, row, col) -> {
                 JLabel badge = new JLabel(value != null ? value.toString() : "");
@@ -302,7 +293,6 @@ public class PaymentHistoryPage extends JPanel {
                         badge.setForeground(COLOR_MUTED);
                 }
 
-                // Wrapper centres the badge vertically inside the cell
                 JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 5));
                 wrapper.setOpaque(true);
                 wrapper.setBackground(row % 2 == 0 ? Color.WHITE : new Color(248, 249, 253));
@@ -314,37 +304,43 @@ public class PaymentHistoryPage extends JPanel {
             }
         );
 
-        // ── Preferred column widths ────────────────────────────────
+        // Column widths
         int[] widths = { 90, 70, 120, 110, 100, 100, 100, 90, 90 };
         for (int i = 0; i < widths.length; i++) {
             table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
         }
 
-        // ── Row click → open invoice popup ────────────────────────
-        table.addMouseListener(new MouseAdapter() {
+        // Row click → show receipt popup
+        table.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
-            public void mouseClicked(MouseEvent e) {
-                int selectedRow = table.getSelectedRow();
-                if (selectedRow >= 0 && selectedRow < currentRows.size()) {
-                    showInvoicePopup(currentRows.get(selectedRow));
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                int viewRow = table.getSelectedRow();
+                if (viewRow < 0) return;
+                // Convert visible row index to model row index
+                // (needed because sorting may have reordered rows)
+                int modelRow = table.convertRowIndexToModel(viewRow);
+                if (modelRow >= 0 && modelRow < currentRows.size()) {
+                    ReceiptUtil.showReceipt(
+                        SwingUtilities.getWindowAncestor(PaymentHistoryPage.this),
+                        currentRows.get(modelRow),
+                        vehicleService,
+                        accountService
+                    );
                 }
             }
         });
 
-        // Change cursor to hand pointer when hovering over rows
-        table.addMouseMotionListener(new MouseAdapter() {
+        // Show hand cursor when hovering over a row
+        table.addMouseMotionListener(new java.awt.event.MouseAdapter() {
             @Override
-            public void mouseMoved(MouseEvent e) {
+            public void mouseMoved(java.awt.event.MouseEvent e) {
                 int row = table.rowAtPoint(e.getPoint());
-                if (row >= 0) {
-                    table.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-                } else {
-                    table.setCursor(Cursor.getDefaultCursor());
-                }
+                table.setCursor(row >= 0
+                        ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                        : Cursor.getDefaultCursor());
             }
         });
 
-        // ── Scroll pane — vertical scrollbar appears when rows overflow ──
         JScrollPane tableScroll = new JScrollPane(table);
         tableScroll.setBorder(null);
         tableScroll.setBackground(COLOR_CARD);
@@ -352,10 +348,10 @@ public class PaymentHistoryPage extends JPanel {
         tableScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         tableScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         tableScroll.getVerticalScrollBar().setUnitIncrement(16);
-        tableScroll.setPreferredSize(new Dimension(0, 420)); // fixed height; scroll handles overflow
+        tableScroll.setPreferredSize(new Dimension(0, 420));
         tableScroll.setMinimumSize(new Dimension(0, 200));
 
-        // Hint text at the bottom of the card
+        // Small hint at the bottom of the card
         JLabel hint = new JLabel("  \uD83D\uDCA1  Click any row to view the full invoice.");
         hint.setFont(new Font("SansSerif", Font.ITALIC, 12));
         hint.setForeground(COLOR_MUTED);
@@ -363,125 +359,229 @@ public class PaymentHistoryPage extends JPanel {
 
         card.add(tableScroll, BorderLayout.CENTER);
         card.add(hint,        BorderLayout.SOUTH);
+
         return card;
     }
 
     // ─────────────────────────────────────────────────────────────
-    // buildEmptyPanel()
-    // Shown when no payment records are found for this customer.
+    // buildSearchSortBar() — search field + sort dropdown above table
     // ─────────────────────────────────────────────────────────────
-    private JPanel buildEmptyPanel() {
-        return ServiceHistoryPage.buildNoDataPanel(
-            "\uD83D\uDCB5",                       // 💵 money icon
-            "No payment records found.",
-            "Your completed payment transactions will appear here."
+    private JPanel buildSearchSortBar() {
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        bar.setOpaque(false);
+
+        // Search field
+        searchField = new JTextField(16);
+        searchField.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        searchField.setBackground(Color.WHITE);
+        searchField.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(COLOR_BORDER, 1, true),
+                new EmptyBorder(4, 10, 4, 10)
+        ));
+        searchField.setPreferredSize(new Dimension(180, 30));
+
+        // Grey placeholder
+        searchField.setForeground(COLOR_MUTED);
+        searchField.setText("Search...");
+        searchField.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusGained(java.awt.event.FocusEvent e) {
+                if (searchField.getText().equals("Search...")) {
+                    searchField.setText("");
+                    searchField.setForeground(COLOR_TEXT);
+                }
+            }
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
+                if (searchField.getText().isEmpty()) {
+                    searchField.setForeground(COLOR_MUTED);
+                    searchField.setText("Search...");
+                }
+            }
+        });
+
+        searchField.getDocument().addDocumentListener(
+            new javax.swing.event.DocumentListener() {
+                @Override public void insertUpdate(javax.swing.event.DocumentEvent e)  { applyFilter(); }
+                @Override public void removeUpdate(javax.swing.event.DocumentEvent e)  { applyFilter(); }
+                @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { applyFilter(); }
+            }
         );
+
+        // Sort dropdown
+        String[] sortOptions = {
+            "Sort by...",
+            "Date (Newest)",
+            "Date (Oldest)",
+            "Amount (High\u2192Low)",
+            "Amount (Low\u2192High)",
+            "Method",
+            "Payment ID"
+        };
+        sortCombo = new JComboBox<>(sortOptions);
+        sortCombo.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        sortCombo.setBackground(Color.WHITE);
+        sortCombo.setForeground(COLOR_TEXT);
+        sortCombo.setPreferredSize(new Dimension(170, 30));
+        sortCombo.setBorder(BorderFactory.createLineBorder(COLOR_BORDER, 1, true));
+        sortCombo.addActionListener(e -> applySort());
+
+        bar.add(searchField);
+        bar.add(sortCombo);
+
+        bar.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, COLOR_BORDER),
+                new EmptyBorder(10, 16, 10, 16)
+        ));
+
+        return bar;
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // refresh()
-    // Called every time the user clicks "Payment History" in the
-    // sidebar. Reads payments.txt and updates the whole UI.
-    // ══════════════════════════════════════════════════════════════
-    public void refresh() {
-        // Step 1: Find who is logged in
-        model.User loggedInUser = getLoggedInUser();
-        if (loggedInUser == null) {
-            cardLayout.show(switchPanel, "EMPTY");
+    // ─────────────────────────────────────────────────────────────
+    // applyFilter() — live keyword search across all columns
+    // ─────────────────────────────────────────────────────────────
+    private void applyFilter() {
+        if (rowSorter == null || searchField == null) return;
+
+        String text = searchField.getText().trim();
+        if (text.equals("Search...") || text.isEmpty()) {
+            rowSorter.setRowFilter(null);
             return;
         }
 
-        String customerId = loggedInUser.getUserId(); // e.g. "C1"
+        try {
+            rowSorter.setRowFilter(RowFilter.regexFilter(
+                    "(?i)" + java.util.regex.Pattern.quote(text)));
+        } catch (java.util.regex.PatternSyntaxException ignored) {}
+    }
 
-        // Step 2: Read ALL rows from payments.txt
-        List<String[]> allPayments = readPaymentsFromFile();
+    // ─────────────────────────────────────────────────────────────
+    // applySort() — sorts table rows by the selected dropdown option
+    // ─────────────────────────────────────────────────────────────
+    private void applySort() {
+        if (rowSorter == null || sortCombo == null) return;
 
-        // Step 3: Keep only rows where column [1] matches this customer's ID
+        int selectedIndex = sortCombo.getSelectedIndex();
+
+        // Column 5 = Amount: use numeric comparator so "120" < "350"
+        rowSorter.setComparator(5, (Comparator<Object>) (a, b) -> {
+            try {
+                return Double.compare(Double.parseDouble(a.toString()),
+                                      Double.parseDouble(b.toString()));
+            } catch (NumberFormatException e) {
+                return a.toString().compareTo(b.toString());
+            }
+        });
+
+        List<RowSorter.SortKey> keys = new ArrayList<>();
+
+        switch (selectedIndex) {
+            case 0: rowSorter.setSortKeys(null); return;
+            case 1: keys.add(new RowSorter.SortKey(6, SortOrder.DESCENDING)); break; // Date newest
+            case 2: keys.add(new RowSorter.SortKey(6, SortOrder.ASCENDING));  break; // Date oldest
+            case 3: keys.add(new RowSorter.SortKey(5, SortOrder.DESCENDING)); break; // Amount high
+            case 4: keys.add(new RowSorter.SortKey(5, SortOrder.ASCENDING));  break; // Amount low
+            case 5: keys.add(new RowSorter.SortKey(7, SortOrder.ASCENDING));  break; // Method A-Z
+            case 6: keys.add(new RowSorter.SortKey(0, SortOrder.ASCENDING));  break; // Payment ID
+            default: rowSorter.setSortKeys(null); return;
+        }
+
+        rowSorter.setSortKeys(keys);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // refresh()
+    //
+    // Loads payment records for the logged-in customer.
+    // If there are no records the stat cards show zero values and
+    // the table is empty — no special empty-state panel is shown.
+    // ═══════════════════════════════════════════════════════════════
+    public void refresh() {
+        model.User loggedInUser = getLoggedInUser();
+
+        if (loggedInUser == null) {
+            resetStatsToZero();
+            tableModel.setRowCount(0);
+            currentRows = new ArrayList<>();
+            return;
+        }
+
+        String customerId      = loggedInUser.getUserId();
+        List<String[]> allPay  = readPaymentsFromFile();
+
+        // Keep only rows that belong to this customer
         currentRows = new ArrayList<>();
-        for (String[] row : allPayments) {
+        for (String[] row : allPay) {
             if (row[1].trim().equalsIgnoreCase(customerId)) {
                 currentRows.add(row);
             }
         }
 
-        // Step 4: Show empty state if no matching records
         if (currentRows.isEmpty()) {
-            cardLayout.show(switchPanel, "EMPTY");
-            return;
+            // No payments yet — show zero values, empty table
+            resetStatsToZero();
+            tableModel.setRowCount(0);
+        } else {
+            updateStatsCards(currentRows);
+            fillTable(currentRows);
         }
 
-        // Step 5: Populate stat cards and table, then show the TABLE card
-        updateStatsCards(currentRows);
-        fillTable(currentRows);
-        cardLayout.show(switchPanel, "TABLE");
+        // Reset search and sort controls
+        if (searchField != null) {
+            searchField.setForeground(COLOR_MUTED);
+            searchField.setText("Search...");
+        }
+        if (sortCombo  != null) sortCombo.setSelectedIndex(0);
+        if (rowSorter  != null) {
+            rowSorter.setRowFilter(null);
+            rowSorter.setSortKeys(null);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────
-    // readPaymentsFromFile()
-    // Opens payments.txt and returns every valid data row.
-    // Lines with the wrong number of columns are skipped.
+    // resetStatsToZero() — default "no data" values for stat cards
     // ─────────────────────────────────────────────────────────────
-    private List<String[]> readPaymentsFromFile() {
-        List<String[]> list = new ArrayList<>();
-        File file = new File(PAYMENTS_FILE);
-
-        if (!file.exists()) return list; // file not created yet
-
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                // Skip blank lines and comment lines
-                if (line.isBlank() || line.trim().startsWith("#")) continue;
-
-                // Split by comma; limit to EXPECTED_COLUMNS so the last value
-                // is not accidentally split if it contains a comma
-                String[] columns = line.split(",", EXPECTED_COLUMNS);
-
-                if (columns.length == EXPECTED_COLUMNS) {
-                    list.add(columns);
-                }
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return list;
+    private void resetStatsToZero() {
+        totalPaidValueLabel.setText("RM 0.00");
+        totalPaidSubLabel.setText("across 0 payments");
+        paymentCountValueLabel.setText("0");
+        paymentCountSubLabel.setText("no records yet");
+        prefMethodValueLabel.setText("—");
+        prefMethodSubLabel.setText("used most frequently");
     }
 
     // ─────────────────────────────────────────────────────────────
-    // updateStatsCards()
-    // Calculates totals from the customer's rows and writes them
-    // into the three stat card labels.
+    // updateStatsCards() — fills stat card labels with real data
     // ─────────────────────────────────────────────────────────────
     private void updateStatsCards(List<String[]> rows) {
-        // ── Card 1: Total amount (sum of "Paid" rows only) ────────
+        // Card 1: total paid
         double totalPaid = 0.0;
         int    paidCount = 0;
         for (String[] row : rows) {
             if (row[8].trim().equalsIgnoreCase("Paid")) {
                 try {
-                    totalPaid += Double.parseDouble(row[5].trim()); // column [5] = amount
+                    totalPaid += Double.parseDouble(row[5].trim());
                     paidCount++;
-                } catch (NumberFormatException ignored) { }
+                } catch (NumberFormatException ignored) {}
             }
         }
         totalPaidValueLabel.setText(String.format("RM %.2f", totalPaid));
         totalPaidSubLabel.setText(
-            "across " + paidCount + " payment" + (paidCount != 1 ? "s" : ""));
+                "across " + paidCount + " payment" + (paidCount != 1 ? "s" : ""));
 
-        // ── Card 2: Total records + how many are pending ──────────
+        // Card 2: record count + pending count
         int total   = rows.size();
         int pending = 0;
         for (String[] row : rows) {
             if (row[8].trim().equalsIgnoreCase("Pending")) pending++;
         }
         paymentCountValueLabel.setText(String.valueOf(total));
-        paymentCountSubLabel.setText(
-            pending > 0 ? pending + " pending" : "all completed");
+        paymentCountSubLabel.setText(pending > 0 ? pending + " pending" : "all completed");
 
-        // ── Card 3: Most-used payment method ──────────────────────
+        // Card 3: most-used payment method
         Map<String, Integer> methodCount = new HashMap<>();
         for (String[] row : rows) {
-            String method = row[7].trim(); // column [7] = method
+            String method = row[7].trim();
             methodCount.put(method, methodCount.getOrDefault(method, 0) + 1);
         }
         String favMethod = "—";
@@ -497,27 +597,24 @@ public class PaymentHistoryPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // fillTable()
-    // Clears the table and adds one row per payment record.
+    // fillTable() — adds one row per payment record
     // ─────────────────────────────────────────────────────────────
     private void fillTable(List<String[]> rows) {
-        tableModel.setRowCount(0); // clear existing rows first
+        tableModel.setRowCount(0);
 
         for (String[] row : rows) {
-            String paymentId     = row[0].trim(); // "PY1"
-            String shId          = row[2].trim(); // "SH1"
-            String appointmentId = row[3].trim(); // "AP1"
-            String vehicleId     = row[4].trim(); // "V1"
-            String amount        = row[5].trim(); // "120.00"
-            String date          = row[6].trim(); // "2026-03-05"
-            String method        = row[7].trim(); // "Cash"
-            String status        = row[8].trim(); // "Paid"
+            String paymentId     = row[0].trim();
+            String shId          = row[2].trim();
+            String appointmentId = row[3].trim();
+            String vehicleId     = row[4].trim();
+            String amount        = row[5].trim();
+            String date          = row[6].trim();
+            String method        = row[7].trim();
+            String status        = row[8].trim();
 
-            // Resolve vehicle type and car plate from VehicleService
             String vehicleType = resolveVehicleType(vehicleId);
             String carPlate    = resolveCarPlate(vehicleId);
 
-            // Format amount to 2 decimal places
             String amountDisplay;
             try {
                 amountDisplay = String.format("%.2f", Double.parseDouble(amount));
@@ -525,7 +622,6 @@ public class PaymentHistoryPage extends JPanel {
                 amountDisplay = amount;
             }
 
-            // Add the row to the table model
             tableModel.addRow(new Object[]{
                 paymentId, shId, appointmentId,
                 vehicleType, carPlate,
@@ -535,188 +631,37 @@ public class PaymentHistoryPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // showInvoicePopup()
-    // Opens an invoice dialog when a row is clicked.
-    // rawRow = the original String[9] from payments.txt.
+    // readPaymentsFromFile() — reads payments.txt into a list
     // ─────────────────────────────────────────────────────────────
-    private void showInvoicePopup(String[] rawRow) {
-        String paymentId     = rawRow[0].trim();
-        String shId          = rawRow[2].trim();
-        String appointmentId = rawRow[3].trim();
-        String vehicleId     = rawRow[4].trim();
-        String amount        = rawRow[5].trim();
-        String date          = rawRow[6].trim();
-        String method        = rawRow[7].trim();
-        String status        = rawRow[8].trim();
+    private List<String[]> readPaymentsFromFile() {
+        List<String[]> list = new ArrayList<>();
+        File file = new File(PAYMENTS_FILE);
+        if (!file.exists()) return list;
 
-        String vehicleType = resolveVehicleType(vehicleId);
-        String carPlate    = resolveCarPlate(vehicleId);
-
-        String amountDisplay;
-        try {
-            amountDisplay = String.format("RM %.2f", Double.parseDouble(amount));
-        } catch (NumberFormatException e) {
-            amountDisplay = "RM " + amount;
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank() || line.trim().startsWith("#")) continue;
+                String[] columns = line.split(",", EXPECTED_COLUMNS);
+                if (columns.length == EXPECTED_COLUMNS) {
+                    list.add(columns);
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-
-        // ── Invoice content panel ──────────────────────────────────
-        JPanel invoice = new JPanel();
-        invoice.setLayout(new BoxLayout(invoice, BoxLayout.Y_AXIS));
-        invoice.setBackground(Color.WHITE);
-        invoice.setBorder(new EmptyBorder(28, 32, 28, 32));
-        invoice.setPreferredSize(new Dimension(440, 490));
-
-        // Shop name header
-        JLabel shopName = new JLabel("APU Automotive Service Centre");
-        shopName.setFont(new Font("SansSerif", Font.BOLD, 15));
-        shopName.setForeground(new Color(80, 110, 230));
-        shopName.setAlignmentX(Component.LEFT_ALIGNMENT);
-        invoice.add(shopName);
-        invoice.add(Box.createVerticalStrut(4));
-
-        JLabel invoiceTitle = new JLabel("Official Payment Invoice");
-        invoiceTitle.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        invoiceTitle.setForeground(COLOR_MUTED);
-        invoiceTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
-        invoice.add(invoiceTitle);
-        invoice.add(Box.createVerticalStrut(18));
-
-        invoice.add(makeInvoiceDivider());
-        invoice.add(Box.createVerticalStrut(16));
-
-        // All detail rows
-        invoice.add(makeInvoiceRow("Payment ID",         paymentId));
-        invoice.add(Box.createVerticalStrut(10));
-        invoice.add(makeInvoiceRow("Service History ID", shId));
-        invoice.add(Box.createVerticalStrut(10));
-        invoice.add(makeInvoiceRow("Appointment ID",     appointmentId));
-        invoice.add(Box.createVerticalStrut(10));
-        invoice.add(makeInvoiceRow("Vehicle Type",       vehicleType));
-        invoice.add(Box.createVerticalStrut(10));
-        invoice.add(makeInvoiceRow("Car Plate",          carPlate));
-        invoice.add(Box.createVerticalStrut(10));
-        invoice.add(makeInvoiceRow("Payment Date",       date));
-        invoice.add(Box.createVerticalStrut(10));
-        invoice.add(makeInvoiceRow("Method",             method));
-        invoice.add(Box.createVerticalStrut(10));
-        invoice.add(makeInvoiceRowWithBadge("Status",    status));
-        invoice.add(Box.createVerticalStrut(16));
-
-        invoice.add(makeInvoiceDivider());
-        invoice.add(Box.createVerticalStrut(16));
-
-        // Total amount row — bold + green
-        JPanel amountRow = new JPanel(new BorderLayout());
-        amountRow.setOpaque(false);
-        amountRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
-        amountRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel amountLabel = new JLabel("Total Amount");
-        amountLabel.setFont(new Font("SansSerif", Font.BOLD, 15));
-        amountLabel.setForeground(COLOR_TEXT);
-
-        JLabel amountValue = new JLabel(amountDisplay);
-        amountValue.setFont(new Font("SansSerif", Font.BOLD, 15));
-        amountValue.setForeground(new Color(34, 139, 80)); // green
-
-        amountRow.add(amountLabel, BorderLayout.WEST);
-        amountRow.add(amountValue, BorderLayout.EAST);
-        invoice.add(amountRow);
-
-        // Show popup dialog
-        JOptionPane.showMessageDialog(
-            SwingUtilities.getWindowAncestor(this),
-            invoice,
-            "Invoice — " + paymentId,
-            JOptionPane.PLAIN_MESSAGE
-        );
+        return list;
     }
 
     // ─────────────────────────────────────────────────────────────
-    // makeInvoiceRow()
-    // A "Label : Value" row inside the invoice.
-    // ─────────────────────────────────────────────────────────────
-    private JPanel makeInvoiceRow(String label, String value) {
-        JPanel row = new JPanel(new BorderLayout());
-        row.setOpaque(false);
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
-        row.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel lbl = new JLabel(label);
-        lbl.setFont(new Font("SansSerif", Font.PLAIN, 13));
-        lbl.setForeground(COLOR_MUTED);
-        lbl.setPreferredSize(new Dimension(160, 22)); // fixed width keeps values aligned
-
-        JLabel val = new JLabel(value);
-        val.setFont(new Font("SansSerif", Font.BOLD, 13));
-        val.setForeground(COLOR_TEXT);
-
-        row.add(lbl, BorderLayout.WEST);
-        row.add(val, BorderLayout.CENTER);
-        return row;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // makeInvoiceRowWithBadge()
-    // Like makeInvoiceRow() but shows a coloured badge for Status.
-    // ─────────────────────────────────────────────────────────────
-    private JPanel makeInvoiceRowWithBadge(String label, String status) {
-        JPanel row = new JPanel(new BorderLayout());
-        row.setOpaque(false);
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
-        row.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel lbl = new JLabel(label);
-        lbl.setFont(new Font("SansSerif", Font.PLAIN, 13));
-        lbl.setForeground(COLOR_MUTED);
-        lbl.setPreferredSize(new Dimension(160, 22));
-
-        JLabel badge = new JLabel(status);
-        badge.setFont(new Font("SansSerif", Font.BOLD, 11));
-        badge.setOpaque(true);
-        badge.setBorder(new EmptyBorder(3, 10, 3, 10));
-
-        switch (status.toLowerCase()) {
-            case "paid":
-                badge.setBackground(new Color(220, 248, 232));
-                badge.setForeground(new Color(34, 139, 80));
-                break;
-            case "pending":
-                badge.setBackground(new Color(255, 243, 220));
-                badge.setForeground(new Color(180, 110, 20));
-                break;
-            default:
-                badge.setBackground(new Color(235, 236, 240));
-                badge.setForeground(COLOR_MUTED);
-        }
-
-        row.add(lbl,   BorderLayout.WEST);
-        row.add(badge, BorderLayout.CENTER);
-        return row;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // makeInvoiceDivider()
-    // Thin horizontal divider line inside the invoice popup.
-    // ─────────────────────────────────────────────────────────────
-    private JSeparator makeInvoiceDivider() {
-        JSeparator sep = new JSeparator();
-        sep.setForeground(COLOR_BORDER);
-        sep.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1));
-        return sep;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // resolveVehicleType() / resolveCarPlate()
-    // VehicleService.getVehiclePlate() returns "Type · Plate"
-    // e.g. "Sedan · ABC1234". These helpers split that string.
+    // Vehicle helpers
     // ─────────────────────────────────────────────────────────────
     private String resolveVehicleType(String vehicleId) {
         String label = vehicleService.getVehiclePlate(vehicleId);
         if (label != null && label.contains(" · ")) {
             return label.split(" · ", 2)[0].trim();
         }
-        return vehicleId; // fallback: show raw ID if not found
+        return vehicleId;
     }
 
     private String resolveCarPlate(String vehicleId) {
@@ -724,19 +669,10 @@ public class PaymentHistoryPage extends JPanel {
         if (label != null && label.contains(" · ")) {
             return label.split(" · ", 2)[1].trim();
         }
-        return vehicleId; // fallback
+        return vehicleId;
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // getLoggedInUser()
-    // Walks up the Swing component tree to find the AppFrame,
-    // then calls getLoggedInUserObj() — same approach as
-    // ServiceHistoryPage so both pages work consistently.
-    //
-    // How it works:
-    //   This panel → CustomerDashboard → AppFrame
-    //   AppFrame stores the currently logged-in user.
-    // ─────────────────────────────────────────────────────────────
+    // Walks up the Swing parent chain to find the AppFrame
     private model.User getLoggedInUser() {
         Container parent = getParent();
         while (parent != null) {
@@ -745,14 +681,12 @@ public class PaymentHistoryPage extends JPanel {
             }
             parent = parent.getParent();
         }
-        return null; // not found
+        return null;
     }
 
     // ─────────────────────────────────────────────────────────────
     // Label factory helpers
     // ─────────────────────────────────────────────────────────────
-
-    // Large bold number shown as the main value in a stat card
     private JLabel makeBigValueLabel(String text) {
         JLabel label = new JLabel(text);
         label.setFont(new Font("SansSerif", Font.BOLD, 24));
@@ -760,7 +694,6 @@ public class PaymentHistoryPage extends JPanel {
         return label;
     }
 
-    // Small grey supporting text shown below the main value
     private JLabel makeMutedLabel(String text) {
         JLabel label = new JLabel(text);
         label.setFont(new Font("SansSerif", Font.PLAIN, 12));
