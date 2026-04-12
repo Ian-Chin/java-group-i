@@ -17,9 +17,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Ellipse2D;
 import java.awt.image.BufferedImage;
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
 import java.util.List;
 
@@ -36,11 +34,7 @@ import java.util.List;
  *      - A circular profile picture overlapping the banner
  *        (clickable to change)
  *
- *   2. STATS ROW
- *      - Total Appointments  |  Total Spent
- *      - Counts are read from appointments.txt and payments.txt
- *
- *   3. TWO COLUMNS (side by side)
+ *   2. TWO COLUMNS (side by side)
  *      LEFT  → Personal Information card
  *              Shows: Username, Email, Role
  *              Has an Edit button to update Username and Email
@@ -48,31 +42,8 @@ import java.util.List;
  *              Shows every vehicle registered to this user
  *              Has Add, Edit, and Remove buttons
  *
- * ── FIXES APPLIED ─────────────────────────────────────────────
- *
- *   ★ FIX 1 — My Vehicles was ALWAYS empty (root cause: timing):
- *     The constructor now calls refreshVehicleList() at the very end
- *     so that vehicles are loaded and displayed the first time the
- *     page is shown. Previously the constructor only built the empty
- *     UI panels and stopped — nothing ever triggered the first load.
- *
- *     A secondary safety fallback was also added inside buildVehicleCard():
- *     it directly calls vehicleService.getVehiclesByUserId() and populates
- *     the panel immediately, before the controller callback fires.
- *     This guarantees vehicles appear even if the SectionView wiring in
- *     the outer class (CustomerDashboard / AppFrame) is incomplete.
- *
- *   ★ FIX 2 — Total appointments showed 0:
- *     countUserAppointments() reads appointments.txt and counts every row
- *     whose column[1] matches the logged-in user's ID.
- *     The result is stored in totalAppointmentsLabel (a field) so
- *     refreshUser() can update it without rebuilding the whole page.
- *
- *   ★ FIX 3 — Total spent showed RM 0:
- *     sumUserPayments() reads payments.txt and sums column[5] for every
- *     row whose column[1] matches the logged-in user's ID.
- *     The result is stored in totalSpentLabel (a field) so refreshUser()
- *     can update it without rebuilding the whole page.
+ * NOTE: The "Total Appointments" and "Total Spent" stats row
+ *       has been removed from this version.
  * ============================================================
  */
 public class ViewProfile extends JPanel {
@@ -139,9 +110,8 @@ public class ViewProfile extends JPanel {
     private JComboBox<String> addTypeCombo;
     private int avatarColorIndex = 0;
 
-    // ★ FIX 2 & 3 — Stored as fields so refreshUser() can call setText() on them.
-    private JLabel totalAppointmentsLabel;
-    private JLabel totalSpentLabel;
+    // NOTE: totalAppointmentsLabel and totalSpentLabel have been REMOVED.
+    // These were used by the stats row which no longer exists.
 
     // ----------------------------------------------------------
     // SECTION 4 — Colours
@@ -175,15 +145,9 @@ public class ViewProfile extends JPanel {
     private static final int ROW_HEIGHT  = 64;
     private static final int EDIT_HEIGHT = 64;
 
-    // ----------------------------------------------------------
-    // SECTION 6 — File paths
-    // ----------------------------------------------------------
-
-    private static final String APPOINTMENTS_FILE =
-            "src" + File.separator + "TxtFile" + File.separator + "appointments.txt";
-
-    private static final String PAYMENTS_FILE =
-            "src" + File.separator + "TxtFile" + File.separator + "payments.txt";
+    // NOTE: APPOINTMENTS_FILE and PAYMENTS_FILE constants have been REMOVED.
+    // They were only used by countUserAppointments() and sumUserPayments()
+    // which have both been removed along with the stats row.
 
 
     // ==========================================================
@@ -193,13 +157,8 @@ public class ViewProfile extends JPanel {
     /**
      * Creates the ViewProfile panel.
      *
-     * ★ FIX 1 — The constructor now calls refreshVehicleList() via
-     * SwingUtilities.invokeLater() at the very end, so vehicle data is
-     * loaded and shown the first time this panel is displayed.
-     *
-     * Previously the constructor only built empty UI panels and stopped —
-     * nothing ever triggered the initial population, so My Vehicles was
-     * always blank.
+     * After building the UI, we call refreshVehicleList() so that
+     * vehicle data is loaded and shown the first time the panel opens.
      */
     public ViewProfile(AppFrame app,
                        VehicleSectionController vehicleController,
@@ -227,9 +186,7 @@ public class ViewProfile extends JPanel {
 
         add(scrollPane, BorderLayout.CENTER);
 
-        // ★ FIX 1 — Trigger the first vehicle load after the UI is assembled.
-        // invokeLater ensures the scroll pane is attached to the layout tree
-        // before we try to repaint vehicle rows into it.
+        // Trigger the first vehicle load after the UI is assembled.
         SwingUtilities.invokeLater(this::refreshVehicleList);
     }
 
@@ -241,6 +198,10 @@ public class ViewProfile extends JPanel {
     /**
      * Refreshes the whole page when the logged-in user changes.
      * Call this after login or after saving profile changes.
+     *
+     * NOTE: The stats refresh calls (totalAppointmentsLabel and
+     * totalSpentLabel) have been removed from this method because
+     * the stats row no longer exists on the page.
      */
     public void refreshUser() {
         User user = app.getLoggedInUserObj();
@@ -262,17 +223,8 @@ public class ViewProfile extends JPanel {
             displayRoleLabel.setText(role);
         }
 
-        // ★ FIX 2 — Re-read appointments.txt and refresh the label
-        if (totalAppointmentsLabel != null) {
-            int count = countUserAppointments(user.getUserId());
-            totalAppointmentsLabel.setText(String.valueOf(count));
-        }
-
-        // ★ FIX 3 — Re-read payments.txt and refresh the label
-        if (totalSpentLabel != null) {
-            double spent = sumUserPayments(user.getUserId());
-            totalSpentLabel.setText(String.format("RM %,.0f", spent));
-        }
+        // REMOVED: totalAppointmentsLabel refresh (stats row deleted)
+        // REMOVED: totalSpentLabel refresh (stats row deleted)
 
         if (profileBanner   != null) profileBanner.repaint();
         if (profilePicLabel != null) profilePicLabel.repaint();
@@ -287,9 +239,6 @@ public class ViewProfile extends JPanel {
     /**
      * Asks VehicleSectionController to reload from vehicles.txt, then calls
      * rebuildVehicleList() on this panel with the latest data.
-     *
-     * ★ FIX 1 — Also called from the constructor so the list is never empty
-     * on first open.
      */
     public void refreshVehicleList() {
         vehicleController.refreshList();
@@ -298,17 +247,6 @@ public class ViewProfile extends JPanel {
     /**
      * Called by VehicleSectionController after vehicle data changes.
      * Rebuilds all vehicle rows in the My Vehicles card.
-     *
-     * ★ FIX 1 — This is the method that actually puts vehicle rows on screen.
-     * It is called by VehicleSectionController → SectionView.rebuildList().
-     *
-     * IMPORTANT: If vehicles are still not appearing after this fix, check
-     * that your SectionView implementation (in CustomerDashboard / AppFrame)
-     * delegates rebuildList() to this method:
-     *
-     *   public void rebuildList(List<String[]> items) {
-     *       viewProfile.rebuildVehicleList(items);   // <-- must have this line
-     *   }
      *
      * Each String[] has 6 elements:
      *   [0] vehicleId   [1] vehicleType  [2] plate
@@ -367,6 +305,21 @@ public class ViewProfile extends JPanel {
     // PAGE CONTENT
     // ==========================================================
 
+    /**
+     * Builds the full page layout top-to-bottom.
+     *
+     * CHANGE: The stats row (buildStatsRow) has been removed.
+     * The page now goes directly from the banner to the two-column section.
+     *
+     * BEFORE (3 sections):
+     *   1. Banner
+     *   2. Stats row  ← REMOVED
+     *   3. Two-column section
+     *
+     * AFTER (2 sections):
+     *   1. Banner
+     *   2. Two-column section
+     */
     private JPanel buildPageContent() {
         JPanel page = new JPanel();
         page.setLayout(new BoxLayout(page, BoxLayout.Y_AXIS));
@@ -375,8 +328,12 @@ public class ViewProfile extends JPanel {
 
         page.add(buildBannerSection());
         page.add(Box.createVerticalStrut(20));
-        page.add(buildStatsRow());
-        page.add(Box.createVerticalStrut(24));
+
+        // REMOVED: page.add(buildStatsRow());
+        // REMOVED: page.add(Box.createVerticalStrut(24));
+        // These two lines used to add the "Total Appointments" and
+        // "Total Spent" row. They are no longer needed.
+
         page.add(buildTwoColumnSection());
 
         return page;
@@ -518,95 +475,49 @@ public class ViewProfile extends JPanel {
         g2.drawString(initial, textX, textY);
     }
 
-
     // ==========================================================
-    // STATS ROW
+    // STATS ROW — REMOVED
     // ==========================================================
-
-    /**
-     * ★ FIX 2 & 3 — Labels are now fields so refreshUser() can update them live.
-     */
-    private JPanel buildStatsRow() {
-        JPanel row = new JPanel(new GridLayout(1, 2, 0, 0));
-        row.setOpaque(false);
-        row.setBorder(new EmptyBorder(0, 24, 0, 24));
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 75));
-
-        User user = app.getLoggedInUserObj();
-        int    totalAppointments = (user != null) ? countUserAppointments(user.getUserId()) : 0;
-        double totalSpent        = (user != null) ? sumUserPayments(user.getUserId())        : 0.0;
-
-        totalAppointmentsLabel = buildStatValueLabel(String.valueOf(totalAppointments));
-        totalSpentLabel        = buildStatValueLabel(String.format("RM %,.0f", totalSpent));
-
-        row.add(buildStatCellWith("Total appointments", totalAppointmentsLabel));
-        row.add(buildStatCellWith("Total spent",        totalSpentLabel));
-
-        return row;
-    }
-
-    /**
-     * Counts appointments for a user. appointments.txt col[1] = customerID.
-     */
-    private int countUserAppointments(String userId) {
-        int count = 0;
-        File file = new File(APPOINTMENTS_FILE);
-        if (!file.exists()) return count;
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (line.isBlank() || line.trim().startsWith("#")) continue;
-                String[] cols = line.split(",");
-                if (cols.length >= 2 && cols[1].trim().equalsIgnoreCase(userId))
-                    count++;
-            }
-        } catch (IOException e) { e.printStackTrace(); }
-        return count;
-    }
-
-    /**
-     * Sums payments for a user. payments.txt col[1] = customerID, col[5] = amount.
-     */
-    private double sumUserPayments(String userId) {
-        double total = 0.0;
-        File file = new File(PAYMENTS_FILE);
-        if (!file.exists()) return total;
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (line.isBlank() || line.trim().startsWith("#")) continue;
-                String[] cols = line.split(",");
-                if (cols.length >= 6 && cols[1].trim().equalsIgnoreCase(userId)) {
-                    try { total += Double.parseDouble(cols[5].trim()); }
-                    catch (NumberFormatException ignored) {}
-                }
-            }
-        } catch (IOException e) { e.printStackTrace(); }
-        return total;
-    }
-
-    private JPanel buildStatCellWith(String label, JLabel valueLabel) {
-        JPanel cell = new JPanel();
-        cell.setLayout(new BoxLayout(cell, BoxLayout.Y_AXIS));
-        cell.setOpaque(false);
-        cell.setBorder(new EmptyBorder(4, 0, 4, 32));
-        JLabel labelText = new JLabel(label);
-        labelText.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        labelText.setForeground(TEXT_GREY);
-        labelText.setAlignmentX(Component.LEFT_ALIGNMENT);
-        valueLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        cell.add(labelText);
-        cell.add(Box.createVerticalStrut(2));
-        cell.add(valueLabel);
-        return cell;
-    }
-
-    private JLabel buildStatValueLabel(String value) {
-        JLabel lbl = new JLabel(value);
-        lbl.setFont(new Font("SansSerif", Font.BOLD, 24));
-        lbl.setForeground(TEXT_DARK);
-        return lbl;
-    }
+    //
+    // The following methods have been DELETED:
+    //
+    //   private JPanel buildStatsRow()
+    //   private int countUserAppointments(String userId)
+    //   private double sumUserPayments(String userId)
+    //   private JPanel buildStatCellWith(String label, JLabel valueLabel)
+    //   private JLabel buildStatValueLabel(String value)
+    //
+    // These methods were responsible for:
+    //   - Reading appointments.txt to count user appointments
+    //   - Reading payments.txt to sum user spending
+    //   - Building the "Total appointments" and "Total spent" display row
+    //
+    // If you ever need to bring the stats row back, you can restore them
+    // from the original ViewProfile.java and add back these two lines
+    // inside buildPageContent():
+    //
+    //   page.add(buildStatsRow());
+    //   page.add(Box.createVerticalStrut(24));
+    //
+    // And restore these two fields at the top of the class:
+    //   private JLabel totalAppointmentsLabel;
+    //   private JLabel totalSpentLabel;
+    //
+    // And restore these two blocks inside refreshUser():
+    //   if (totalAppointmentsLabel != null) {
+    //       int count = countUserAppointments(user.getUserId());
+    //       totalAppointmentsLabel.setText(String.valueOf(count));
+    //   }
+    //   if (totalSpentLabel != null) {
+    //       double spent = sumUserPayments(user.getUserId());
+    //       totalSpentLabel.setText(String.format("RM %,.0f", spent));
+    //   }
+    //
+    // Also restore the import at the top of the file:
+    //   import java.io.BufferedReader;
+    //   import java.io.FileReader;
+    //
+    // ==========================================================
 
 
     // ==========================================================
@@ -809,20 +720,6 @@ public class ViewProfile extends JPanel {
     // MY VEHICLES CARD
     // ==========================================================
 
-    /**
-     * Builds the My Vehicles card.
-     *
-     * ★ FIX 1 — DIRECT FALLBACK LOAD:
-     * After building the empty vehicleListPanel, this method calls
-     * populateVehicleListDirectly() to load and display vehicles from
-     * vehicles.txt immediately — without waiting for the controller callback.
-     *
-     * This guarantees vehicles appear on screen even if the SectionView
-     * wiring in CustomerDashboard / AppFrame is incomplete.
-     *
-     * The controller callback (rebuildVehicleList) will overwrite this data
-     * when it fires — no double-display because the content is identical.
-     */
     private JPanel buildVehicleCard() {
         vehicleCard = makeCard();
         vehicleCard.setLayout(new BoxLayout(vehicleCard, BoxLayout.Y_AXIS));
@@ -870,23 +767,20 @@ public class ViewProfile extends JPanel {
             vehicleCard.repaint();
         });
 
-        // ★ FIX 1 — DIRECT FALLBACK LOAD ────────────────────────────────────
-        // Read vehicles from file RIGHT NOW and put them on screen immediately.
-        // This is the safety net — it works even if the controller callback
-        // (rebuildVehicleList) is never triggered due to missing wiring.
+        // Direct fallback load — shows vehicles immediately without waiting
+        // for the controller callback to fire.
         User currentUser = app.getLoggedInUserObj();
         if (currentUser != null) {
             List<String[]> initialVehicles =
                     vehicleService.getVehiclesByUserId(currentUser.getUserId());
             populateVehicleListDirectly(initialVehicles);
         }
-        // ────────────────────────────────────────────────────────────────────
 
         return vehicleCard;
     }
 
     /**
-     * ★ FIX 1 — Directly fills vehicleListPanel without going through the controller.
+     * Directly fills vehicleListPanel without going through the controller.
      *
      * Kept separate from rebuildVehicleList() because vehicleAddPanel is
      * built and assigned AFTER buildVehicleCard() returns, so calling
