@@ -346,8 +346,14 @@ public class ViewProfile extends JPanel {
     private JPanel buildBannerSection() {
         JPanel hero = new JPanel(null);
         hero.setOpaque(false);
-        hero.setPreferredSize(new Dimension(0, 200));
-        hero.setMaximumSize(new Dimension(Integer.MAX_VALUE, 200));
+        // Hero height increased from 200 -> 240px.
+        // This is the total height of the banner section including the
+        // part of the profile picture that hangs below the banner image.
+        // Making it taller pushes the Personal Info and My Vehicles cards
+        // further down the page.
+        // Hero height reduced from 240 -> 215px (banner is shorter).
+        hero.setPreferredSize(new Dimension(0, 215));
+        hero.setMaximumSize(new Dimension(Integer.MAX_VALUE, 215));
 
         boolean[] bannerHov = {false};
         boolean[] avatarHov = {false};
@@ -421,12 +427,15 @@ public class ViewProfile extends JPanel {
 
         hero.addComponentListener(new java.awt.event.ComponentAdapter() {
             @Override public void componentResized(java.awt.event.ComponentEvent e) {
-                profileBanner.setBounds(0, 0, hero.getWidth(), 170);
-                profilePicLabel.setBounds(30, 90, 110, 110);
+                // Banner height reduced from 200 -> 175px.
+                profileBanner.setBounds(0, 0, hero.getWidth(), 175);
+                // Profile pic moved up slightly from y=115 -> y=105 to stay
+                // naturally half-overlapping the shorter banner bottom edge.
+                profilePicLabel.setBounds(30, 105, 110, 110);
             }
         });
-        profileBanner.setBounds(0, 0, 800, 170);
-        profilePicLabel.setBounds(30, 90, 110, 110);
+        profileBanner.setBounds(0, 0, 800, 175);
+        profilePicLabel.setBounds(30, 105, 110, 110);
 
         hero.add(profilePicLabel);
         hero.add(profileBanner);
@@ -904,16 +913,81 @@ public class ViewProfile extends JPanel {
         };
         saveBtn.addActionListener(e -> doSave.run());
 
-        KeyAdapter enter = new KeyAdapter() {
+        // ── Add form: text field Enter key — progressive focus ─────
+        //
+        // FIX: Previously ALL text fields called doSave.run() on Enter,
+        // meaning pressing Enter on an empty plate field immediately tried
+        // to save and showed "Car Plate cannot be empty."
+        //
+        // New behaviour:
+        //   plateF  empty  -> stay on plate (user must fill it in first)
+        //   plateF  filled -> move focus to Brand / Model
+        //   brandF  empty  -> stay on brand
+        //   brandF  filled -> move focus to Year
+        //   yearF   empty  -> stay on year
+        //   yearF   filled -> move focus to Colour
+        //   colourF empty  -> stay on colour
+        //   colourF filled -> attempt save
+        //
+        // This gives a natural keyboard-driven workflow:
+        //   Type → Enter → Plate → Enter → Brand → Enter → Year → Enter → Colour → Enter → Save
+        plateF.addKeyListener(new KeyAdapter() {
             @Override public void keyPressed(KeyEvent e) {
-                if (e.getKeyCode() == KeyEvent.VK_ENTER) doSave.run();
+                if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+                    if (plateF.getText().trim().isEmpty()) {
+                        plateF.requestFocusInWindow(); // stay here — must fill plate
+                    } else {
+                        brandF.requestFocusInWindow(); // move to Brand / Model
+                    }
+                }
             }
-        };
-        plateF.addKeyListener(enter);
-        brandF.addKeyListener(enter);
-        yearF.addKeyListener(enter);
-        colourF.addKeyListener(enter);
+        });
+        brandF.addKeyListener(new KeyAdapter() {
+            @Override public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+                    if (brandF.getText().trim().isEmpty()) {
+                        brandF.requestFocusInWindow(); // stay — must fill brand
+                    } else {
+                        yearF.requestFocusInWindow();  // move to Year
+                    }
+                }
+            }
+        });
+        yearF.addKeyListener(new KeyAdapter() {
+            @Override public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+                    if (yearF.getText().trim().isEmpty()) {
+                        yearF.requestFocusInWindow();   // stay — must fill year
+                    } else {
+                        colourF.requestFocusInWindow(); // move to Colour
+                    }
+                }
+            }
+        });
+        colourF.addKeyListener(new KeyAdapter() {
+            @Override public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+                    if (colourF.getText().trim().isEmpty()) {
+                        colourF.requestFocusInWindow(); // stay — must fill colour
+                    } else {
+                        doSave.run(); // all fields filled — attempt save
+                    }
+                }
+            }
+        });
 
+        // ── Combo Enter behaviour for the ADD form ─────────────────
+        //
+        // FIX: Previously pressing Enter on the Type combo immediately
+        // called doSave.run(), which failed with "Please fill in all fields"
+        // because the plate/brand/year/colour text boxes were still empty.
+        //
+        // The correct behaviour: pressing Enter on the Type combo should
+        // move focus to the Car Plate field so the user can type the plate
+        // number next — just like pressing Tab does.
+        //
+        // When the dropdown IS open, Enter selects the item and closes it;
+        // we leave that default behaviour alone (comboOpen guards it).
         boolean[] comboOpen = {false};
         addTypeCombo.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
             @Override public void popupMenuWillBecomeVisible  (javax.swing.event.PopupMenuEvent e) { comboOpen[0] = true;  }
@@ -922,7 +996,10 @@ public class ViewProfile extends JPanel {
         });
         addTypeCombo.addKeyListener(new KeyAdapter() {
             @Override public void keyPressed(KeyEvent e) {
-                if (e.getKeyCode() == KeyEvent.VK_ENTER && !comboOpen[0]) doSave.run();
+                if (e.getKeyCode() == KeyEvent.VK_ENTER && !comboOpen[0]) {
+                    // Move focus to Car Plate — don't try to save yet.
+                    plateF.requestFocusInWindow();
+                }
             }
         });
 
@@ -1083,16 +1160,63 @@ public class ViewProfile extends JPanel {
         };
         if (eSave != null) eSave.addActionListener(e -> doSave.run());
 
-        // Allow pressing Enter inside any edit field to save
-        KeyAdapter enter = new KeyAdapter() {
+        // ── Edit row: Type combo Enter key ─────────────────────────
+        //
+        // FIX: The type combo in the EDIT row had no key listener at all.
+        // Without this, pressing Enter after changing Car -> Motor (or vice
+        // versa) did nothing, leaving the user confused.
+        //
+        // When the combo dropdown is closed and user presses Enter, we
+        // treat it the same as clicking Save — the type change IS a real
+        // change and must not be blocked by a "no changes" false-positive.
+        //
+        // The "no changes" check in doSave already handles this correctly:
+        //   nt.equals(vehicleType) is false when type changed, so it won't
+        //   show the "no changes" dialog — it goes straight to handleEdit.
+        if (eType != null) {
+            boolean[] editComboOpen = {false};
+            eType.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+                @Override public void popupMenuWillBecomeVisible  (javax.swing.event.PopupMenuEvent e) { editComboOpen[0] = true;  }
+                @Override public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) { editComboOpen[0] = false; }
+                @Override public void popupMenuCanceled           (javax.swing.event.PopupMenuEvent e) { editComboOpen[0] = false; }
+            });
+            eType.addKeyListener(new KeyAdapter() {
+                @Override public void keyPressed(KeyEvent e) {
+                    if (e.getKeyCode() == KeyEvent.VK_ENTER && !editComboOpen[0]) {
+                        // Attempt save — doSave checks if anything actually
+                        // changed, so a type-only change is saved correctly.
+                        doSave.run();
+                    }
+                }
+            });
+        }
+
+        // ── Edit row: text field Enter key ─────────────────────────
+        //
+        // Plate field: if still empty, move focus to it instead of saving.
+        // All other fields: press Enter to save directly.
+        if (ePlate != null) {
+            ePlate.addKeyListener(new KeyAdapter() {
+                @Override public void keyPressed(KeyEvent e) {
+                    if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+                        if (ePlate.getText().trim().isEmpty()) {
+                            // Plate is empty — keep focus here so user fills it in
+                            ePlate.requestFocusInWindow();
+                        } else {
+                            doSave.run();
+                        }
+                    }
+                }
+            });
+        }
+        KeyAdapter enterSave = new KeyAdapter() {
             @Override public void keyPressed(KeyEvent e) {
                 if (e.getKeyCode() == KeyEvent.VK_ENTER) doSave.run();
             }
         };
-        if (ePlate  != null) ePlate.addKeyListener(enter);
-        if (eBrand  != null) eBrand.addKeyListener(enter);
-        if (eYear   != null) eYear.addKeyListener(enter);
-        if (eColour != null) eColour.addKeyListener(enter);
+        if (eBrand  != null) eBrand.addKeyListener(enterSave);
+        if (eYear   != null) eYear.addKeyListener(enterSave);
+        if (eColour != null) eColour.addKeyListener(enterSave);
 
         // ── Remove button: confirm then delete ────────────────────
         removeBtn.addActionListener(e -> {
