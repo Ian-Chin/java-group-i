@@ -26,23 +26,38 @@ import java.util.List;
  * ViewProfile.java — Customer Profile Page
  * ============================================================
  *
- * CHANGES IN THIS VERSION:
+ * BUG FIX IN THIS VERSION:
  *
- *   1. WIDER PERSONAL INFORMATION CARD
- *      In buildTwoColumnSection(), the left column's weightx was
- *      changed from 0.38 to 0.45.  This gives the Personal
- *      Information card more horizontal space without touching
- *      any card-internal logic.
+ *   PROBLEM — Add Vehicle Form Was Too Narrow
+ *   -----------------------------------------
+ *   The add form (vehicleAddPanel) appeared much smaller than the
+ *   vehicle data rows above it. This happened because of TWO issues
+ *   working together:
  *
- *   2. SAVE / CANCEL BUTTONS STAY INSIDE THE CARD
- *      The btnGroup JPanel now has a fixed preferredSize width
- *      of 185 px.  BoxLayout uses the preferred size of child
- *      panels to decide how wide the card should be.  Without
- *      this fix, when Save + Cancel appear together they request
- *      more width than the Edit button alone, which widens the
- *      entire card.  Locking btnGroup's preferred width to a
- *      value that comfortably fits both buttons prevents that
- *      expansion while still rendering both buttons correctly.
+ *   Issue 1: form.setPreferredSize(new Dimension(0, ROW_H))
+ *     Setting the preferred WIDTH to 0 told BoxLayout "this panel
+ *     wants to be 0 pixels wide". BoxLayout uses preferred size as
+ *     a hint, so the form collapsed to a tiny width.
+ *
+ *   Issue 2: The form panel's AlignmentX was LEFT_ALIGNMENT (0.0f)
+ *     while BoxLayout(Y_AXIS) aligns children to their AlignmentX.
+ *     A mismatch between the form and other children caused the
+ *     layout engine to not stretch it to full width.
+ *
+ *   FIX APPLIED:
+ *   1. Removed setPreferredSize() from the add form entirely.
+ *      We only keep setMaximumSize() so BoxLayout can still cap
+ *      the height. Width is now determined naturally by the layout.
+ *
+ *   2. Changed AlignmentX on all panels inside vehicleListPanel
+ *      to LEFT_ALIGNMENT consistently so BoxLayout stretches
+ *      every child to the same full width.
+ *
+ *   3. Wrapped vehicleListPanel in a helper JPanel that uses
+ *      BorderLayout — this forces the inner BoxLayout panel to
+ *      stretch horizontally to fill the card width, which is the
+ *      same technique used by the vehicle data rows.
+ *
  * ============================================================
  */
 public class ViewProfile extends JPanel {
@@ -127,7 +142,7 @@ public class ViewProfile extends JPanel {
     private static final int ICON_SIZE = 44;
 
     // =========================================================
-    // UNICODE EMOJI ICONS  (same approach as CustomerDashboard)
+    // UNICODE EMOJI ICONS
     // =========================================================
 
     /** Car emoji — shown for vehicle type "Car" */
@@ -215,7 +230,9 @@ public class ViewProfile extends JPanel {
             int toShow = Math.min(MAX_VISIBLE, vehicles.size());
             for (int i = 0; i < toShow; i++) {
                 String[] v = vehicles.get(i);
+                // FIX: set AlignmentX to LEFT on every vehicle row
                 JPanel row = buildVehicleRow(v[1], v[2], v[3], v[4], v[5]);
+                row.setAlignmentX(Component.LEFT_ALIGNMENT);
                 vehicleListPanel.add(row);
                 if (i < toShow - 1) vehicleListPanel.add(Box.createVerticalStrut(6));
             }
@@ -223,6 +240,8 @@ public class ViewProfile extends JPanel {
 
         if (vehicleAddPanel != null) {
             vehicleListPanel.add(Box.createVerticalStrut(6));
+            // FIX: make sure the add form also has LEFT alignment to match rows
+            vehicleAddPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
             vehicleListPanel.add(vehicleAddPanel);
             vehicleAddPanel.setVisible(addFormWasOpen);
         }
@@ -231,6 +250,7 @@ public class ViewProfile extends JPanel {
             vehicleListPanel.add(Box.createVerticalStrut(4));
             JPanel linkRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
             linkRow.setOpaque(false);
+            linkRow.setAlignmentX(Component.LEFT_ALIGNMENT);
             linkRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
             JButton viewAll = makeLinkButton("View All (" + vehicles.size() + ")", BLUE);
             final List<String[]> snap = vehicles;
@@ -408,10 +428,6 @@ public class ViewProfile extends JPanel {
         c.gridy = 0; c.weighty = 1.0; c.fill = GridBagConstraints.BOTH;
         c.anchor = GridBagConstraints.NORTH;
 
-        // ── CHANGE 1: Left column weight increased from 0.38 → 0.45 ──────────
-        // A higher weightx means GridBagLayout gives this column a bigger share
-        // of the available horizontal space, making the Personal Information
-        // card visibly wider without changing anything else.
         c.gridx = 0; c.weightx = 0.45; c.insets = new Insets(0, 0, 0, 14);
         JPanel left = new JPanel();
         left.setLayout(new BoxLayout(left, BoxLayout.Y_AXIS));
@@ -419,7 +435,6 @@ public class ViewProfile extends JPanel {
         left.add(buildPersonalInfoCard());
         row.add(left, c);
 
-        // The right column automatically becomes narrower (1.0 - 0.45 = 0.55)
         c.gridx = 1; c.weightx = 0.55; c.insets = new Insets(0, 0, 0, 0);
         JPanel right = new JPanel();
         right.setLayout(new BoxLayout(right, BoxLayout.Y_AXIS));
@@ -445,26 +460,14 @@ public class ViewProfile extends JPanel {
         titleRow.setOpaque(false);
         titleRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
 
-        JLabel title = new JLabel("Personal information");
+        JLabel title = new JLabel("Personal Information");
         title.setFont(new Font("SansSerif", Font.BOLD, 15));
         title.setForeground(TEXT_DARK);
         titleRow.add(title, BorderLayout.WEST);
 
-        // ── CHANGE 2: Fix button group width ─────────────────────────────────
-        // We set a fixed preferredSize on btnGroup so that BoxLayout always sees
-        // the same width for this panel, regardless of which buttons are visible.
-        //
-        // HOW IT WORKS:
-        //   - When only "Edit" is showing, its preferred width is ~82px.
-        //   - When "Save" + "Cancel" are showing, their combined preferred width
-        //     is wider (~165px), which BoxLayout uses to resize the whole card.
-        //   - By locking btnGroup to 185px wide, BoxLayout always sees 185px
-        //     and NEVER widens the card when switching between button sets.
-        //   - The buttons themselves still paint and function normally — only
-        //     the *requested* layout width is capped.
         JPanel btnGroup = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
         btnGroup.setOpaque(false);
-        btnGroup.setPreferredSize(new Dimension(185, 30)); // FIX: lock preferred width
+        btnGroup.setPreferredSize(new Dimension(185, 30));
 
         btnEdit   = makeFilledButton("\u270E  Edit", BLUE,     Color.WHITE);
         btnSave   = makeFilledButton("Save",         GREEN,    Color.WHITE);
@@ -474,8 +477,8 @@ public class ViewProfile extends JPanel {
         btnSave.setPreferredSize(new Dimension(70, 30));
         btnCancel.setPreferredSize(new Dimension(85, 30));
 
-        btnSave.setVisible(false);   // hidden until Edit is clicked
-        btnCancel.setVisible(false); // hidden until Edit is clicked
+        btnSave.setVisible(false);
+        btnCancel.setVisible(false);
 
         btnGroup.add(btnEdit);
         btnGroup.add(btnSave);
@@ -495,13 +498,11 @@ public class ViewProfile extends JPanel {
         if (!role.isEmpty())
             role = Character.toUpperCase(role.charAt(0)) + role.substring(1).toLowerCase();
 
-        // ── READ row — Username ────────────────────────────────
         nameReadPanel    = makeReadRow("Username", name);
         displayNameLabel = getValueLabel(nameReadPanel);
         card.add(nameReadPanel);
         card.add(Box.createVerticalStrut(14));
 
-        // ── EDIT row — Username ────────────────────────────────
         nameEditPanel = new JPanel(new BorderLayout(10, 0));
         nameEditPanel.setOpaque(false);
         nameEditPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
@@ -511,7 +512,7 @@ public class ViewProfile extends JPanel {
 
         editNameField = new JTextField(name);
         styleField(editNameField);
-        editNameField.setPreferredSize(new Dimension(160, 30)); // cap preferred width
+        editNameField.setPreferredSize(new Dimension(160, 30));
 
         nameEditPanel.add(nameFieldLabel, BorderLayout.WEST);
         nameEditPanel.add(editNameField,  BorderLayout.CENTER);
@@ -519,13 +520,11 @@ public class ViewProfile extends JPanel {
         card.add(nameEditPanel);
         card.add(Box.createVerticalStrut(14));
 
-        // ── READ row — Email ───────────────────────────────────
         emailReadPanel    = makeReadRow("Email", email);
         displayEmailLabel = getValueLabel(emailReadPanel);
         card.add(emailReadPanel);
         card.add(Box.createVerticalStrut(14));
 
-        // ── EDIT row — Email ───────────────────────────────────
         emailEditPanel = new JPanel(new BorderLayout(10, 0));
         emailEditPanel.setOpaque(false);
         emailEditPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
@@ -535,7 +534,7 @@ public class ViewProfile extends JPanel {
 
         editEmailField = new JTextField(email);
         styleField(editEmailField);
-        editEmailField.setPreferredSize(new Dimension(160, 30)); // cap preferred width
+        editEmailField.setPreferredSize(new Dimension(160, 30));
 
         emailEditPanel.add(emailFieldLabel, BorderLayout.WEST);
         emailEditPanel.add(editEmailField,  BorderLayout.CENTER);
@@ -543,13 +542,11 @@ public class ViewProfile extends JPanel {
         card.add(emailEditPanel);
         card.add(Box.createVerticalStrut(14));
 
-        // ── READ row — Role (read-only, never editable) ────────
         JPanel roleRow = makeReadRow("Role", role);
         displayRoleLabel = getValueLabel(roleRow);
         card.add(roleRow);
         card.add(Box.createVerticalStrut(4));
 
-        // ── Button listeners ───────────────────────────────────
         btnEdit.addActionListener(e -> enterEditMode());
         btnCancel.addActionListener(e -> exitEditMode());
         btnSave.addActionListener(e -> saveProfileChanges());
@@ -625,29 +622,60 @@ public class ViewProfile extends JPanel {
         JPanel titleRow = new JPanel(new BorderLayout());
         titleRow.setOpaque(false);
         titleRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
-        JLabel title = new JLabel("My vehicles");
+        titleRow.setAlignmentX(Component.LEFT_ALIGNMENT);  // FIX: consistent alignment
+
+        JLabel title = new JLabel("My Vehicles");
         title.setFont(new Font("SansSerif", Font.BOLD, 15));
         title.setForeground(TEXT_DARK);
         titleRow.add(title, BorderLayout.WEST);
 
-        JButton addBtn = makeFilledButton("+Add", BLUE, Color.WHITE);
+        JButton addBtn = makeFilledButton("+ Add", BLUE, Color.WHITE);
         addBtn.setPreferredSize(new Dimension(80, 30));
         titleRow.add(addBtn, BorderLayout.EAST);
 
         vehicleCard.add(titleRow);
         vehicleCard.add(Box.createVerticalStrut(8));
-        vehicleCard.add(makeDivider());
+
+        JSeparator divider = makeDivider();
+        vehicleCard.add(divider);
         vehicleCard.add(Box.createVerticalStrut(12));
+
+        // ── FIX: Wrap vehicleListPanel in a BorderLayout panel ──────────────
+        //
+        // WHY THIS FIX WORKS (beginner-friendly explanation):
+        //
+        // BoxLayout (Y_AXIS) stacks panels top-to-bottom. It respects each
+        // child's AlignmentX and preferred/maximum width. The problem is that
+        // BoxLayout doesn't automatically stretch children to fill the full
+        // available width — it sizes them based on their own preferred size.
+        //
+        // By wrapping vehicleListPanel in a "stretchWrapper" that uses
+        // BorderLayout and placing vehicleListPanel in the CENTER, we let
+        // BorderLayout handle the horizontal stretching. BorderLayout ALWAYS
+        // fills the CENTER component to the full available width.
+        //
+        // This is the same reason the vehicle data rows looked correct — they
+        // were already using BorderLayout internally, so they filled the width.
+        // Now the add form (which lives inside vehicleListPanel) also benefits
+        // from the same full-width stretching behaviour.
 
         vehicleListPanel = new JPanel();
         vehicleListPanel.setLayout(new BoxLayout(vehicleListPanel, BoxLayout.Y_AXIS));
         vehicleListPanel.setOpaque(false);
         vehicleListPanel.add(makeEmptyLabel("Loading vehicles..."));
-        vehicleCard.add(vehicleListPanel);
 
-        // Build add form — height = ROW_H so it matches vehicle rows exactly
+        // The stretch wrapper: forces vehicleListPanel to fill full card width
+        JPanel stretchWrapper = new JPanel(new BorderLayout());
+        stretchWrapper.setOpaque(false);
+        stretchWrapper.setAlignmentX(Component.LEFT_ALIGNMENT); // consistent with siblings
+        stretchWrapper.add(vehicleListPanel, BorderLayout.CENTER);
+
+        vehicleCard.add(stretchWrapper);
+
+        // Build add form — this is now inside stretchWrapper → vehicleListPanel
         vehicleAddPanel = buildAddForm();
         vehicleAddPanel.setVisible(false);
+        vehicleAddPanel.setAlignmentX(Component.LEFT_ALIGNMENT); // FIX: match other rows
 
         addBtn.addActionListener(e -> {
             boolean open = !vehicleAddPanel.isVisible();
@@ -666,8 +694,23 @@ public class ViewProfile extends JPanel {
 
     /**
      * Builds the inline add-vehicle form.
-     * Uses ROW_H for both max and preferred height so it matches
-     * the vehicle data rows above it exactly.
+     *
+     * FIX EXPLANATION (beginner-friendly):
+     *
+     * The original code had:
+     *   form.setPreferredSize(new Dimension(0, ROW_H));
+     *
+     * Setting the preferred WIDTH to 0 is the main culprit. When BoxLayout
+     * asks the form "how wide do you want to be?", the form answered "0 pixels".
+     * BoxLayout then allocated only a tiny amount of space for it.
+     *
+     * The fix is simple:
+     *   - Remove setPreferredSize() entirely. Let the form calculate its own
+     *     natural width based on the fields inside it.
+     *   - Keep setMaximumSize() only for height control (capping the height
+     *     so the form doesn't grow too tall).
+     *   - The width is now controlled by the parent stretchWrapper (BorderLayout
+     *     CENTER), which fills the full available card width automatically.
      */
     private JPanel buildAddForm() {
         JPanel form = new JPanel(new BorderLayout(6, 0));
@@ -677,9 +720,13 @@ public class ViewProfile extends JPanel {
                 BorderFactory.createLineBorder(CARD_BORDER),
                 new EmptyBorder(6, 10, 6, 10)));
 
-        // Same height as vehicle data rows
+        // FIX: Only set maximum HEIGHT — do NOT set preferred width to 0.
+        // Previously: form.setPreferredSize(new Dimension(0, ROW_H));  ← WRONG
+        // Now we only cap the height, width is determined by the layout parent.
         form.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
-        form.setPreferredSize(new Dimension(0, ROW_H));
+        // Note: we intentionally do NOT call setPreferredSize() here anymore.
+        // The width will now naturally stretch to fill the card, just like the
+        // vehicle data rows above the form.
 
         JPanel fields = new JPanel(new GridBagLayout());
         fields.setOpaque(false);
@@ -833,6 +880,8 @@ public class ViewProfile extends JPanel {
         wrapper.setOpaque(false);
         wrapper.setBorder(BorderFactory.createLineBorder(CARD_BORDER, 1));
         wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
+        // FIX: ensure wrapper also has LEFT alignment for BoxLayout consistency
+        wrapper.setAlignmentX(Component.LEFT_ALIGNMENT);
         wrapper.add(switchPanel, BorderLayout.CENTER);
 
         JComboBox<String> eType   = (JComboBox<String>) editCard.getClientProperty("typeCombo");
@@ -1119,6 +1168,7 @@ public class ViewProfile extends JPanel {
         wrapper.setOpaque(false);
         wrapper.setBorder(BorderFactory.createLineBorder(CARD_BORDER, 1));
         wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
+        wrapper.setAlignmentX(Component.LEFT_ALIGNMENT);
         wrapper.add(switchPanel, BorderLayout.CENTER);
 
         JComboBox<String> eType   = (JComboBox<String>) editCard.getClientProperty("typeCombo");
