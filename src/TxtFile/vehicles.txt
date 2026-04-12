@@ -9,3 +9,4 @@ V8,C3,Motor,ALP1000,Yamaha,2023,Red
 V9,C4,Car,DIDI01,Perodua Myvi,2020,White
 V10,C5,Car,AMY88,Honda Civic,2022,Grey
 V11,C6,Car,RYAN77,Proton X50,2023,Black
+V12,C3,Motor,WWW100,Yamaha,2026,Blue
