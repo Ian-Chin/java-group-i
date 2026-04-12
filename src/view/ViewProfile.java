@@ -26,37 +26,16 @@ import java.util.List;
  * ViewProfile.java — Customer Profile Page
  * ============================================================
  *
- * BUG FIX IN THIS VERSION:
+ * CHANGES IN THIS VERSION:
  *
- *   PROBLEM — Add Vehicle Form Was Too Narrow
- *   -----------------------------------------
- *   The add form (vehicleAddPanel) appeared much smaller than the
- *   vehicle data rows above it. This happened because of TWO issues
- *   working together:
- *
- *   Issue 1: form.setPreferredSize(new Dimension(0, ROW_H))
- *     Setting the preferred WIDTH to 0 told BoxLayout "this panel
- *     wants to be 0 pixels wide". BoxLayout uses preferred size as
- *     a hint, so the form collapsed to a tiny width.
- *
- *   Issue 2: The form panel's AlignmentX was LEFT_ALIGNMENT (0.0f)
- *     while BoxLayout(Y_AXIS) aligns children to their AlignmentX.
- *     A mismatch between the form and other children caused the
- *     layout engine to not stretch it to full width.
- *
- *   FIX APPLIED:
- *   1. Removed setPreferredSize() from the add form entirely.
- *      We only keep setMaximumSize() so BoxLayout can still cap
- *      the height. Width is now determined naturally by the layout.
- *
- *   2. Changed AlignmentX on all panels inside vehicleListPanel
- *      to LEFT_ALIGNMENT consistently so BoxLayout stretches
- *      every child to the same full width.
- *
- *   3. Wrapped vehicleListPanel in a helper JPanel that uses
- *      BorderLayout — this forces the inner BoxLayout panel to
- *      stretch horizontally to fill the card width, which is the
- *      same technique used by the vehicle data rows.
+ *   My Vehicles section now:
+ *   - Shows up to 7 vehicles without scrolling
+ *   - If there are MORE than 7 vehicles, a vertical scroll bar
+ *     appears ONLY inside the My Vehicles card
+ *   - The scroll bar style matches the Upcoming Appointments
+ *     section in CounterStaffDashboard.java
+ *   - The panel sizes for Personal Info and My Vehicles do NOT change
+ *   - The "View All" link is removed — scrolling handles overflow
  *
  * ============================================================
  */
@@ -95,9 +74,9 @@ public class ViewProfile extends JPanel {
     private JButton btnSave;
     private JButton btnCancel;
 
-    private JPanel vehicleListPanel;
-    private JPanel vehicleAddPanel;
-    private JPanel vehicleCard;
+    private JPanel vehicleListPanel;   // The inner panel that holds vehicle rows
+    private JPanel vehicleAddPanel;    // The "add vehicle" form
+    private JPanel vehicleCard;        // The outer card container
 
     private JComboBox<String> addTypeCombo;
     private int avatarColorIndex = 0;
@@ -128,18 +107,18 @@ public class ViewProfile extends JPanel {
     // CONSTANTS
     // =========================================================
 
-    /** Max vehicle rows shown before a "View All" link appears. */
-    private static final int MAX_VISIBLE = 4;
-
     /**
-     * ROW_H — height used for BOTH vehicle rows AND the add form.
-     * One constant keeps everything exactly the same size.
+     * MAX_VISIBLE — how many vehicles are shown before a scroll bar appears.
+     * Set to 6 — scroll bar only appears when there are 7 or more vehicles.
      */
+    private static final int MAX_VISIBLE = 6;
+
+    /** Height of each vehicle row and the add-vehicle form. */
     private static final int ROW_H  = 64;
     private static final int EDIT_H = 68;
 
     /** Size of the icon canvas inside each vehicle row. */
-    private static final int ICON_SIZE = 44;
+    private static final int ICON_SIZE = 50;
 
     // =========================================================
     // UNICODE EMOJI ICONS
@@ -173,6 +152,7 @@ public class ViewProfile extends JPanel {
         setLayout(new BorderLayout());
         setBackground(PAGE_BG);
 
+        // The outer scroll pane wraps the WHOLE page
         JScrollPane scroll = new JScrollPane(buildPage());
         scroll.setBorder(null);
         scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
@@ -217,51 +197,72 @@ public class ViewProfile extends JPanel {
     /**
      * Called by the controller callback chain.
      * Rebuilds all vehicle rows with fresh data.
-     * Each String[]: [0]id [1]type [2]plate [3]brand [4]year [5]colour
+     *
+     * Each String[] in the list holds:
+     *   [0] id  [1] type  [2] plate  [3] brand  [4] year  [5] colour
+     *
+     * HOW SCROLLING WORKS HERE:
+     * - All vehicles are added to vehicleListPanel (no MAX_VISIBLE limit on display)
+     * - vehicleListPanel lives inside a JScrollPane
+     * - The JScrollPane only shows a scroll bar when the content is taller
+     *   than the fixed height we set on the scroll pane
+     * - MAX_VISIBLE (6) is used to calculate the preferred height of the
+     *   scroll pane so that exactly 6 rows are visible before scrolling starts
      */
     public void rebuildVehicleList(List<String[]> vehicles) {
         if (vehicleListPanel == null) return;
+
+        // Remember if the add-form was open before we rebuild
         boolean addFormWasOpen = (vehicleAddPanel != null) && vehicleAddPanel.isVisible();
+
+        // Clear all existing rows
         vehicleListPanel.removeAll();
 
         if (vehicles.isEmpty()) {
+            // Show a friendly message when there are no vehicles
             vehicleListPanel.add(makeEmptyLabel("No vehicles registered yet."));
         } else {
-            int toShow = Math.min(MAX_VISIBLE, vehicles.size());
-            for (int i = 0; i < toShow; i++) {
+            // Add ALL vehicles to the list — scrolling handles overflow
+            for (int i = 0; i < vehicles.size(); i++) {
                 String[] v = vehicles.get(i);
-                // FIX: set AlignmentX to LEFT on every vehicle row
+
+                // Build one row for this vehicle
                 JPanel row = buildVehicleRow(v[1], v[2], v[3], v[4], v[5]);
-                row.setAlignmentX(Component.LEFT_ALIGNMENT);
+                row.setAlignmentX(Component.LEFT_ALIGNMENT); // keep rows aligned left
                 vehicleListPanel.add(row);
-                if (i < toShow - 1) vehicleListPanel.add(Box.createVerticalStrut(6));
+
+                // Add a small gap between rows (but not after the last one)
+                if (i < vehicles.size() - 1) {
+                    vehicleListPanel.add(Box.createVerticalStrut(6));
+                }
             }
         }
 
-        if (vehicleAddPanel != null) {
+        // Re-add the "add vehicle" form below all the rows — ONLY when it is open.
+        //
+        // WHY: Even when vehicleAddPanel is hidden (setVisible(false)), Swing
+        // still counts it and its gap strut as height inside vehicleListPanel.
+        // This causes the content to appear taller than the viewport, which:
+        //   1. Triggers a scroll bar even when there are only 6 vehicles
+        //   2. Leaves a blank space at the bottom of the card
+        //
+        // FIX: Only physically add the form panel to the list when it is open.
+        // When the form is closed, it is not in the layout at all, so Swing
+        // measures no extra height and the scroll bar stays hidden.
+        if (vehicleAddPanel != null && addFormWasOpen) {
             vehicleListPanel.add(Box.createVerticalStrut(6));
-            // FIX: make sure the add form also has LEFT alignment to match rows
             vehicleAddPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
             vehicleListPanel.add(vehicleAddPanel);
-            vehicleAddPanel.setVisible(addFormWasOpen);
+            vehicleAddPanel.setVisible(true);
         }
 
-        if (vehicles.size() > MAX_VISIBLE) {
-            vehicleListPanel.add(Box.createVerticalStrut(4));
-            JPanel linkRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
-            linkRow.setOpaque(false);
-            linkRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-            linkRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
-            JButton viewAll = makeLinkButton("View All (" + vehicles.size() + ")", BLUE);
-            final List<String[]> snap = vehicles;
-            viewAll.addActionListener(e -> showViewAllDialog(snap));
-            linkRow.add(viewAll);
-            vehicleListPanel.add(linkRow);
-        }
-
+        // Tell Swing to re-draw the updated list
         vehicleListPanel.revalidate();
         vehicleListPanel.repaint();
-        if (vehicleCard != null) { vehicleCard.revalidate(); vehicleCard.repaint(); }
+        if (vehicleCard != null) {
+            vehicleCard.revalidate();
+            vehicleCard.repaint();
+        }
     }
 
 
@@ -428,14 +429,17 @@ public class ViewProfile extends JPanel {
         c.gridy = 0; c.weighty = 1.0; c.fill = GridBagConstraints.BOTH;
         c.anchor = GridBagConstraints.NORTH;
 
-        c.gridx = 0; c.weightx = 0.45; c.insets = new Insets(0, 0, 0, 14);
+        // weightx controls how much of the total width each column gets.
+        // 0.19 = Personal Information takes 19% of the width (narrower)
+        // 0.81 = My Vehicles takes 81% of the width (wider)
+        c.gridx = 0; c.weightx = 0.19; c.insets = new Insets(0, 0, 0, 14);
         JPanel left = new JPanel();
         left.setLayout(new BoxLayout(left, BoxLayout.Y_AXIS));
         left.setOpaque(false);
         left.add(buildPersonalInfoCard());
         row.add(left, c);
 
-        c.gridx = 1; c.weightx = 0.55; c.insets = new Insets(0, 0, 0, 0);
+        c.gridx = 1; c.weightx = 0.81; c.insets = new Insets(0, 0, 0, 0);
         JPanel right = new JPanel();
         right.setLayout(new BoxLayout(right, BoxLayout.Y_AXIS));
         right.setOpaque(false);
@@ -613,16 +617,40 @@ public class ViewProfile extends JPanel {
     // MY VEHICLES CARD
     // =========================================================
 
+    /**
+     * Builds the "My Vehicles" card.
+     *
+     * SCROLL BAR EXPLANATION (beginner-friendly):
+     *
+     * The vehicle list is placed inside a JScrollPane — the same approach
+     * used for the Upcoming Appointments section in CounterStaffDashboard.java.
+     *
+     * How it works step by step:
+     *
+     * 1. vehicleListPanel — a BoxLayout(Y_AXIS) panel that holds all vehicle rows.
+     *    All vehicles are added here; there is no hard cut-off on display count.
+     *
+     * 2. JScrollPane (vehicleScrollPane) — wraps vehicleListPanel.
+     *    When the content inside is taller than the scroll pane's height,
+     *    a vertical scroll bar automatically appears.
+     *
+     * 3. Preferred height of the scroll pane — we set it to exactly
+     *    MAX_VISIBLE (7) rows tall. So the first 7 rows are visible without
+     *    scrolling; any row beyond the 7th requires scrolling to reach.
+     *
+     * 4. The scroll pane has no border and a transparent background so
+     *    it blends seamlessly inside the card — just like Upcoming Appointments.
+     */
     private JPanel buildVehicleCard() {
         vehicleCard = makeCard();
         vehicleCard.setLayout(new BoxLayout(vehicleCard, BoxLayout.Y_AXIS));
         vehicleCard.setBorder(new EmptyBorder(18, 20, 18, 20));
 
-        // ── Title row with "+Add" button ──────────────────────
+        // ── Title row with "+Add" button ──────────────────────────
         JPanel titleRow = new JPanel(new BorderLayout());
         titleRow.setOpaque(false);
         titleRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
-        titleRow.setAlignmentX(Component.LEFT_ALIGNMENT);  // FIX: consistent alignment
+        titleRow.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JLabel title = new JLabel("My Vehicles");
         title.setFont(new Font("SansSerif", Font.BOLD, 15));
@@ -640,50 +668,103 @@ public class ViewProfile extends JPanel {
         vehicleCard.add(divider);
         vehicleCard.add(Box.createVerticalStrut(12));
 
-        // ── FIX: Wrap vehicleListPanel in a BorderLayout panel ──────────────
+        // ── vehicleListPanel: holds all the rows ─────────────────
         //
-        // WHY THIS FIX WORKS (beginner-friendly explanation):
+        // We use ScrollableVehiclePanel — a private inner class at the
+        // bottom of this file that extends JPanel and implements Scrollable.
         //
-        // BoxLayout (Y_AXIS) stacks panels top-to-bottom. It respects each
-        // child's AlignmentX and preferred/maximum width. The problem is that
-        // BoxLayout doesn't automatically stretch children to fill the full
-        // available width — it sizes them based on their own preferred size.
+        // WHY: A plain JPanel inside a JScrollPane cannot tell Swing
+        // "stretch my width to fill the viewport". Without this, Swing
+        // may show a scroll bar even when fewer than MAX_VISIBLE rows
+        // are present, because it cannot correctly compare content height
+        // to viewport height.
         //
-        // By wrapping vehicleListPanel in a "stretchWrapper" that uses
-        // BorderLayout and placing vehicleListPanel in the CENTER, we let
-        // BorderLayout handle the horizontal stretching. BorderLayout ALWAYS
-        // fills the CENTER component to the full available width.
-        //
-        // This is the same reason the vehicle data rows looked correct — they
-        // were already using BorderLayout internally, so they filled the width.
-        // Now the add form (which lives inside vehicleListPanel) also benefits
-        // from the same full-width stretching behaviour.
-
-        vehicleListPanel = new JPanel();
+        // ScrollableVehiclePanel fixes this by implementing Scrollable:
+        //   getScrollableTracksViewportWidth()  → true
+        //     Always fill full width; no horizontal scroll bar ever.
+        //   getScrollableTracksViewportHeight() → false
+        //     Allow vertical scrolling only when content genuinely
+        //     exceeds the fixed viewport height of MAX_VISIBLE rows.
+        vehicleListPanel = new ScrollableVehiclePanel();
         vehicleListPanel.setLayout(new BoxLayout(vehicleListPanel, BoxLayout.Y_AXIS));
-        vehicleListPanel.setOpaque(false);
+        vehicleListPanel.setOpaque(false); // transparent so card background shows through
+
+        // Show a placeholder while real data is loading
         vehicleListPanel.add(makeEmptyLabel("Loading vehicles..."));
 
-        // The stretch wrapper: forces vehicleListPanel to fill full card width
-        JPanel stretchWrapper = new JPanel(new BorderLayout());
-        stretchWrapper.setOpaque(false);
-        stretchWrapper.setAlignmentX(Component.LEFT_ALIGNMENT); // consistent with siblings
-        stretchWrapper.add(vehicleListPanel, BorderLayout.CENTER);
+        // ── JScrollPane: wraps vehicleListPanel ───────────────────
+        //
+        // This is the key change: vehicleListPanel is placed inside a
+        // JScrollPane so that when there are more than MAX_VISIBLE rows,
+        // a vertical scroll bar appears automatically.
+        //
+        // We use the SAME settings as the Upcoming Appointments scroll pane
+        // in CounterStaffDashboard.java:
+        //   - VERTICAL_SCROLLBAR_AS_NEEDED  → scroll bar only appears when needed
+        //   - HORIZONTAL_SCROLLBAR_NEVER    → no horizontal scroll bar
+        //   - setBorder(null)               → no visible border around the scroll pane
+        //   - setOpaque(false)              → transparent background
+        //   - getViewport().setOpaque(false)→ transparent viewport
+        //   - getVerticalScrollBar().setUnitIncrement(10) → smooth scrolling
+        JScrollPane vehicleScrollPane = new JScrollPane(vehicleListPanel,
+                JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+                JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        vehicleScrollPane.setBorder(null);
+        vehicleScrollPane.setOpaque(false);
+        vehicleScrollPane.getViewport().setOpaque(false);
+        vehicleScrollPane.getVerticalScrollBar().setUnitIncrement(10);
 
-        vehicleCard.add(stretchWrapper);
+        // ── Set the scroll pane height to exactly MAX_VISIBLE rows ──
+        //
+        // WHY: We want exactly 6 rows visible before scrolling starts.
+        // Each row is ROW_H (64px) tall, plus a 6px gap between rows.
+        // Formula: (6 rows × 64px) + (5 gaps × 6px) = 384 + 30 = 414px
+        //
+        // setMaximumSize controls how tall the scroll pane can grow.
+        // We also set it as the preferred size so BoxLayout respects it.
+        int scrollPaneHeight = (MAX_VISIBLE * ROW_H) + ((MAX_VISIBLE - 1) * 6);
+        vehicleScrollPane.setPreferredSize(new Dimension(0, scrollPaneHeight));
+        vehicleScrollPane.setMaximumSize(new Dimension(Integer.MAX_VALUE, scrollPaneHeight));
+        vehicleScrollPane.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        // Build add form — this is now inside stretchWrapper → vehicleListPanel
+        vehicleCard.add(vehicleScrollPane);
+
+        // ── Build the add-vehicle form ─────────────────────────────
+        // vehicleAddPanel is added INSIDE vehicleListPanel (by rebuildVehicleList),
+        // so it also appears inside the scroll pane below all the rows.
         vehicleAddPanel = buildAddForm();
         vehicleAddPanel.setVisible(false);
-        vehicleAddPanel.setAlignmentX(Component.LEFT_ALIGNMENT); // FIX: match other rows
+        vehicleAddPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
+        // ── Wire up the "+Add" button ──────────────────────────────
+        //
+        // Because we now only add vehicleAddPanel to vehicleListPanel when
+        // it is open, the toggle button must physically add/remove it from
+        // the layout rather than just calling setVisible().
         addBtn.addActionListener(e -> {
-            boolean open = !vehicleAddPanel.isVisible();
-            vehicleAddPanel.setVisible(open);
-            if (open) {
+            boolean currentlyOpen = vehicleListPanel.isAncestorOf(vehicleAddPanel);
+            if (currentlyOpen) {
+                // Close: remove the form and its gap strut from the list
+                vehicleListPanel.remove(vehicleAddPanel);
+                // Remove the last strut that was added before the form
+                int count = vehicleListPanel.getComponentCount();
+                if (count > 0) {
+                    java.awt.Component last = vehicleListPanel.getComponent(count - 1);
+                    if (last instanceof javax.swing.Box.Filler) {
+                        vehicleListPanel.remove(last);
+                    }
+                }
+            } else {
+                // Open: append the gap strut and form to the list
                 clearFields(vehicleAddPanel);
                 if (addTypeCombo != null) addTypeCombo.setSelectedIndex(0);
+                vehicleListPanel.add(Box.createVerticalStrut(6));
+                vehicleAddPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+                vehicleListPanel.add(vehicleAddPanel);
+                vehicleAddPanel.setVisible(true);
             }
+            vehicleListPanel.revalidate();
+            vehicleListPanel.repaint();
             vehicleCard.revalidate();
             vehicleCard.repaint();
         });
@@ -695,22 +776,8 @@ public class ViewProfile extends JPanel {
     /**
      * Builds the inline add-vehicle form.
      *
-     * FIX EXPLANATION (beginner-friendly):
-     *
-     * The original code had:
-     *   form.setPreferredSize(new Dimension(0, ROW_H));
-     *
-     * Setting the preferred WIDTH to 0 is the main culprit. When BoxLayout
-     * asks the form "how wide do you want to be?", the form answered "0 pixels".
-     * BoxLayout then allocated only a tiny amount of space for it.
-     *
-     * The fix is simple:
-     *   - Remove setPreferredSize() entirely. Let the form calculate its own
-     *     natural width based on the fields inside it.
-     *   - Keep setMaximumSize() only for height control (capping the height
-     *     so the form doesn't grow too tall).
-     *   - The width is now controlled by the parent stretchWrapper (BorderLayout
-     *     CENTER), which fills the full available card width automatically.
+     * This form is added inside vehicleListPanel (which lives inside the
+     * JScrollPane), so it scrolls along with the vehicle rows.
      */
     private JPanel buildAddForm() {
         JPanel form = new JPanel(new BorderLayout(6, 0));
@@ -720,13 +787,8 @@ public class ViewProfile extends JPanel {
                 BorderFactory.createLineBorder(CARD_BORDER),
                 new EmptyBorder(6, 10, 6, 10)));
 
-        // FIX: Only set maximum HEIGHT — do NOT set preferred width to 0.
-        // Previously: form.setPreferredSize(new Dimension(0, ROW_H));  ← WRONG
-        // Now we only cap the height, width is determined by the layout parent.
+        // Only cap the height; let width fill naturally from parent layout
         form.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
-        // Note: we intentionally do NOT call setPreferredSize() here anymore.
-        // The width will now naturally stretch to fill the card, just like the
-        // vehicle data rows above the form.
 
         JPanel fields = new JPanel(new GridBagLayout());
         fields.setOpaque(false);
@@ -762,7 +824,19 @@ public class ViewProfile extends JPanel {
         form.add(btns, BorderLayout.EAST);
 
         cancelBtn.addActionListener(e -> {
-            vehicleAddPanel.setVisible(false);
+            // Remove form and its preceding gap strut from the list entirely
+            if (vehicleListPanel != null && vehicleListPanel.isAncestorOf(vehicleAddPanel)) {
+                vehicleListPanel.remove(vehicleAddPanel);
+                int count = vehicleListPanel.getComponentCount();
+                if (count > 0) {
+                    java.awt.Component last = vehicleListPanel.getComponent(count - 1);
+                    if (last instanceof javax.swing.Box.Filler) {
+                        vehicleListPanel.remove(last);
+                    }
+                }
+                vehicleListPanel.revalidate();
+                vehicleListPanel.repaint();
+            }
             clearFields(vehicleAddPanel);
             if (addTypeCombo != null) addTypeCombo.setSelectedIndex(0);
             if (vehicleCard  != null) { vehicleCard.revalidate(); vehicleCard.repaint(); }
@@ -774,9 +848,19 @@ public class ViewProfile extends JPanel {
                               yearF.getText().trim(), colourF.getText().trim() };
             boolean ok = vehicleController.handleAdd(data);
             if (ok) {
+                // Remove form and its preceding gap strut from the list
+                if (vehicleListPanel != null && vehicleListPanel.isAncestorOf(vehicleAddPanel)) {
+                    vehicleListPanel.remove(vehicleAddPanel);
+                    int count = vehicleListPanel.getComponentCount();
+                    if (count > 0) {
+                        java.awt.Component last = vehicleListPanel.getComponent(count - 1);
+                        if (last instanceof javax.swing.Box.Filler) {
+                            vehicleListPanel.remove(last);
+                        }
+                    }
+                }
                 clearFields(vehicleAddPanel);
                 if (addTypeCombo != null) addTypeCombo.setSelectedIndex(0);
-                vehicleAddPanel.setVisible(false);
                 if (vehicleCard != null) { vehicleCard.revalidate(); vehicleCard.repaint(); }
                 loadVehicles();
                 JOptionPane.showMessageDialog(app, "Vehicle added successfully.",
@@ -826,7 +910,7 @@ public class ViewProfile extends JPanel {
         // ── VEHICLE ICON ──────────────────────────────────────────
         String iconText = "Motor".equalsIgnoreCase(vehicleType) ? ICON_MOTOR : ICON_CAR;
         JLabel iconLbl  = new JLabel(iconText, SwingConstants.CENTER);
-        iconLbl.setFont(new Font("SansSerif", Font.PLAIN, 24));
+        iconLbl.setFont(new Font("SansSerif", Font.PLAIN, 30));
         iconLbl.setPreferredSize(new Dimension(ICON_SIZE, ICON_SIZE));
         iconLbl.setMinimumSize  (new Dimension(ICON_SIZE, ICON_SIZE));
         iconLbl.setMaximumSize  (new Dimension(ICON_SIZE, ICON_SIZE));
@@ -880,7 +964,6 @@ public class ViewProfile extends JPanel {
         wrapper.setOpaque(false);
         wrapper.setBorder(BorderFactory.createLineBorder(CARD_BORDER, 1));
         wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
-        // FIX: ensure wrapper also has LEFT alignment for BoxLayout consistency
         wrapper.setAlignmentX(Component.LEFT_ALIGNMENT);
         wrapper.add(switchPanel, BorderLayout.CENTER);
 
@@ -1020,236 +1103,6 @@ public class ViewProfile extends JPanel {
         card.putClientProperty("saveBtn",   saveBtn);
         card.putClientProperty("cancelBtn", cancelBtn);
         return card;
-    }
-
-
-    // =========================================================
-    // VIEW ALL DIALOG
-    // =========================================================
-
-    private void showViewAllDialog(List<String[]> initial) {
-        JDialog dlg = new JDialog((Frame) SwingUtilities.getWindowAncestor(this),
-                "All My Vehicles", true);
-        dlg.setSize(820, 520);
-        dlg.setLocationRelativeTo(this);
-        dlg.setLayout(new BorderLayout());
-        dlg.setResizable(false);
-
-        JPanel header = new JPanel(new BorderLayout());
-        header.setBackground(Color.WHITE);
-        header.setBorder(new EmptyBorder(16, 22, 12, 22));
-        JLabel titleLbl = new JLabel("All My Vehicles");
-        titleLbl.setFont(new Font("SansSerif", Font.BOLD, 15));
-        titleLbl.setForeground(TEXT_DARK);
-        header.add(titleLbl, BorderLayout.WEST);
-        JLabel countLbl = new JLabel(initial.size() + " vehicles");
-        countLbl.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        countLbl.setForeground(TEXT_GREY);
-        header.add(countLbl, BorderLayout.EAST);
-        dlg.add(header, BorderLayout.NORTH);
-
-        JPanel listPanel = new JPanel();
-        listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
-        listPanel.setBackground(Color.WHITE);
-        listPanel.setBorder(new EmptyBorder(8, 18, 18, 18));
-
-        Runnable[] refresh = {null};
-        refresh[0] = () -> {
-            User user = app.getLoggedInUserObj();
-            List<String[]> latest = (user != null)
-                    ? vehicleController.getAllVehiclesForUser(user.getUserId())
-                    : new java.util.ArrayList<>();
-            countLbl.setText(latest.size() + " vehicles");
-            listPanel.removeAll();
-            if (latest.isEmpty()) {
-                listPanel.add(makeEmptyLabel("No vehicles registered."));
-            } else {
-                for (int i = 0; i < latest.size(); i++) {
-                    JPanel row = buildDialogRow(latest.get(i), dlg, refresh[0]);
-                    row.setAlignmentX(Component.LEFT_ALIGNMENT);
-                    listPanel.add(row);
-                    if (i < latest.size() - 1) listPanel.add(Box.createVerticalStrut(6));
-                }
-            }
-            listPanel.revalidate();
-            listPanel.repaint();
-            loadVehicles();
-            if (latest.size() <= MAX_VISIBLE) dlg.dispose();
-        };
-
-        for (int i = 0; i < initial.size(); i++) {
-            JPanel row = buildDialogRow(initial.get(i), dlg, refresh[0]);
-            row.setAlignmentX(Component.LEFT_ALIGNMENT);
-            listPanel.add(row);
-            if (i < initial.size() - 1) listPanel.add(Box.createVerticalStrut(6));
-        }
-
-        JScrollPane scroll = new JScrollPane(listPanel);
-        scroll.setBorder(null);
-        scroll.getViewport().setBackground(Color.WHITE);
-        scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        scroll.getVerticalScrollBar().setUnitIncrement(16);
-        dlg.add(scroll, BorderLayout.CENTER);
-
-        JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 18, 10));
-        footer.setBackground(Color.WHITE);
-        footer.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, CARD_BORDER));
-        JButton closeBtn = makeFilledButton("Close", new Color(108, 117, 125), Color.WHITE);
-        closeBtn.setPreferredSize(new Dimension(78, 32));
-        closeBtn.addActionListener(e -> dlg.dispose());
-        footer.add(closeBtn);
-        dlg.add(footer, BorderLayout.SOUTH);
-
-        dlg.setVisible(true);
-    }
-
-    private JPanel buildDialogRow(String[] v, JDialog dlg, Runnable onChanged) {
-        String vType  = v[1];
-        String plate  = v[2];
-        String brand  = v[3];
-        String year   = v[4];
-        String colour = v[5];
-
-        JPanel display = new JPanel(new BorderLayout(0, 0));
-        display.setOpaque(false);
-        display.setBorder(new EmptyBorder(10, 12, 10, 12));
-
-        // ── VEHICLE ICON ──────────────────────────────────────────
-        String iconText = "Motor".equalsIgnoreCase(vType) ? ICON_MOTOR : ICON_CAR;
-        JLabel iconLbl  = new JLabel(iconText, SwingConstants.CENTER);
-        iconLbl.setFont(new Font("SansSerif", Font.PLAIN, 24));
-        iconLbl.setPreferredSize(new Dimension(ICON_SIZE, ICON_SIZE));
-        iconLbl.setMinimumSize  (new Dimension(ICON_SIZE, ICON_SIZE));
-        iconLbl.setMaximumSize  (new Dimension(ICON_SIZE, ICON_SIZE));
-        display.add(iconLbl, BorderLayout.WEST);
-
-        JPanel info = new JPanel();
-        info.setLayout(new BoxLayout(info, BoxLayout.Y_AXIS));
-        info.setOpaque(false);
-        info.setBorder(new EmptyBorder(0, 10, 0, 0));
-
-        JLabel brandLbl = new JLabel(brand);
-        brandLbl.setFont(new Font("SansSerif", Font.BOLD, 13));
-        brandLbl.setForeground(TEXT_DARK);
-        brandLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel detailLbl = new JLabel(plate + "  \u00B7  " + year + "  \u00B7  " + colour);
-        detailLbl.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        detailLbl.setForeground(TEXT_GREY);
-        detailLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        info.add(Box.createVerticalGlue());
-        info.add(brandLbl);
-        info.add(Box.createVerticalStrut(3));
-        info.add(detailLbl);
-        info.add(Box.createVerticalGlue());
-        display.add(info, BorderLayout.CENTER);
-
-        JPanel acts = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
-        acts.setOpaque(false);
-        JButton editBtn   = makeFilledButton("Edit",   BLUE, Color.WHITE);
-        JButton removeBtn = makeFilledButton("Remove", RED,  Color.WHITE);
-        editBtn.setPreferredSize(new Dimension(70, 30));
-        removeBtn.setPreferredSize(new Dimension(85, 30));
-        acts.add(editBtn);
-        acts.add(removeBtn);
-        display.add(acts, BorderLayout.EAST);
-
-        JPanel     editCard   = buildEditCard(vType, plate, brand, year, colour);
-        CardLayout switcher   = new CardLayout();
-        JPanel     switchPanel = new JPanel(switcher);
-        switchPanel.setOpaque(false);
-        switchPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
-        switchPanel.add(display,  "display");
-        switchPanel.add(editCard, "edit");
-        switcher.show(switchPanel, "display");
-
-        JPanel wrapper = new JPanel(new BorderLayout());
-        wrapper.setOpaque(false);
-        wrapper.setBorder(BorderFactory.createLineBorder(CARD_BORDER, 1));
-        wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
-        wrapper.setAlignmentX(Component.LEFT_ALIGNMENT);
-        wrapper.add(switchPanel, BorderLayout.CENTER);
-
-        JComboBox<String> eType   = (JComboBox<String>) editCard.getClientProperty("typeCombo");
-        JTextField        ePlate  = (JTextField)        editCard.getClientProperty("plate");
-        JTextField        eBrand  = (JTextField)        editCard.getClientProperty("brand");
-        JTextField        eYear   = (JTextField)        editCard.getClientProperty("year");
-        JTextField        eColour = (JTextField)        editCard.getClientProperty("colour");
-        JButton           eSave   = (JButton)           editCard.getClientProperty("saveBtn");
-        JButton           eCancel = (JButton)           editCard.getClientProperty("cancelBtn");
-
-        editBtn.addActionListener(e -> {
-            if (eType   != null) eType.setSelectedItem(vType);
-            if (ePlate  != null) ePlate.setText(plate);
-            if (eBrand  != null) eBrand.setText(brand);
-            if (eYear   != null) eYear.setText(year);
-            if (eColour != null) eColour.setText(colour);
-            switchPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, EDIT_H));
-            wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, EDIT_H));
-            switcher.show(switchPanel, "edit");
-            if (ePlate != null) ePlate.requestFocusInWindow();
-            if (wrapper.getParent() != null) wrapper.getParent().revalidate();
-        });
-
-        if (eCancel != null) {
-            eCancel.addActionListener(e -> {
-                switchPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
-                wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
-                switcher.show(switchPanel, "display");
-                if (wrapper.getParent() != null) wrapper.getParent().revalidate();
-            });
-        }
-
-        Runnable doSave = () -> {
-            String nt = (eType   != null) ? (String) eType.getSelectedItem() : vType;
-            String np = (ePlate  != null) ? ePlate.getText().trim()  : plate;
-            String nb = (eBrand  != null) ? eBrand.getText().trim()  : brand;
-            String ny = (eYear   != null) ? eYear.getText().trim()   : year;
-            String nc = (eColour != null) ? eColour.getText().trim() : colour;
-            if (nt.equals(vType) && np.equals(plate) && nb.equals(brand)
-                    && ny.equals(year) && nc.equals(colour)) {
-                JOptionPane.showMessageDialog(dlg, "No changes were made.", "No Changes",
-                        JOptionPane.INFORMATION_MESSAGE);
-                if (eCancel != null) eCancel.doClick();
-                return;
-            }
-            if (vehicleController.handleEdit(plate, new String[]{nt, np, nb, ny, nc})) {
-                JOptionPane.showMessageDialog(dlg, "Vehicle updated successfully.", "Success",
-                        JOptionPane.INFORMATION_MESSAGE);
-                onChanged.run();
-            }
-        };
-        if (eSave != null) eSave.addActionListener(e -> doSave.run());
-
-        KeyAdapter enter = new KeyAdapter() {
-            @Override public void keyPressed(KeyEvent e) {
-                if (e.getKeyCode() == KeyEvent.VK_ENTER) doSave.run();
-            }
-        };
-        if (ePlate  != null) ePlate.addKeyListener(enter);
-        if (eBrand  != null) eBrand.addKeyListener(enter);
-        if (eYear   != null) eYear.addKeyListener(enter);
-        if (eColour != null) eColour.addKeyListener(enter);
-
-        removeBtn.addActionListener(e -> {
-            int ch = JOptionPane.showConfirmDialog(dlg,
-                    "Remove " + brand + " (" + plate + ")?",
-                    "Confirm Remove", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
-            if (ch == JOptionPane.YES_OPTION) {
-                User u = app.getLoggedInUserObj();
-                if (u != null && vehicleService.deleteVehicle(u.getUserId(), plate)) {
-                    JOptionPane.showMessageDialog(dlg, brand + " removed.", "Removed",
-                            JOptionPane.INFORMATION_MESSAGE);
-                    onChanged.run();
-                } else {
-                    JOptionPane.showMessageDialog(dlg, "Failed to remove vehicle.", "Error",
-                            JOptionPane.ERROR_MESSAGE);
-                }
-            }
-        });
-
-        return wrapper;
     }
 
 
@@ -1405,18 +1258,6 @@ public class ViewProfile extends JPanel {
         return p;
     }
 
-    private JButton makeLinkButton(String text, Color color) {
-        JButton btn = new JButton(text);
-        btn.setFont(new Font("SansSerif", Font.PLAIN, 13));
-        btn.setForeground(color);
-        btn.setContentAreaFilled(false);
-        btn.setBorderPainted(false);
-        btn.setFocusPainted(false);
-        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        btn.setMargin(new Insets(0, 4, 0, 4));
-        return btn;
-    }
-
     private JButton makeFilledButton(String text, Color bg, Color fg) {
         JButton btn = new JButton(text) {
             private boolean hov = false;
@@ -1460,4 +1301,66 @@ public class ViewProfile extends JPanel {
             else if (comp instanceof Container) clearFields((Container) comp);
         }
     }
+    // =========================================================
+    // PRIVATE INNER CLASS — ScrollableVehiclePanel
+    // =========================================================
+
+    /**
+     * A JPanel that implements javax.swing.Scrollable so that the
+     * JScrollPane wrapping the vehicle list knows:
+     *
+     *   1. Always stretch width to fill the viewport (no horizontal scroll bar).
+     *   2. Only show a vertical scroll bar when content height TRULY
+     *      exceeds the viewport height (i.e. more than MAX_VISIBLE rows).
+     *
+     * WHY A SEPARATE CLASS:
+     * Java does not allow "new JPanel() implements SomeInterface { ... }"
+     * inside a method body — that is invalid syntax. The correct pattern
+     * is to declare a named inner class and instantiate it with "new".
+     */
+    private static class ScrollableVehiclePanel extends JPanel
+            implements javax.swing.Scrollable {
+
+        @Override
+        public Dimension getPreferredScrollableViewportSize() {
+            // Let the scroll pane use our natural preferred size
+            return getPreferredSize();
+        }
+
+        @Override
+        public int getScrollableUnitIncrement(
+                java.awt.Rectangle visibleRect, int orientation, int direction) {
+            // Scroll one row height at a time when using the scroll bar arrows
+            return ROW_H;
+        }
+
+        @Override
+        public int getScrollableBlockIncrement(
+                java.awt.Rectangle visibleRect, int orientation, int direction) {
+            // Scroll three rows at a time on Page Up / Page Down
+            return ROW_H * 3;
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportWidth() {
+            // TRUE → always stretch to fill the full viewport width.
+            // This prevents a horizontal scroll bar and lets Swing
+            // measure height correctly.
+            return true;
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportHeight() {
+            // FALSE → do NOT stretch to fill viewport height.
+            // This allows the scroll bar to appear when the content
+            // (vehicle rows) is taller than the fixed viewport height.
+            return false;
+        }
+
+        // ROW_H must be accessible here; we re-declare it as a constant.
+        // It must match the ROW_H in the outer ViewProfile class.
+        private static final int ROW_H = 64;
+    }
+
+
 }

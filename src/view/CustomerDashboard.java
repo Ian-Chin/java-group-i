@@ -1254,7 +1254,7 @@ public class CustomerDashboard extends JPanel {
         } catch (Exception ignored) {}
 
         if (!logoLoaded) {
-            JLabel fallback = new JLabel("APU Customer");
+            JLabel fallback = new JLabel("APU ASC Customer");
             fallback.setFont(new Font("SansSerif", Font.BOLD, 22));
             fallback.setForeground(Color.WHITE);
             fallback.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -1264,7 +1264,7 @@ public class CustomerDashboard extends JPanel {
         // ── CHANGE: "APU" → "APU Customer" ────────────────────────
         // This label appears below the logo image in the sidebar header.
         // We simply updated the text string from "APU" to "APU Customer".
-        JLabel brandName = new JLabel("APU Customer");
+        JLabel brandName = new JLabel("APU ASC Customer");
         brandName.setFont(UIConstants.FONT_SIDEBAR);
         brandName.setForeground(Color.WHITE);
         brandName.setAlignmentX(Component.LEFT_ALIGNMENT);
