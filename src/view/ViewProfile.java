@@ -23,66 +23,43 @@ import java.util.List;
 
 /**
  * ============================================================
- * ViewProfile.java
+ * ViewProfile.java — Customer Profile Page
  * ============================================================
- * This panel shows the customer's profile page.
  *
- * The page is split into these sections (top to bottom):
+ * CHANGES IN THIS VERSION:
  *
- *   1. BANNER HERO
- *      - A wide blue banner image at the top (clickable to change)
- *      - A circular profile picture overlapping the banner
- *        (clickable to change)
+ *   1. WIDER PERSONAL INFORMATION CARD
+ *      In buildTwoColumnSection(), the left column's weightx was
+ *      changed from 0.38 to 0.45.  This gives the Personal
+ *      Information card more horizontal space without touching
+ *      any card-internal logic.
  *
- *   2. TWO COLUMNS (side by side)
- *      LEFT  → Personal Information card
- *              Shows: Username, Email, Role
- *              Has an Edit button to update Username and Email
- *      RIGHT → My Vehicles card
- *              Shows every vehicle registered to this user
- *              Has Add, Edit, and Remove buttons
- *
- * NOTE: The "Total Appointments" and "Total Spent" stats row
- *       has been removed from this version.
+ *   2. SAVE / CANCEL BUTTONS STAY INSIDE THE CARD
+ *      The btnGroup JPanel now has a fixed preferredSize width
+ *      of 185 px.  BoxLayout uses the preferred size of child
+ *      panels to decide how wide the card should be.  Without
+ *      this fix, when Save + Cancel appear together they request
+ *      more width than the Edit button alone, which widens the
+ *      entire card.  Locking btnGroup's preferred width to a
+ *      value that comfortably fits both buttons prevents that
+ *      expansion while still rendering both buttons correctly.
  * ============================================================
  */
 public class ViewProfile extends JPanel {
 
-    // ----------------------------------------------------------
-    // SECTION 1 — References to other objects this class needs
-    // ----------------------------------------------------------
+    // =========================================================
+    // FIELDS
+    // =========================================================
 
-    /** The main application window (used to get the logged-in user). */
-    private final AppFrame app;
-
-    /** Handles saving changes to the user's name and email. */
+    private final AppFrame                  app;
     private final CustomerProfileController profileController;
+    private final VehicleSectionController  vehicleController;
+    private final VehicleService            vehicleService;
+    private final ProfilePicStorage         profilePicStorage;
+    private final BackgroundImageStorage    backgroundStorage;
 
-    /** Handles adding, editing, and removing vehicles. */
-    private final VehicleSectionController vehicleController;
-
-    /** Reads and writes the vehicles.txt file directly. */
-    private final VehicleService vehicleService;
-
-    /** Loads and saves the circular profile picture image. */
-    private final ProfilePicStorage profilePicStorage;
-
-    /** Loads and saves the banner background image. */
-    private final BackgroundImageStorage backgroundStorage;
-
-    // ----------------------------------------------------------
-    // SECTION 2 — Images stored in memory
-    // ----------------------------------------------------------
-
-    /** The profile picture chosen by the user (null = show default avatar). */
     private BufferedImage profileImage = null;
-
-    /** The banner image chosen by the user (null = show default blue gradient). */
-    private BufferedImage bannerImage = null;
-
-    // ----------------------------------------------------------
-    // SECTION 3 — UI components we need to reference later
-    // ----------------------------------------------------------
+    private BufferedImage bannerImage  = null;
 
     private JPanel profileBanner;
     private JLabel profilePicLabel;
@@ -110,56 +87,60 @@ public class ViewProfile extends JPanel {
     private JComboBox<String> addTypeCombo;
     private int avatarColorIndex = 0;
 
-    // NOTE: totalAppointmentsLabel and totalSpentLabel have been REMOVED.
-    // These were used by the stats row which no longer exists.
-
-    // ----------------------------------------------------------
-    // SECTION 4 — Colours
-    // ----------------------------------------------------------
+    // =========================================================
+    // COLOURS
+    // =========================================================
 
     private static final Color BLUE        = new Color(80,  110, 230);
     private static final Color BANNER_BLUE = new Color(100, 130, 240);
     private static final Color GREEN       = new Color(80,  190, 110);
-    private static final Color RED         = new Color(220, 80,  80);
+    private static final Color RED         = new Color(210,  70,  70);
     private static final Color GREY_BTN    = new Color(150, 150, 165);
-
-    private static final Color TEXT_DARK  = new Color(30,  35,  50);
-    private static final Color TEXT_GREY  = new Color(130, 135, 155);
-
+    private static final Color TEXT_DARK   = new Color(30,  35,  50);
+    private static final Color TEXT_GREY   = new Color(130, 135, 155);
     private static final Color PAGE_BG     = new Color(245, 246, 250);
     private static final Color CARD_BG     = Color.WHITE;
-    private static final Color CARD_BORDER = new Color(225, 227, 235);
+    private static final Color CARD_BORDER = new Color(220, 222, 230);
 
     private static final Color[] AVATAR_COLORS = {
-        new Color(80,  110, 230), new Color(230, 80,  80),
-        new Color(80,  190, 110), new Color(230, 160, 40),
-        new Color(160, 80,  230), new Color(40,  180, 200),
-        new Color(230, 80,  160), new Color(100, 100, 120),
+        new Color(80,  110, 230), new Color(220,  70,  70),
+        new Color(80,  190, 110), new Color(230, 160,  40),
+        new Color(160,  80, 230), new Color( 40, 180, 200),
+        new Color(220,  80, 160), new Color(100, 100, 120),
     };
 
-    // ----------------------------------------------------------
-    // SECTION 5 — Size constants
-    // ----------------------------------------------------------
+    // =========================================================
+    // CONSTANTS
+    // =========================================================
 
-    private static final int MAX_VISIBLE_VEHICLES = 4;
-    private static final int ROW_HEIGHT  = 64;
-    private static final int EDIT_HEIGHT = 64;
-
-    // NOTE: APPOINTMENTS_FILE and PAYMENTS_FILE constants have been REMOVED.
-    // They were only used by countUserAppointments() and sumUserPayments()
-    // which have both been removed along with the stats row.
-
-
-    // ==========================================================
-    // CONSTRUCTOR
-    // ==========================================================
+    /** Max vehicle rows shown before a "View All" link appears. */
+    private static final int MAX_VISIBLE = 4;
 
     /**
-     * Creates the ViewProfile panel.
-     *
-     * After building the UI, we call refreshVehicleList() so that
-     * vehicle data is loaded and shown the first time the panel opens.
+     * ROW_H — height used for BOTH vehicle rows AND the add form.
+     * One constant keeps everything exactly the same size.
      */
+    private static final int ROW_H  = 64;
+    private static final int EDIT_H = 68;
+
+    /** Size of the icon canvas inside each vehicle row. */
+    private static final int ICON_SIZE = 44;
+
+    // =========================================================
+    // UNICODE EMOJI ICONS  (same approach as CustomerDashboard)
+    // =========================================================
+
+    /** Car emoji — shown for vehicle type "Car" */
+    private static final String ICON_CAR   = "\uD83D\uDE97";
+
+    /** Motorcycle emoji — shown for vehicle type "Motor" */
+    private static final String ICON_MOTOR = "\uD83C\uDFCD";
+
+
+    // =========================================================
+    // CONSTRUCTOR
+    // =========================================================
+
     public ViewProfile(AppFrame app,
                        VehicleSectionController vehicleController,
                        CustomerProfileController profileController,
@@ -167,42 +148,34 @@ public class ViewProfile extends JPanel {
                        ProfilePicStorage profilePicStorage,
                        BackgroundImageStorage backgroundStorage) {
 
-        this.app                = app;
-        this.vehicleController  = vehicleController;
-        this.profileController  = profileController;
-        this.vehicleService     = vehicleService;
-        this.profilePicStorage  = profilePicStorage;
-        this.backgroundStorage  = backgroundStorage;
+        this.app               = app;
+        this.vehicleController = vehicleController;
+        this.profileController = profileController;
+        this.vehicleService    = vehicleService;
+        this.profilePicStorage = profilePicStorage;
+        this.backgroundStorage = backgroundStorage;
 
         setLayout(new BorderLayout());
         setBackground(PAGE_BG);
 
-        JScrollPane scrollPane = new JScrollPane(buildPageContent());
-        scrollPane.setBorder(null);
-        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-        scrollPane.getViewport().setBackground(PAGE_BG);
-        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
+        JScrollPane scroll = new JScrollPane(buildPage());
+        scroll.setBorder(null);
+        scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        scroll.getViewport().setBackground(PAGE_BG);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        add(scroll, BorderLayout.CENTER);
 
-        add(scrollPane, BorderLayout.CENTER);
-
-        // Trigger the first vehicle load after the UI is assembled.
-        SwingUtilities.invokeLater(this::refreshVehicleList);
+        // Load vehicle data after the UI is fully built
+        SwingUtilities.invokeLater(this::loadVehicles);
     }
 
 
-    // ==========================================================
+    // =========================================================
     // PUBLIC METHODS
-    // ==========================================================
+    // =========================================================
 
-    /**
-     * Refreshes the whole page when the logged-in user changes.
-     * Call this after login or after saving profile changes.
-     *
-     * NOTE: The stats refresh calls (totalAppointmentsLabel and
-     * totalSpentLabel) have been removed from this method because
-     * the stats row no longer exists on the page.
-     */
+    /** Call after login or after saving profile edits. */
     public void refreshUser() {
         User user = app.getLoggedInUserObj();
         if (user == null) return;
@@ -213,136 +186,96 @@ public class ViewProfile extends JPanel {
 
         if (displayNameLabel  != null) displayNameLabel.setText(user.getName());
         if (displayEmailLabel != null) displayEmailLabel.setText(user.getEmail());
-
-        if (displayRoleLabel != null) {
+        if (displayRoleLabel  != null) {
             String role = user.getRole();
-            if (role != null && !role.isEmpty()) {
-                role = role.substring(0, 1).toUpperCase()
-                     + role.substring(1).toLowerCase();
-            }
+            if (role != null && !role.isEmpty())
+                role = Character.toUpperCase(role.charAt(0)) + role.substring(1).toLowerCase();
             displayRoleLabel.setText(role);
         }
 
-        // REMOVED: totalAppointmentsLabel refresh (stats row deleted)
-        // REMOVED: totalSpentLabel refresh (stats row deleted)
-
         if (profileBanner   != null) profileBanner.repaint();
         if (profilePicLabel != null) profilePicLabel.repaint();
-
-        if (btnEdit != null && !btnEdit.isVisible()) {
-            exitEditMode();
-        }
-
-        refreshVehicleList();
+        if (btnEdit != null && !btnEdit.isVisible()) exitEditMode();
+        loadVehicles();
     }
 
     /**
-     * Asks VehicleSectionController to reload from vehicles.txt, then calls
-     * rebuildVehicleList() on this panel with the latest data.
-     */
-    public void refreshVehicleList() {
-        vehicleController.refreshList();
-    }
-
-    /**
-     * Called by VehicleSectionController after vehicle data changes.
-     * Rebuilds all vehicle rows in the My Vehicles card.
-     *
-     * Each String[] has 6 elements:
-     *   [0] vehicleId   [1] vehicleType  [2] plate
-     *   [3] brand       [4] year         [5] colour
+     * Called by the controller callback chain.
+     * Rebuilds all vehicle rows with fresh data.
+     * Each String[]: [0]id [1]type [2]plate [3]brand [4]year [5]colour
      */
     public void rebuildVehicleList(List<String[]> vehicles) {
         if (vehicleListPanel == null) return;
-
-        boolean addFormOpen = (vehicleAddPanel != null) && vehicleAddPanel.isVisible();
-
+        boolean addFormWasOpen = (vehicleAddPanel != null) && vehicleAddPanel.isVisible();
         vehicleListPanel.removeAll();
 
         if (vehicles.isEmpty()) {
             vehicleListPanel.add(makeEmptyLabel("No vehicles registered yet."));
         } else {
-            int rowsToShow = Math.min(MAX_VISIBLE_VEHICLES, vehicles.size());
-            for (int i = 0; i < rowsToShow; i++) {
+            int toShow = Math.min(MAX_VISIBLE, vehicles.size());
+            for (int i = 0; i < toShow; i++) {
                 String[] v = vehicles.get(i);
                 JPanel row = buildVehicleRow(v[1], v[2], v[3], v[4], v[5]);
-                row.setAlignmentX(Component.LEFT_ALIGNMENT);
                 vehicleListPanel.add(row);
-                if (i < rowsToShow - 1) {
-                    vehicleListPanel.add(Box.createVerticalStrut(8));
-                }
+                if (i < toShow - 1) vehicleListPanel.add(Box.createVerticalStrut(6));
             }
         }
 
         if (vehicleAddPanel != null) {
-            vehicleListPanel.add(Box.createVerticalStrut(8));
+            vehicleListPanel.add(Box.createVerticalStrut(6));
             vehicleListPanel.add(vehicleAddPanel);
-            vehicleAddPanel.setVisible(addFormOpen);
+            vehicleAddPanel.setVisible(addFormWasOpen);
         }
 
-        if (vehicles.size() > MAX_VISIBLE_VEHICLES) {
+        if (vehicles.size() > MAX_VISIBLE) {
             vehicleListPanel.add(Box.createVerticalStrut(4));
             JPanel linkRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
             linkRow.setOpaque(false);
-            linkRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
-            JButton viewAllBtn = makeLinkButton("View All (" + vehicles.size() + ")", BLUE);
-            final List<String[]> copy = vehicles;
-            viewAllBtn.addActionListener(e -> showViewAllDialog(copy));
-            linkRow.add(viewAllBtn);
+            linkRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
+            JButton viewAll = makeLinkButton("View All (" + vehicles.size() + ")", BLUE);
+            final List<String[]> snap = vehicles;
+            viewAll.addActionListener(e -> showViewAllDialog(snap));
+            linkRow.add(viewAll);
             vehicleListPanel.add(linkRow);
         }
 
         vehicleListPanel.revalidate();
         vehicleListPanel.repaint();
-        if (vehicleCard != null) {
-            vehicleCard.revalidate();
-            vehicleCard.repaint();
-        }
+        if (vehicleCard != null) { vehicleCard.revalidate(); vehicleCard.repaint(); }
     }
 
 
-    // ==========================================================
-    // PAGE CONTENT
-    // ==========================================================
+    // =========================================================
+    // PRIVATE — load vehicles directly from VehicleService
+    // =========================================================
 
-    /**
-     * Builds the full page layout top-to-bottom.
-     *
-     * CHANGE: The stats row (buildStatsRow) has been removed.
-     * The page now goes directly from the banner to the two-column section.
-     *
-     * BEFORE (3 sections):
-     *   1. Banner
-     *   2. Stats row  ← REMOVED
-     *   3. Two-column section
-     *
-     * AFTER (2 sections):
-     *   1. Banner
-     *   2. Two-column section
-     */
-    private JPanel buildPageContent() {
+    private void loadVehicles() {
+        User user = app.getLoggedInUserObj();
+        if (user == null || vehicleListPanel == null) return;
+        List<String[]> list = vehicleService.getVehiclesByUserId(user.getUserId());
+        rebuildVehicleList(list);
+    }
+
+
+    // =========================================================
+    // PAGE LAYOUT
+    // =========================================================
+
+    private JPanel buildPage() {
         JPanel page = new JPanel();
         page.setLayout(new BoxLayout(page, BoxLayout.Y_AXIS));
         page.setBackground(PAGE_BG);
         page.setBorder(new EmptyBorder(0, 0, 40, 0));
-
         page.add(buildBannerSection());
         page.add(Box.createVerticalStrut(20));
-
-        // REMOVED: page.add(buildStatsRow());
-        // REMOVED: page.add(Box.createVerticalStrut(24));
-        // These two lines used to add the "Total Appointments" and
-        // "Total Spent" row. They are no longer needed.
-
         page.add(buildTwoColumnSection());
-
         return page;
     }
 
 
-    // ==========================================================
+    // =========================================================
     // BANNER SECTION
-    // ==========================================================
+    // =========================================================
 
     private JPanel buildBannerSection() {
         JPanel hero = new JPanel(null);
@@ -350,71 +283,62 @@ public class ViewProfile extends JPanel {
         hero.setPreferredSize(new Dimension(0, 200));
         hero.setMaximumSize(new Dimension(Integer.MAX_VALUE, 200));
 
-        boolean[] bannerHovered = { false };
-        boolean[] avatarHovered = { false };
+        boolean[] bannerHov = {false};
+        boolean[] avatarHov = {false};
 
         profileBanner = new JPanel() {
-            @Override
-            protected void paintComponent(Graphics g) {
+            @Override protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
                 Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                                    RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 if (bannerImage != null) {
                     g2.drawImage(bannerImage, 0, 0, getWidth(), getHeight(), null);
                 } else {
-                    g2.setPaint(new GradientPaint(
-                            0, 0, BANNER_BLUE,
+                    g2.setPaint(new GradientPaint(0, 0, BANNER_BLUE,
                             getWidth(), getHeight(), new Color(55, 85, 205)));
                     g2.fillRect(0, 0, getWidth(), getHeight());
                 }
-                if (bannerHovered[0]) {
-                    g2.setColor(new Color(0, 0, 0, 110));
+                if (bannerHov[0]) {
+                    g2.setColor(new Color(0, 0, 0, 100));
                     g2.fillRect(0, 0, getWidth(), getHeight());
-                    drawCameraIcon(g2, getWidth() / 2, getHeight() / 2 - 10, 28, Color.WHITE);
+                    drawCameraIcon(g2, getWidth() / 2, getHeight() / 2 - 10, 26, Color.WHITE);
                     g2.setColor(Color.WHITE);
                     g2.setFont(new Font("SansSerif", Font.BOLD, 13));
                     FontMetrics fm = g2.getFontMetrics();
                     String hint = "Click to change";
-                    g2.drawString(hint,
-                            getWidth() / 2 - fm.stringWidth(hint) / 2,
-                            getHeight() / 2 + 34);
+                    g2.drawString(hint, getWidth() / 2 - fm.stringWidth(hint) / 2, getHeight() / 2 + 30);
                 }
                 g2.dispose();
             }
         };
         profileBanner.setOpaque(false);
-        profileBanner.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        profileBanner.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         profileBanner.addMouseListener(new MouseAdapter() {
-            @Override public void mouseEntered(MouseEvent e) { bannerHovered[0] = true;  profileBanner.repaint(); }
-            @Override public void mouseExited (MouseEvent e) { bannerHovered[0] = false; profileBanner.repaint(); }
+            @Override public void mouseEntered(MouseEvent e) { bannerHov[0] = true;  profileBanner.repaint(); }
+            @Override public void mouseExited (MouseEvent e) { bannerHov[0] = false; profileBanner.repaint(); }
             @Override public void mouseClicked(MouseEvent e) { pickBannerImage(); }
         });
 
         profilePicLabel = new JLabel() {
-            @Override
-            protected void paintComponent(Graphics g) {
+            @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                                    RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 int size = Math.min(getWidth(), getHeight());
                 if (profileImage != null) {
                     int iw = profileImage.getWidth(), ih = profileImage.getHeight();
-                    int crop = Math.min(iw, ih);
-                    int cx = (iw - crop) / 2, cy = (ih - crop) / 2;
+                    int crop = Math.min(iw, ih), ox = (iw - crop) / 2, oy = (ih - crop) / 2;
                     g2.setClip(new Ellipse2D.Float(0, 0, size, size));
-                    g2.drawImage(profileImage, 0, 0, size, size,
-                            cx, cy, cx + crop, cy + crop, null);
+                    g2.drawImage(profileImage, 0, 0, size, size, ox, oy, ox + crop, oy + crop, null);
                     g2.setClip(null);
                 } else {
                     drawDefaultAvatar(g2, size);
                 }
-                if (avatarHovered[0]) {
+                if (avatarHov[0]) {
                     g2.setClip(new Ellipse2D.Float(0, 0, size, size));
-                    g2.setColor(new Color(0, 0, 0, 110));
+                    g2.setColor(new Color(0, 0, 0, 100));
                     g2.fillOval(0, 0, size, size);
                     g2.setClip(null);
-                    drawCameraIcon(g2, size / 2, size / 2, 20, Color.WHITE);
+                    drawCameraIcon(g2, size / 2, size / 2, 18, Color.WHITE);
                 }
                 g2.setColor(Color.WHITE);
                 g2.setStroke(new BasicStroke(4));
@@ -422,21 +346,19 @@ public class ViewProfile extends JPanel {
                 g2.dispose();
             }
         };
-        profilePicLabel.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        profilePicLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         profilePicLabel.addMouseListener(new MouseAdapter() {
-            @Override public void mouseEntered(MouseEvent e) { avatarHovered[0] = true;  profilePicLabel.repaint(); }
-            @Override public void mouseExited (MouseEvent e) { avatarHovered[0] = false; profilePicLabel.repaint(); }
+            @Override public void mouseEntered(MouseEvent e) { avatarHov[0] = true;  profilePicLabel.repaint(); }
+            @Override public void mouseExited (MouseEvent e) { avatarHov[0] = false; profilePicLabel.repaint(); }
             @Override public void mouseClicked(MouseEvent e) { pickProfileImage(); }
         });
 
         hero.addComponentListener(new java.awt.event.ComponentAdapter() {
-            @Override
-            public void componentResized(java.awt.event.ComponentEvent e) {
+            @Override public void componentResized(java.awt.event.ComponentEvent e) {
                 profileBanner.setBounds(0, 0, hero.getWidth(), 170);
                 profilePicLabel.setBounds(30, 90, 110, 110);
             }
         });
-
         profileBanner.setBounds(0, 0, 800, 170);
         profilePicLabel.setBounds(30, 90, 110, 110);
 
@@ -444,15 +366,13 @@ public class ViewProfile extends JPanel {
         hero.add(profileBanner);
         hero.setComponentZOrder(profilePicLabel, 0);
         hero.setComponentZOrder(profileBanner,   1);
-
         return hero;
     }
 
-    private void drawCameraIcon(Graphics2D g2, int cx, int cy, int size, Color color) {
-        g2.setColor(color);
-        g2.setStroke(new BasicStroke(size / 10f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        int bw = size, bh = size * 7 / 10;
-        int bx = cx - bw / 2, by = cy - bh / 2;
+    private void drawCameraIcon(Graphics2D g2, int cx, int cy, int size, Color c) {
+        g2.setColor(c);
+        g2.setStroke(new BasicStroke(size / 9f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        int bw = size, bh = size * 7 / 10, bx = cx - bw / 2, by = cy - bh / 2;
         g2.drawRoundRect(bx, by, bw, bh, size / 5, size / 5);
         int lr = size * 22 / 100;
         g2.drawOval(cx - lr, cy - lr + size / 20, lr * 2, lr * 2);
@@ -462,202 +382,185 @@ public class ViewProfile extends JPanel {
     private void drawDefaultAvatar(Graphics2D g2, int size) {
         g2.setColor(AVATAR_COLORS[avatarColorIndex % AVATAR_COLORS.length]);
         g2.fillOval(0, 0, size, size);
-        String initial = "U";
+        String letter = "U";
         User user = app.getLoggedInUserObj();
-        if (user != null && user.getName() != null && !user.getName().isEmpty()) {
-            initial = String.valueOf(user.getName().charAt(0)).toUpperCase();
-        }
+        if (user != null && user.getName() != null && !user.getName().isEmpty())
+            letter = String.valueOf(user.getName().charAt(0)).toUpperCase();
         g2.setFont(new Font("SansSerif", Font.BOLD, size / 3));
         g2.setColor(Color.WHITE);
         FontMetrics fm = g2.getFontMetrics();
-        int textX = (size - fm.stringWidth(initial)) / 2;
-        int textY = (size + fm.getAscent() - fm.getDescent()) / 2;
-        g2.drawString(initial, textX, textY);
+        g2.drawString(letter,
+                (size - fm.stringWidth(letter)) / 2,
+                (size + fm.getAscent() - fm.getDescent()) / 2);
     }
 
-    // ==========================================================
-    // STATS ROW — REMOVED
-    // ==========================================================
-    //
-    // The following methods have been DELETED:
-    //
-    //   private JPanel buildStatsRow()
-    //   private int countUserAppointments(String userId)
-    //   private double sumUserPayments(String userId)
-    //   private JPanel buildStatCellWith(String label, JLabel valueLabel)
-    //   private JLabel buildStatValueLabel(String value)
-    //
-    // These methods were responsible for:
-    //   - Reading appointments.txt to count user appointments
-    //   - Reading payments.txt to sum user spending
-    //   - Building the "Total appointments" and "Total spent" display row
-    //
-    // If you ever need to bring the stats row back, you can restore them
-    // from the original ViewProfile.java and add back these two lines
-    // inside buildPageContent():
-    //
-    //   page.add(buildStatsRow());
-    //   page.add(Box.createVerticalStrut(24));
-    //
-    // And restore these two fields at the top of the class:
-    //   private JLabel totalAppointmentsLabel;
-    //   private JLabel totalSpentLabel;
-    //
-    // And restore these two blocks inside refreshUser():
-    //   if (totalAppointmentsLabel != null) {
-    //       int count = countUserAppointments(user.getUserId());
-    //       totalAppointmentsLabel.setText(String.valueOf(count));
-    //   }
-    //   if (totalSpentLabel != null) {
-    //       double spent = sumUserPayments(user.getUserId());
-    //       totalSpentLabel.setText(String.format("RM %,.0f", spent));
-    //   }
-    //
-    // Also restore the import at the top of the file:
-    //   import java.io.BufferedReader;
-    //   import java.io.FileReader;
-    //
-    // ==========================================================
 
-
-    // ==========================================================
+    // =========================================================
     // TWO-COLUMN SECTION
-    // ==========================================================
+    // =========================================================
 
     private JPanel buildTwoColumnSection() {
-        JPanel twoCol = new JPanel(new GridBagLayout());
-        twoCol.setBackground(PAGE_BG);
-        twoCol.setBorder(new EmptyBorder(0, 24, 0, 24));
+        JPanel row = new JPanel(new GridBagLayout());
+        row.setBackground(PAGE_BG);
+        row.setBorder(new EmptyBorder(0, 24, 0, 24));
 
         GridBagConstraints c = new GridBagConstraints();
-        c.gridy   = 0;
-        c.weighty = 1.0;
-        c.fill    = GridBagConstraints.BOTH;
-        c.anchor  = GridBagConstraints.NORTH;
+        c.gridy = 0; c.weighty = 1.0; c.fill = GridBagConstraints.BOTH;
+        c.anchor = GridBagConstraints.NORTH;
 
-        c.gridx   = 0;
-        c.weightx = 0.38;
-        c.insets  = new Insets(0, 0, 0, 16);
-        JPanel leftCol = new JPanel();
-        leftCol.setLayout(new BoxLayout(leftCol, BoxLayout.Y_AXIS));
-        leftCol.setOpaque(false);
-        leftCol.add(buildPersonalInfoCard());
-        twoCol.add(leftCol, c);
+        // ── CHANGE 1: Left column weight increased from 0.38 → 0.45 ──────────
+        // A higher weightx means GridBagLayout gives this column a bigger share
+        // of the available horizontal space, making the Personal Information
+        // card visibly wider without changing anything else.
+        c.gridx = 0; c.weightx = 0.45; c.insets = new Insets(0, 0, 0, 14);
+        JPanel left = new JPanel();
+        left.setLayout(new BoxLayout(left, BoxLayout.Y_AXIS));
+        left.setOpaque(false);
+        left.add(buildPersonalInfoCard());
+        row.add(left, c);
 
-        c.gridx   = 1;
-        c.weightx = 0.62;
-        c.insets  = new Insets(0, 0, 0, 0);
-        JPanel rightCol = new JPanel();
-        rightCol.setLayout(new BoxLayout(rightCol, BoxLayout.Y_AXIS));
-        rightCol.setOpaque(false);
-        rightCol.add(buildVehicleCard());
-        twoCol.add(rightCol, c);
+        // The right column automatically becomes narrower (1.0 - 0.45 = 0.55)
+        c.gridx = 1; c.weightx = 0.55; c.insets = new Insets(0, 0, 0, 0);
+        JPanel right = new JPanel();
+        right.setLayout(new BoxLayout(right, BoxLayout.Y_AXIS));
+        right.setOpaque(false);
+        right.add(buildVehicleCard());
+        row.add(right, c);
 
-        return twoCol;
+        return row;
     }
 
 
-    // ==========================================================
+    // =========================================================
     // PERSONAL INFORMATION CARD
-    // ==========================================================
+    // =========================================================
 
     private JPanel buildPersonalInfoCard() {
         JPanel card = makeCard();
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(new EmptyBorder(20, 24, 20, 24));
 
+        // ── Title row ──────────────────────────────────────────
         JPanel titleRow = new JPanel(new BorderLayout());
         titleRow.setOpaque(false);
-        titleRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        titleRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
 
         JLabel title = new JLabel("Personal information");
         title.setFont(new Font("SansSerif", Font.BOLD, 15));
         title.setForeground(TEXT_DARK);
         titleRow.add(title, BorderLayout.WEST);
 
-        JPanel buttonRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
-        buttonRow.setOpaque(false);
+        // ── CHANGE 2: Fix button group width ─────────────────────────────────
+        // We set a fixed preferredSize on btnGroup so that BoxLayout always sees
+        // the same width for this panel, regardless of which buttons are visible.
+        //
+        // HOW IT WORKS:
+        //   - When only "Edit" is showing, its preferred width is ~82px.
+        //   - When "Save" + "Cancel" are showing, their combined preferred width
+        //     is wider (~165px), which BoxLayout uses to resize the whole card.
+        //   - By locking btnGroup to 185px wide, BoxLayout always sees 185px
+        //     and NEVER widens the card when switching between button sets.
+        //   - The buttons themselves still paint and function normally — only
+        //     the *requested* layout width is capped.
+        JPanel btnGroup = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+        btnGroup.setOpaque(false);
+        btnGroup.setPreferredSize(new Dimension(185, 30)); // FIX: lock preferred width
 
         btnEdit   = makeFilledButton("\u270E  Edit", BLUE,     Color.WHITE);
-        btnSave   = makeFilledButton("Save",          GREEN,    Color.WHITE);
-        btnCancel = makeFilledButton("Cancel",         GREY_BTN, Color.WHITE);
+        btnSave   = makeFilledButton("Save",         GREEN,    Color.WHITE);
+        btnCancel = makeFilledButton("Cancel",       GREY_BTN, Color.WHITE);
 
         btnEdit.setPreferredSize(new Dimension(82, 30));
         btnSave.setPreferredSize(new Dimension(70, 30));
         btnCancel.setPreferredSize(new Dimension(85, 30));
 
-        btnSave.setVisible(false);
-        btnCancel.setVisible(false);
+        btnSave.setVisible(false);   // hidden until Edit is clicked
+        btnCancel.setVisible(false); // hidden until Edit is clicked
 
-        buttonRow.add(btnEdit);
-        buttonRow.add(btnSave);
-        buttonRow.add(btnCancel);
-        titleRow.add(buttonRow, BorderLayout.EAST);
+        btnGroup.add(btnEdit);
+        btnGroup.add(btnSave);
+        btnGroup.add(btnCancel);
+        titleRow.add(btnGroup, BorderLayout.EAST);
 
         card.add(titleRow);
         card.add(Box.createVerticalStrut(10));
         card.add(makeDivider());
         card.add(Box.createVerticalStrut(18));
 
-        User user = app.getLoggedInUserObj();
-        String currentName  = (user != null && user.getName()  != null) ? user.getName()  : "";
-        String currentEmail = (user != null && user.getEmail() != null) ? user.getEmail() : "";
-        String currentRole  = (user != null && user.getRole()  != null) ? user.getRole()  : "";
+        // ── User data ──────────────────────────────────────────
+        User   user  = app.getLoggedInUserObj();
+        String name  = (user != null && user.getName()  != null) ? user.getName()  : "";
+        String email = (user != null && user.getEmail() != null) ? user.getEmail() : "";
+        String role  = (user != null && user.getRole()  != null) ? user.getRole()  : "";
+        if (!role.isEmpty())
+            role = Character.toUpperCase(role.charAt(0)) + role.substring(1).toLowerCase();
 
-        if (!currentRole.isEmpty()) {
-            currentRole = currentRole.substring(0, 1).toUpperCase()
-                        + currentRole.substring(1).toLowerCase();
-        }
-
-        nameReadPanel    = makeReadRow("Username", currentName);
+        // ── READ row — Username ────────────────────────────────
+        nameReadPanel    = makeReadRow("Username", name);
         displayNameLabel = getValueLabel(nameReadPanel);
         card.add(nameReadPanel);
         card.add(Box.createVerticalStrut(14));
 
+        // ── EDIT row — Username ────────────────────────────────
         nameEditPanel = new JPanel(new BorderLayout(10, 0));
         nameEditPanel.setOpaque(false);
         nameEditPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
-        nameEditPanel.add(makeFieldLabel("Username"), BorderLayout.WEST);
-        editNameField = new JTextField(currentName);
-        styleTextField(editNameField);
-        nameEditPanel.add(editNameField, BorderLayout.CENTER);
+
+        JLabel nameFieldLabel = makeFieldLabel("Username");
+        nameFieldLabel.setPreferredSize(new Dimension(90, 18));
+
+        editNameField = new JTextField(name);
+        styleField(editNameField);
+        editNameField.setPreferredSize(new Dimension(160, 30)); // cap preferred width
+
+        nameEditPanel.add(nameFieldLabel, BorderLayout.WEST);
+        nameEditPanel.add(editNameField,  BorderLayout.CENTER);
         nameEditPanel.setVisible(false);
         card.add(nameEditPanel);
         card.add(Box.createVerticalStrut(14));
 
-        emailReadPanel    = makeReadRow("Email", currentEmail);
+        // ── READ row — Email ───────────────────────────────────
+        emailReadPanel    = makeReadRow("Email", email);
         displayEmailLabel = getValueLabel(emailReadPanel);
         card.add(emailReadPanel);
         card.add(Box.createVerticalStrut(14));
 
+        // ── EDIT row — Email ───────────────────────────────────
         emailEditPanel = new JPanel(new BorderLayout(10, 0));
         emailEditPanel.setOpaque(false);
         emailEditPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
-        emailEditPanel.add(makeFieldLabel("Email"), BorderLayout.WEST);
-        editEmailField = new JTextField(currentEmail);
-        styleTextField(editEmailField);
-        emailEditPanel.add(editEmailField, BorderLayout.CENTER);
+
+        JLabel emailFieldLabel = makeFieldLabel("Email");
+        emailFieldLabel.setPreferredSize(new Dimension(90, 18));
+
+        editEmailField = new JTextField(email);
+        styleField(editEmailField);
+        editEmailField.setPreferredSize(new Dimension(160, 30)); // cap preferred width
+
+        emailEditPanel.add(emailFieldLabel, BorderLayout.WEST);
+        emailEditPanel.add(editEmailField,  BorderLayout.CENTER);
         emailEditPanel.setVisible(false);
         card.add(emailEditPanel);
         card.add(Box.createVerticalStrut(14));
 
-        JPanel roleRow = makeReadRow("Role", currentRole);
+        // ── READ row — Role (read-only, never editable) ────────
+        JPanel roleRow = makeReadRow("Role", role);
         displayRoleLabel = getValueLabel(roleRow);
         card.add(roleRow);
         card.add(Box.createVerticalStrut(4));
 
+        // ── Button listeners ───────────────────────────────────
         btnEdit.addActionListener(e -> enterEditMode());
         btnCancel.addActionListener(e -> exitEditMode());
         btnSave.addActionListener(e -> saveProfileChanges());
 
-        KeyAdapter enterToSave = new KeyAdapter() {
-            @Override
-            public void keyPressed(KeyEvent e) {
+        KeyAdapter enterSaves = new KeyAdapter() {
+            @Override public void keyPressed(KeyEvent e) {
                 if (e.getKeyCode() == KeyEvent.VK_ENTER) saveProfileChanges();
             }
         };
-        editNameField.addKeyListener(enterToSave);
-        editEmailField.addKeyListener(enterToSave);
+        editNameField.addKeyListener(enterSaves);
+        editEmailField.addKeyListener(enterSaves);
 
         return card;
     }
@@ -665,13 +568,9 @@ public class ViewProfile extends JPanel {
     private void enterEditMode() {
         editNameField.setText(profileController.getCurrentName());
         editEmailField.setText(profileController.getCurrentEmail());
-        nameReadPanel.setVisible(false);
-        nameEditPanel.setVisible(true);
-        emailReadPanel.setVisible(false);
-        emailEditPanel.setVisible(true);
-        btnEdit.setVisible(false);
-        btnSave.setVisible(true);
-        btnCancel.setVisible(true);
+        nameReadPanel.setVisible(false);  nameEditPanel.setVisible(true);
+        emailReadPanel.setVisible(false); emailEditPanel.setVisible(true);
+        btnEdit.setVisible(false); btnSave.setVisible(true); btnCancel.setVisible(true);
         editNameField.requestFocusInWindow();
     }
 
@@ -690,227 +589,166 @@ public class ViewProfile extends JPanel {
     private void saveProfileChanges() {
         String newName  = editNameField.getText().trim();
         String newEmail = editEmailField.getText().trim();
-
         if (profileController.hasNoChanges(newName, newEmail)) {
             JOptionPane.showMessageDialog(app, "No changes were made.", "No Changes",
                     JOptionPane.INFORMATION_MESSAGE);
             exitEditMode();
             return;
         }
-
         try {
-            boolean saved = profileController.saveProfile(newName, newEmail);
-            if (saved) {
+            if (profileController.saveProfile(newName, newEmail)) {
                 exitEditMode();
                 refreshUser();
-                JOptionPane.showMessageDialog(app, "Profile updated successfully!", "Success",
-                        JOptionPane.INFORMATION_MESSAGE);
+                JOptionPane.showMessageDialog(app, "Profile updated successfully!",
+                        "Success", JOptionPane.INFORMATION_MESSAGE);
             } else {
-                JOptionPane.showMessageDialog(app, "Failed to save. Please try again.", "Error",
-                        JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(app, "Failed to save. Please try again.",
+                        "Error", JOptionPane.ERROR_MESSAGE);
             }
         } catch (IllegalArgumentException ex) {
-            JOptionPane.showMessageDialog(app, ex.getMessage(), "Validation Error",
-                    JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(app, ex.getMessage(),
+                    "Validation Error", JOptionPane.WARNING_MESSAGE);
         }
     }
 
 
-    // ==========================================================
+    // =========================================================
     // MY VEHICLES CARD
-    // ==========================================================
+    // =========================================================
 
     private JPanel buildVehicleCard() {
         vehicleCard = makeCard();
         vehicleCard.setLayout(new BoxLayout(vehicleCard, BoxLayout.Y_AXIS));
-        vehicleCard.setBorder(new EmptyBorder(20, 24, 20, 24));
+        vehicleCard.setBorder(new EmptyBorder(18, 20, 18, 20));
 
-        // ---- Title row ----
+        // ── Title row with "+Add" button ──────────────────────
         JPanel titleRow = new JPanel(new BorderLayout());
         titleRow.setOpaque(false);
-        titleRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
-
+        titleRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
         JLabel title = new JLabel("My vehicles");
         title.setFont(new Font("SansSerif", Font.BOLD, 15));
         title.setForeground(TEXT_DARK);
         titleRow.add(title, BorderLayout.WEST);
 
-        JButton addVehicleBtn = makeFilledButton("+ Add vehicle", BLUE, Color.WHITE);
-        addVehicleBtn.setPreferredSize(new Dimension(120, 30));
-        titleRow.add(addVehicleBtn, BorderLayout.EAST);
+        JButton addBtn = makeFilledButton("+Add", BLUE, Color.WHITE);
+        addBtn.setPreferredSize(new Dimension(80, 30));
+        titleRow.add(addBtn, BorderLayout.EAST);
 
         vehicleCard.add(titleRow);
         vehicleCard.add(Box.createVerticalStrut(8));
         vehicleCard.add(makeDivider());
-        vehicleCard.add(Box.createVerticalStrut(14));
+        vehicleCard.add(Box.createVerticalStrut(12));
 
-        // ---- Vehicle list panel ----
         vehicleListPanel = new JPanel();
         vehicleListPanel.setLayout(new BoxLayout(vehicleListPanel, BoxLayout.Y_AXIS));
         vehicleListPanel.setOpaque(false);
-        vehicleListPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        vehicleListPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
+        vehicleListPanel.add(makeEmptyLabel("Loading vehicles..."));
         vehicleCard.add(vehicleListPanel);
 
-        // ---- Add form ----
-        vehicleAddPanel = buildAddVehicleForm();
+        // Build add form — height = ROW_H so it matches vehicle rows exactly
+        vehicleAddPanel = buildAddForm();
         vehicleAddPanel.setVisible(false);
 
-        addVehicleBtn.addActionListener(e -> {
-            boolean nowOpen = !vehicleAddPanel.isVisible();
-            vehicleAddPanel.setVisible(nowOpen);
-            if (nowOpen) {
-                clearAllTextFields(vehicleAddPanel);
+        addBtn.addActionListener(e -> {
+            boolean open = !vehicleAddPanel.isVisible();
+            vehicleAddPanel.setVisible(open);
+            if (open) {
+                clearFields(vehicleAddPanel);
                 if (addTypeCombo != null) addTypeCombo.setSelectedIndex(0);
             }
             vehicleCard.revalidate();
             vehicleCard.repaint();
         });
 
-        // Direct fallback load — shows vehicles immediately without waiting
-        // for the controller callback to fire.
-        User currentUser = app.getLoggedInUserObj();
-        if (currentUser != null) {
-            List<String[]> initialVehicles =
-                    vehicleService.getVehiclesByUserId(currentUser.getUserId());
-            populateVehicleListDirectly(initialVehicles);
-        }
-
+        SwingUtilities.invokeLater(this::loadVehicles);
         return vehicleCard;
     }
 
     /**
-     * Directly fills vehicleListPanel without going through the controller.
-     *
-     * Kept separate from rebuildVehicleList() because vehicleAddPanel is
-     * built and assigned AFTER buildVehicleCard() returns, so calling
-     * rebuildVehicleList() here would reference a null vehicleAddPanel.
-     * This method omits the vehicleAddPanel block to avoid that null reference.
+     * Builds the inline add-vehicle form.
+     * Uses ROW_H for both max and preferred height so it matches
+     * the vehicle data rows above it exactly.
      */
-    private void populateVehicleListDirectly(List<String[]> vehicles) {
-        if (vehicleListPanel == null) return;
-
-        vehicleListPanel.removeAll();
-
-        if (vehicles.isEmpty()) {
-            vehicleListPanel.add(makeEmptyLabel("No vehicles registered yet."));
-        } else {
-            int rowsToShow = Math.min(MAX_VISIBLE_VEHICLES, vehicles.size());
-            for (int i = 0; i < rowsToShow; i++) {
-                String[] v = vehicles.get(i);
-                JPanel row = buildVehicleRow(v[1], v[2], v[3], v[4], v[5]);
-                row.setAlignmentX(Component.LEFT_ALIGNMENT);
-                vehicleListPanel.add(row);
-                if (i < rowsToShow - 1) {
-                    vehicleListPanel.add(Box.createVerticalStrut(8));
-                }
-            }
-            if (vehicles.size() > MAX_VISIBLE_VEHICLES) {
-                vehicleListPanel.add(Box.createVerticalStrut(4));
-                JPanel linkRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
-                linkRow.setOpaque(false);
-                linkRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
-                JButton viewAllBtn = makeLinkButton("View All (" + vehicles.size() + ")", BLUE);
-                viewAllBtn.addActionListener(e -> showViewAllDialog(vehicles));
-                linkRow.add(viewAllBtn);
-                vehicleListPanel.add(linkRow);
-            }
-        }
-
-        vehicleListPanel.revalidate();
-        vehicleListPanel.repaint();
-    }
-
-    private JPanel buildAddVehicleForm() {
+    private JPanel buildAddForm() {
         JPanel form = new JPanel(new BorderLayout(6, 0));
         form.setOpaque(false);
         form.setAlignmentX(Component.LEFT_ALIGNMENT);
         form.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(CARD_BORDER, 1),
-                new EmptyBorder(6, 8, 6, 8)));
-        form.setMaximumSize(new Dimension(Integer.MAX_VALUE, 64));
-        form.setPreferredSize(new Dimension(0, 64));
+                BorderFactory.createLineBorder(CARD_BORDER),
+                new EmptyBorder(6, 10, 6, 10)));
+
+        // Same height as vehicle data rows
+        form.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
+        form.setPreferredSize(new Dimension(0, ROW_H));
 
         JPanel fields = new JPanel(new GridBagLayout());
         fields.setOpaque(false);
-
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.fill    = GridBagConstraints.BOTH;
-        gbc.gridy   = 0;
-        gbc.weighty = 1.0;
-        gbc.insets  = new Insets(0, 1, 0, 1);
+        GridBagConstraints g = new GridBagConstraints();
+        g.fill    = GridBagConstraints.BOTH;
+        g.gridy   = 0;
+        g.weighty = 1.0;
+        g.insets  = new Insets(0, 1, 0, 1);
 
         addTypeCombo = new JComboBox<>(new String[]{"Car", "Motor"});
         addTypeCombo.setFont(new Font("SansSerif", Font.PLAIN, 12));
 
-        JTextField addPlateField  = makeSmallTextField("");
-        JTextField addBrandField  = makeSmallTextField("");
-        JTextField addYearField   = makeSmallTextField("");
-        JTextField addColourField = makeSmallTextField("");
+        JTextField plateF  = makeSmallField("");
+        JTextField brandF  = makeSmallField("");
+        JTextField yearF   = makeSmallField("");
+        JTextField colourF = makeSmallField("");
 
-        gbc.gridx = 0; gbc.weightx = 0;   gbc.ipadx = 28;
-        fields.add(wrapWithLabel("Type",          addTypeCombo),  gbc);
-        gbc.gridx = 1; gbc.weightx = 0;   gbc.ipadx = 40;
-        fields.add(wrapWithLabel("Car Plate",     addPlateField), gbc);
-        gbc.gridx = 2; gbc.weightx = 0.7; gbc.ipadx = 0;
-        fields.add(wrapWithLabel("Brand / Model", addBrandField), gbc);
-        gbc.gridx = 3; gbc.weightx = 0;   gbc.ipadx = 26;
-        fields.add(wrapWithLabel("Year",          addYearField),  gbc);
-        gbc.gridx = 4; gbc.weightx = 0;   gbc.ipadx = 34;
-        fields.add(wrapWithLabel("Colour",        addColourField), gbc);
-
+        g.gridx = 0; g.weightx = 0;   g.ipadx = 28; fields.add(labelWrap("Type",          addTypeCombo), g);
+        g.gridx = 1; g.weightx = 0;   g.ipadx = 40; fields.add(labelWrap("Car Plate",     plateF),       g);
+        g.gridx = 2; g.weightx = 0.7; g.ipadx = 0;  fields.add(labelWrap("Brand / Model", brandF),       g);
+        g.gridx = 3; g.weightx = 0;   g.ipadx = 26; fields.add(labelWrap("Year",          yearF),        g);
+        g.gridx = 4; g.weightx = 0;   g.ipadx = 34; fields.add(labelWrap("Colour",        colourF),      g);
         form.add(fields, BorderLayout.CENTER);
 
-        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
-        btnPanel.setOpaque(false);
-
+        JPanel btns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+        btns.setOpaque(false);
         JButton saveBtn   = makeFilledButton("Save",   GREEN,    Color.WHITE);
         JButton cancelBtn = makeFilledButton("Cancel", GREY_BTN, Color.WHITE);
-        saveBtn.setPreferredSize(new Dimension(65, 28));
-        cancelBtn.setPreferredSize(new Dimension(80, 28));
-        btnPanel.add(saveBtn);
-        btnPanel.add(cancelBtn);
-        form.add(btnPanel, BorderLayout.EAST);
+        saveBtn.setPreferredSize(new Dimension(65, 30));
+        cancelBtn.setPreferredSize(new Dimension(80, 30));
+        btns.add(saveBtn);
+        btns.add(cancelBtn);
+        form.add(btns, BorderLayout.EAST);
 
         cancelBtn.addActionListener(e -> {
             vehicleAddPanel.setVisible(false);
-            clearAllTextFields(vehicleAddPanel);
+            clearFields(vehicleAddPanel);
             if (addTypeCombo != null) addTypeCombo.setSelectedIndex(0);
             if (vehicleCard  != null) { vehicleCard.revalidate(); vehicleCard.repaint(); }
         });
 
         Runnable doSave = () -> {
-            String type = (String) addTypeCombo.getSelectedItem();
-            String[] newVehicleData = {
-                type,
-                addPlateField.getText().trim(),
-                addBrandField.getText().trim(),
-                addYearField.getText().trim(),
-                addColourField.getText().trim()
-            };
-            boolean success = vehicleController.handleAdd(newVehicleData);
-            if (success) {
-                clearAllTextFields(vehicleAddPanel);
+            String   type = (String) addTypeCombo.getSelectedItem();
+            String[] data = { type, plateF.getText().trim(), brandF.getText().trim(),
+                              yearF.getText().trim(), colourF.getText().trim() };
+            boolean ok = vehicleController.handleAdd(data);
+            if (ok) {
+                clearFields(vehicleAddPanel);
                 if (addTypeCombo != null) addTypeCombo.setSelectedIndex(0);
                 vehicleAddPanel.setVisible(false);
                 if (vehicleCard != null) { vehicleCard.revalidate(); vehicleCard.repaint(); }
-                JOptionPane.showMessageDialog(app, "Vehicle added successfully.", "Success",
-                        JOptionPane.INFORMATION_MESSAGE);
+                loadVehicles();
+                JOptionPane.showMessageDialog(app, "Vehicle added successfully.",
+                        "Success", JOptionPane.INFORMATION_MESSAGE);
             }
         };
         saveBtn.addActionListener(e -> doSave.run());
 
-        KeyAdapter enterKey = new KeyAdapter() {
+        KeyAdapter enter = new KeyAdapter() {
             @Override public void keyPressed(KeyEvent e) {
                 if (e.getKeyCode() == KeyEvent.VK_ENTER) doSave.run();
             }
         };
-        addPlateField.addKeyListener(enterKey);
-        addBrandField.addKeyListener(enterKey);
-        addYearField.addKeyListener(enterKey);
-        addColourField.addKeyListener(enterKey);
+        plateF.addKeyListener(enter);
+        brandF.addKeyListener(enter);
+        yearF.addKeyListener(enter);
+        colourF.addKeyListener(enter);
 
-        final boolean[] comboOpen = { false };
+        boolean[] comboOpen = {false};
         addTypeCombo.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
             @Override public void popupMenuWillBecomeVisible  (javax.swing.event.PopupMenuEvent e) { comboOpen[0] = true;  }
             @Override public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) { comboOpen[0] = false; }
@@ -926,441 +764,103 @@ public class ViewProfile extends JPanel {
     }
 
 
-    // ==========================================================
+    // =========================================================
     // VEHICLE ROW
-    // ==========================================================
+    // =========================================================
 
     private JPanel buildVehicleRow(String vehicleType, String plate,
                                    String brand, String year, String colour) {
 
-        JPanel displayCard = new JPanel(new BorderLayout(0, 0));
-        displayCard.setOpaque(false);
-        displayCard.setBorder(new EmptyBorder(10, 12, 10, 8));
+        // ── DISPLAY CARD ──────────────────────────────────────────
+        JPanel display = new JPanel(new BorderLayout(0, 0));
+        display.setOpaque(false);
+        display.setBorder(new EmptyBorder(10, 12, 10, 12));
 
-        JLabel iconLabel = new JLabel() {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                drawVehicleIcon(g2, vehicleType, getWidth(), getHeight());
-                g2.dispose();
-            }
-        };
-        iconLabel.setPreferredSize(new Dimension(40, 40));
-        displayCard.add(iconLabel, BorderLayout.WEST);
+        // ── VEHICLE ICON ──────────────────────────────────────────
+        String iconText = "Motor".equalsIgnoreCase(vehicleType) ? ICON_MOTOR : ICON_CAR;
+        JLabel iconLbl  = new JLabel(iconText, SwingConstants.CENTER);
+        iconLbl.setFont(new Font("SansSerif", Font.PLAIN, 24));
+        iconLbl.setPreferredSize(new Dimension(ICON_SIZE, ICON_SIZE));
+        iconLbl.setMinimumSize  (new Dimension(ICON_SIZE, ICON_SIZE));
+        iconLbl.setMaximumSize  (new Dimension(ICON_SIZE, ICON_SIZE));
+        display.add(iconLbl, BorderLayout.WEST);
 
-        JPanel infoPanel = new JPanel();
-        infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
-        infoPanel.setOpaque(false);
-        infoPanel.setBorder(new EmptyBorder(0, 10, 0, 0));
+        JPanel info = new JPanel();
+        info.setLayout(new BoxLayout(info, BoxLayout.Y_AXIS));
+        info.setOpaque(false);
+        info.setBorder(new EmptyBorder(0, 10, 0, 0));
 
-        JLabel brandLabel = new JLabel(brand);
-        brandLabel.setFont(new Font("SansSerif", Font.BOLD, 13));
-        brandLabel.setForeground(TEXT_DARK);
-        brandLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel brandLbl = new JLabel(brand);
+        brandLbl.setFont(new Font("SansSerif", Font.BOLD, 13));
+        brandLbl.setForeground(TEXT_DARK);
+        brandLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel detailLabel = new JLabel(plate + "  \u00B7  " + year + "  \u00B7  " + colour);
-        detailLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        detailLabel.setForeground(TEXT_GREY);
-        detailLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel detailLbl = new JLabel(plate + "  \u00B7  " + year + "  \u00B7  " + colour);
+        detailLbl.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        detailLbl.setForeground(TEXT_GREY);
+        detailLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        infoPanel.add(Box.createVerticalGlue());
-        infoPanel.add(brandLabel);
-        infoPanel.add(Box.createVerticalStrut(3));
-        infoPanel.add(detailLabel);
-        infoPanel.add(Box.createVerticalGlue());
-        displayCard.add(infoPanel, BorderLayout.CENTER);
+        info.add(Box.createVerticalGlue());
+        info.add(brandLbl);
+        info.add(Box.createVerticalStrut(3));
+        info.add(detailLbl);
+        info.add(Box.createVerticalGlue());
+        display.add(info, BorderLayout.CENTER);
 
-        JPanel actionButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
-        actionButtons.setOpaque(false);
-        JButton editLink   = makeLinkButton("Edit",   BLUE);
-        JButton removeLink = makeLinkButton("Remove", RED);
-        actionButtons.add(editLink);
-        actionButtons.add(removeLink);
-        displayCard.add(actionButtons, BorderLayout.EAST);
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        actions.setOpaque(false);
+        JButton editBtn   = makeFilledButton("Edit",   BLUE, Color.WHITE);
+        JButton removeBtn = makeFilledButton("Remove", RED,  Color.WHITE);
+        editBtn.setPreferredSize(new Dimension(70, 30));
+        removeBtn.setPreferredSize(new Dimension(85, 30));
+        actions.add(editBtn);
+        actions.add(removeBtn);
+        display.add(actions, BorderLayout.EAST);
 
-        JPanel editCard = buildVehicleEditCard(vehicleType, plate, brand, year, colour);
+        // ── EDIT CARD ─────────────────────────────────────────────
+        JPanel editCard = buildEditCard(vehicleType, plate, brand, year, colour);
 
-        CardLayout switcher   = new CardLayout();
-        JPanel switcherPanel  = new JPanel(switcher);
-        switcherPanel.setOpaque(false);
-        switcherPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        switcherPanel.setPreferredSize(new Dimension(0, ROW_HEIGHT));
-        switcherPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_HEIGHT));
-        switcherPanel.add(displayCard, "display");
-        switcherPanel.add(editCard,    "edit");
-        switcher.show(switcherPanel, "display");
-
-        JPanel wrapper = new JPanel(new BorderLayout());
-        wrapper.setOpaque(false);
-        wrapper.setBorder(BorderFactory.createLineBorder(CARD_BORDER, 1));
-        wrapper.setAlignmentX(Component.LEFT_ALIGNMENT);
-        wrapper.setPreferredSize(new Dimension(0, ROW_HEIGHT));
-        wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_HEIGHT));
-        wrapper.add(switcherPanel, BorderLayout.CENTER);
-
-        JComboBox<String> eTypeCombo = (JComboBox<String>) editCard.getClientProperty("typeCombo");
-        JTextField ePlate  = (JTextField) editCard.getClientProperty("plate");
-        JTextField eBrand  = (JTextField) editCard.getClientProperty("brand");
-        JTextField eYear   = (JTextField) editCard.getClientProperty("year");
-        JTextField eColour = (JTextField) editCard.getClientProperty("colour");
-        JButton    eSave   = (JButton)    editCard.getClientProperty("saveBtn");
-        JButton    eCancel = (JButton)    editCard.getClientProperty("cancelBtn");
-
-        editLink.addActionListener(e -> {
-            if (eTypeCombo != null) eTypeCombo.setSelectedItem(vehicleType);
-            if (ePlate  != null) ePlate.setText(plate);
-            if (eBrand  != null) eBrand.setText(brand);
-            if (eYear   != null) eYear.setText(year);
-            if (eColour != null) eColour.setText(colour);
-            switcherPanel.setPreferredSize(new Dimension(0, EDIT_HEIGHT));
-            switcherPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, EDIT_HEIGHT));
-            wrapper.setPreferredSize(new Dimension(0, EDIT_HEIGHT));
-            wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, EDIT_HEIGHT));
-            switcher.show(switcherPanel, "edit");
-            if (ePlate != null) ePlate.requestFocusInWindow();
-            if (wrapper.getParent() != null) wrapper.getParent().revalidate();
-        });
-
-        if (eCancel != null) {
-            eCancel.addActionListener(e -> {
-                switcherPanel.setPreferredSize(new Dimension(0, ROW_HEIGHT));
-                switcherPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_HEIGHT));
-                wrapper.setPreferredSize(new Dimension(0, ROW_HEIGHT));
-                wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_HEIGHT));
-                switcher.show(switcherPanel, "display");
-                if (wrapper.getParent() != null) wrapper.getParent().revalidate();
-            });
-        }
-
-        Runnable doEditSave = () -> {
-            String newType   = (eTypeCombo != null) ? (String) eTypeCombo.getSelectedItem() : vehicleType;
-            String newPlate  = (ePlate  != null) ? ePlate.getText().trim()  : plate;
-            String newBrand  = (eBrand  != null) ? eBrand.getText().trim()  : brand;
-            String newYear   = (eYear   != null) ? eYear.getText().trim()   : year;
-            String newColour = (eColour != null) ? eColour.getText().trim() : colour;
-
-            if (newType.equals(vehicleType) && newPlate.equals(plate)
-                    && newBrand.equals(brand) && newYear.equals(year)
-                    && newColour.equals(colour)) {
-                JOptionPane.showMessageDialog(app, "No changes were made.", "No Changes",
-                        JOptionPane.INFORMATION_MESSAGE);
-                if (eCancel != null) eCancel.doClick();
-                return;
-            }
-
-            boolean updated = vehicleController.handleEdit(
-                    plate, new String[]{ newType, newPlate, newBrand, newYear, newColour });
-
-            if (updated) {
-                switcherPanel.setPreferredSize(new Dimension(0, ROW_HEIGHT));
-                switcherPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_HEIGHT));
-                wrapper.setPreferredSize(new Dimension(0, ROW_HEIGHT));
-                wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_HEIGHT));
-                switcher.show(switcherPanel, "display");
-                if (wrapper.getParent() != null) wrapper.getParent().revalidate();
-                JOptionPane.showMessageDialog(app, "Vehicle updated successfully.", "Success",
-                        JOptionPane.INFORMATION_MESSAGE);
-            }
-        };
-        if (eSave != null) eSave.addActionListener(e -> doEditSave.run());
-
-        KeyAdapter enterSave = new KeyAdapter() {
-            @Override public void keyPressed(KeyEvent e) {
-                if (e.getKeyCode() == KeyEvent.VK_ENTER) doEditSave.run();
-            }
-        };
-        if (ePlate  != null) ePlate.addKeyListener(enterSave);
-        if (eBrand  != null) eBrand.addKeyListener(enterSave);
-        if (eYear   != null) eYear.addKeyListener(enterSave);
-        if (eColour != null) eColour.addKeyListener(enterSave);
-
-        removeLink.addActionListener(e -> {
-            int choice = JOptionPane.showConfirmDialog(app,
-                    "Are you sure you want to remove " + brand + " (" + plate + ")?",
-                    "Confirm Remove", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
-            if (choice == JOptionPane.YES_OPTION) {
-                User user = app.getLoggedInUserObj();
-                boolean deleted = (user != null)
-                        && vehicleService.deleteVehicle(user.getUserId(), plate);
-                if (deleted) {
-                    vehicleController.refreshList();
-                } else {
-                    JOptionPane.showMessageDialog(app,
-                            "Failed to remove vehicle. Please try again.",
-                            "Error", JOptionPane.ERROR_MESSAGE);
-                }
-            }
-        });
-
-        return wrapper;
-    }
-
-    private JPanel buildVehicleEditCard(String vehicleType, String plate,
-                                        String brand, String year, String colour) {
-        JPanel editCard = new JPanel(new BorderLayout(6, 0));
-        editCard.setOpaque(false);
-        editCard.setBorder(new EmptyBorder(6, 10, 6, 10));
-
-        JPanel editFields = new JPanel(new GridBagLayout());
-        editFields.setOpaque(false);
-
-        GridBagConstraints ec = new GridBagConstraints();
-        ec.fill    = GridBagConstraints.BOTH;
-        ec.gridy   = 0;
-        ec.weighty = 1.0;
-        ec.insets  = new Insets(0, 1, 0, 1);
-
-        JComboBox<String> typeCombo = new JComboBox<>(new String[]{"Car", "Motor"});
-        typeCombo.setSelectedItem(vehicleType);
-        typeCombo.setFont(new Font("SansSerif", Font.PLAIN, 11));
-
-        JTextField plateField  = makeSmallTextField(plate);
-        JTextField brandField  = makeSmallTextField(brand);
-        JTextField yearField   = makeSmallTextField(year);
-        JTextField colourField = makeSmallTextField(colour);
-
-        ec.gridx = 0; ec.weightx = 0;   ec.ipadx = 28;
-        editFields.add(wrapWithLabel("Type",   typeCombo),   ec);
-        ec.gridx = 1; ec.weightx = 0;   ec.ipadx = 40;
-        editFields.add(wrapWithLabel("Plate",  plateField),  ec);
-        ec.gridx = 2; ec.weightx = 0.7; ec.ipadx = 0;
-        editFields.add(wrapWithLabel("Brand",  brandField),  ec);
-        ec.gridx = 3; ec.weightx = 0;   ec.ipadx = 26;
-        editFields.add(wrapWithLabel("Year",   yearField),   ec);
-        ec.gridx = 4; ec.weightx = 0;   ec.ipadx = 34;
-        editFields.add(wrapWithLabel("Colour", colourField), ec);
-        editCard.add(editFields, BorderLayout.CENTER);
-
-        JPanel btns = new JPanel(new GridBagLayout());
-        btns.setOpaque(false);
-        GridBagConstraints bc = new GridBagConstraints();
-        bc.gridy  = 0;
-        bc.anchor = GridBagConstraints.CENTER;
-        bc.insets = new Insets(0, 4, 0, 0);
-
-        JButton saveBtn   = makeFilledButton("Save",   GREEN,    Color.WHITE);
-        JButton cancelBtn = makeFilledButton("Cancel", GREY_BTN, Color.WHITE);
-        saveBtn.setPreferredSize(new Dimension(65, 30));
-        cancelBtn.setPreferredSize(new Dimension(80, 30));
-
-        bc.gridx = 0; btns.add(saveBtn,   bc);
-        bc.gridx = 1; btns.add(cancelBtn, bc);
-        editCard.add(btns, BorderLayout.EAST);
-
-        editCard.putClientProperty("typeCombo", typeCombo);
-        editCard.putClientProperty("plate",     plateField);
-        editCard.putClientProperty("brand",     brandField);
-        editCard.putClientProperty("year",      yearField);
-        editCard.putClientProperty("colour",    colourField);
-        editCard.putClientProperty("saveBtn",   saveBtn);
-        editCard.putClientProperty("cancelBtn", cancelBtn);
-
-        return editCard;
-    }
-
-    private void drawVehicleIcon(Graphics2D g2, String vehicleType, int width, int height) {
-        int cx = width / 2, cy = height / 2;
-        g2.setColor(new Color(80, 110, 230, 200));
-        g2.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        if ("Motor".equalsIgnoreCase(vehicleType)) {
-            g2.drawOval(cx - 8,  cy - 5, 16, 10);
-            g2.drawOval(cx + 7,  cy + 2,  8,  8);
-            g2.drawOval(cx - 15, cy + 2,  8,  8);
-            g2.drawLine(cx + 4, cy - 5, cx + 12, cy - 8);
-        } else {
-            g2.drawRoundRect(cx - 8,  cy - 9, 16,  8, 4, 4);
-            g2.drawRoundRect(cx - 14, cy - 3, 28, 10, 3, 3);
-            g2.fillOval(cx - 11, cy + 5, 7, 7);
-            g2.fillOval(cx + 4,  cy + 5, 7, 7);
-        }
-    }
-
-
-    // ==========================================================
-    // VIEW ALL VEHICLES POPUP DIALOG
-    // ==========================================================
-
-    private void showViewAllDialog(List<String[]> initialVehicles) {
-        JDialog dialog = new JDialog(
-                (Frame) SwingUtilities.getWindowAncestor(this),
-                "All My Vehicles", true);
-        dialog.setSize(820, 520);
-        dialog.setLocationRelativeTo(this);
-        dialog.setLayout(new BorderLayout());
-        dialog.setResizable(false);
-
-        JPanel header = new JPanel(new BorderLayout());
-        header.setBackground(Color.WHITE);
-        header.setBorder(new EmptyBorder(16, 22, 12, 22));
-        JLabel titleLbl = new JLabel("All My Vehicles");
-        titleLbl.setFont(new Font("SansSerif", Font.BOLD, 15));
-        titleLbl.setForeground(TEXT_DARK);
-        header.add(titleLbl, BorderLayout.WEST);
-        JLabel countLbl = new JLabel(initialVehicles.size() + " vehicles");
-        countLbl.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        countLbl.setForeground(TEXT_GREY);
-        header.add(countLbl, BorderLayout.EAST);
-        dialog.add(header, BorderLayout.NORTH);
-
-        JPanel listPanel = new JPanel();
-        listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
-        listPanel.setBackground(Color.WHITE);
-        listPanel.setBorder(new EmptyBorder(8, 18, 18, 18));
-
-        Runnable[] refreshDialog = { null };
-        refreshDialog[0] = () -> {
-            User user = app.getLoggedInUserObj();
-            List<String[]> latest = (user != null)
-                    ? vehicleController.getAllVehiclesForUser(user.getUserId())
-                    : new java.util.ArrayList<>();
-
-            countLbl.setText(latest.size() + " vehicles");
-            listPanel.removeAll();
-
-            if (latest.isEmpty()) {
-                listPanel.add(makeEmptyLabel("No vehicles registered."));
-            } else {
-                for (int i = 0; i < latest.size(); i++) {
-                    JPanel row = buildDialogVehicleRow(latest.get(i), dialog, refreshDialog[0]);
-                    row.setAlignmentX(Component.LEFT_ALIGNMENT);
-                    listPanel.add(row);
-                    if (i < latest.size() - 1)
-                        listPanel.add(Box.createVerticalStrut(8));
-                }
-            }
-
-            listPanel.revalidate();
-            listPanel.repaint();
-            vehicleController.refreshList();
-            if (latest.size() <= MAX_VISIBLE_VEHICLES) dialog.dispose();
-        };
-
-        for (int i = 0; i < initialVehicles.size(); i++) {
-            JPanel row = buildDialogVehicleRow(initialVehicles.get(i), dialog, refreshDialog[0]);
-            row.setAlignmentX(Component.LEFT_ALIGNMENT);
-            listPanel.add(row);
-            if (i < initialVehicles.size() - 1)
-                listPanel.add(Box.createVerticalStrut(8));
-        }
-
-        JScrollPane scrollPane = new JScrollPane(listPanel);
-        scrollPane.setBorder(null);
-        scrollPane.getViewport().setBackground(Color.WHITE);
-        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
-        dialog.add(scrollPane, BorderLayout.CENTER);
-
-        JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 18, 10));
-        footer.setBackground(Color.WHITE);
-        footer.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, CARD_BORDER));
-        JButton closeBtn = makeFilledButton("Close", new Color(108, 117, 125), Color.WHITE);
-        closeBtn.setPreferredSize(new Dimension(78, 32));
-        closeBtn.addActionListener(e -> dialog.dispose());
-        footer.add(closeBtn);
-        dialog.add(footer, BorderLayout.SOUTH);
-
-        dialog.setVisible(true);
-    }
-
-    private JPanel buildDialogVehicleRow(String[] v, JDialog parentDialog, Runnable onChanged) {
-        String vehicleType = v[1], plate = v[2], brand = v[3], year = v[4], colour = v[5];
-
-        JPanel displayCard = new JPanel(new BorderLayout(0, 0));
-        displayCard.setOpaque(false);
-        displayCard.setBorder(new EmptyBorder(10, 12, 10, 8));
-
-        JLabel iconLabel = new JLabel() {
-            @Override protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                drawVehicleIcon(g2, vehicleType, getWidth(), getHeight());
-                g2.dispose();
-            }
-        };
-        iconLabel.setPreferredSize(new Dimension(40, 40));
-        displayCard.add(iconLabel, BorderLayout.WEST);
-
-        JPanel infoPanel = new JPanel();
-        infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
-        infoPanel.setOpaque(false);
-        infoPanel.setBorder(new EmptyBorder(0, 10, 0, 0));
-
-        JLabel brandLabel  = new JLabel(brand);
-        brandLabel.setFont(new Font("SansSerif", Font.BOLD, 13));
-        brandLabel.setForeground(TEXT_DARK);
-        brandLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel detailLabel = new JLabel(plate + "  \u00B7  " + year + "  \u00B7  " + colour);
-        detailLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        detailLabel.setForeground(TEXT_GREY);
-        detailLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        infoPanel.add(Box.createVerticalGlue());
-        infoPanel.add(brandLabel);
-        infoPanel.add(Box.createVerticalStrut(3));
-        infoPanel.add(detailLabel);
-        infoPanel.add(Box.createVerticalGlue());
-        displayCard.add(infoPanel, BorderLayout.CENTER);
-
-        JPanel actionButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
-        actionButtons.setOpaque(false);
-        JButton editLink   = makeLinkButton("Edit",   BLUE);
-        JButton removeLink = makeLinkButton("Remove", RED);
-        actionButtons.add(editLink);
-        actionButtons.add(removeLink);
-        displayCard.add(actionButtons, BorderLayout.EAST);
-
-        JPanel editCard = buildVehicleEditCard(vehicleType, plate, brand, year, colour);
-
-        CardLayout switcher   = new CardLayout();
-        JPanel switcherPanel  = new JPanel(switcher);
-        switcherPanel.setOpaque(false);
-        switcherPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        switcherPanel.setPreferredSize(new Dimension(0, ROW_HEIGHT));
-        switcherPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_HEIGHT));
-        switcherPanel.add(displayCard, "display");
-        switcherPanel.add(editCard,    "edit");
-        switcher.show(switcherPanel, "display");
+        // ── CARD LAYOUT SWITCHER ──────────────────────────────────
+        CardLayout switcher    = new CardLayout();
+        JPanel     switchPanel = new JPanel(switcher);
+        switchPanel.setOpaque(false);
+        switchPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
+        switchPanel.add(display,  "display");
+        switchPanel.add(editCard, "edit");
+        switcher.show(switchPanel, "display");
 
         JPanel wrapper = new JPanel(new BorderLayout());
         wrapper.setOpaque(false);
         wrapper.setBorder(BorderFactory.createLineBorder(CARD_BORDER, 1));
-        wrapper.setAlignmentX(Component.LEFT_ALIGNMENT);
-        wrapper.setPreferredSize(new Dimension(0, ROW_HEIGHT));
-        wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_HEIGHT));
-        wrapper.add(switcherPanel, BorderLayout.CENTER);
+        wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
+        wrapper.add(switchPanel, BorderLayout.CENTER);
 
         JComboBox<String> eType   = (JComboBox<String>) editCard.getClientProperty("typeCombo");
-        JTextField ePlate  = (JTextField) editCard.getClientProperty("plate");
-        JTextField eBrand  = (JTextField) editCard.getClientProperty("brand");
-        JTextField eYear   = (JTextField) editCard.getClientProperty("year");
-        JTextField eColour = (JTextField) editCard.getClientProperty("colour");
-        JButton    eSave   = (JButton)    editCard.getClientProperty("saveBtn");
-        JButton    eCancel = (JButton)    editCard.getClientProperty("cancelBtn");
+        JTextField        ePlate  = (JTextField)        editCard.getClientProperty("plate");
+        JTextField        eBrand  = (JTextField)        editCard.getClientProperty("brand");
+        JTextField        eYear   = (JTextField)        editCard.getClientProperty("year");
+        JTextField        eColour = (JTextField)        editCard.getClientProperty("colour");
+        JButton           eSave   = (JButton)           editCard.getClientProperty("saveBtn");
+        JButton           eCancel = (JButton)           editCard.getClientProperty("cancelBtn");
 
-        editLink.addActionListener(e -> {
+        editBtn.addActionListener(e -> {
             if (eType   != null) eType.setSelectedItem(vehicleType);
             if (ePlate  != null) ePlate.setText(plate);
             if (eBrand  != null) eBrand.setText(brand);
             if (eYear   != null) eYear.setText(year);
             if (eColour != null) eColour.setText(colour);
-            switcherPanel.setPreferredSize(new Dimension(0, EDIT_HEIGHT));
-            switcherPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, EDIT_HEIGHT));
-            wrapper.setPreferredSize(new Dimension(0, EDIT_HEIGHT));
-            wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, EDIT_HEIGHT));
-            switcher.show(switcherPanel, "edit");
+            switchPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, EDIT_H));
+            wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, EDIT_H));
+            switcher.show(switchPanel, "edit");
             if (ePlate != null) ePlate.requestFocusInWindow();
             if (wrapper.getParent() != null) wrapper.getParent().revalidate();
         });
 
         if (eCancel != null) {
             eCancel.addActionListener(e -> {
-                switcherPanel.setPreferredSize(new Dimension(0, ROW_HEIGHT));
-                switcherPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_HEIGHT));
-                wrapper.setPreferredSize(new Dimension(0, ROW_HEIGHT));
-                wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_HEIGHT));
-                switcher.show(switcherPanel, "display");
+                switchPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
+                wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
+                switcher.show(switchPanel, "display");
                 if (wrapper.getParent() != null) wrapper.getParent().revalidate();
             });
         }
@@ -1371,49 +871,330 @@ public class ViewProfile extends JPanel {
             String nb = (eBrand  != null) ? eBrand.getText().trim()  : brand;
             String ny = (eYear   != null) ? eYear.getText().trim()   : year;
             String nc = (eColour != null) ? eColour.getText().trim() : colour;
-
-            boolean noChange = nt.equals(vehicleType) && np.equals(plate)
-                    && nb.equals(brand) && ny.equals(year) && nc.equals(colour);
-            if (noChange) {
-                JOptionPane.showMessageDialog(parentDialog, "No changes were made.", "No Changes",
+            if (nt.equals(vehicleType) && np.equals(plate) && nb.equals(brand)
+                    && ny.equals(year) && nc.equals(colour)) {
+                JOptionPane.showMessageDialog(app, "No changes were made.", "No Changes",
                         JOptionPane.INFORMATION_MESSAGE);
                 if (eCancel != null) eCancel.doClick();
                 return;
             }
+            boolean ok = vehicleController.handleEdit(plate, new String[]{nt, np, nb, ny, nc});
+            if (ok) {
+                switchPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
+                wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
+                switcher.show(switchPanel, "display");
+                if (wrapper.getParent() != null) wrapper.getParent().revalidate();
+                loadVehicles();
+                JOptionPane.showMessageDialog(app, "Vehicle updated successfully.", "Success",
+                        JOptionPane.INFORMATION_MESSAGE);
+            }
+        };
+        if (eSave != null) eSave.addActionListener(e -> doSave.run());
 
-            boolean updated = vehicleController.handleEdit(plate, new String[]{ nt, np, nb, ny, nc });
-            if (updated) {
-                JOptionPane.showMessageDialog(parentDialog, "Vehicle updated successfully.", "Success",
+        KeyAdapter enter = new KeyAdapter() {
+            @Override public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ENTER) doSave.run();
+            }
+        };
+        if (ePlate  != null) ePlate.addKeyListener(enter);
+        if (eBrand  != null) eBrand.addKeyListener(enter);
+        if (eYear   != null) eYear.addKeyListener(enter);
+        if (eColour != null) eColour.addKeyListener(enter);
+
+        removeBtn.addActionListener(e -> {
+            int ch = JOptionPane.showConfirmDialog(app,
+                    "Remove " + brand + " (" + plate + ")?",
+                    "Confirm Remove", JOptionPane.YES_NO_OPTION,
+                    JOptionPane.QUESTION_MESSAGE);
+            if (ch == JOptionPane.YES_OPTION) {
+                User    u   = app.getLoggedInUserObj();
+                boolean del = (u != null) && vehicleService.deleteVehicle(u.getUserId(), plate);
+                if (del) loadVehicles();
+                else JOptionPane.showMessageDialog(app,
+                        "Failed to remove vehicle. Please try again.",
+                        "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        return wrapper;
+    }
+
+    private JPanel buildEditCard(String vehicleType, String plate,
+                                 String brand, String year, String colour) {
+        JPanel card = new JPanel(new BorderLayout(6, 0));
+        card.setOpaque(false);
+        card.setBorder(new EmptyBorder(6, 10, 6, 10));
+
+        JPanel fieldRow = new JPanel(new GridBagLayout());
+        fieldRow.setOpaque(false);
+        GridBagConstraints g = new GridBagConstraints();
+        g.fill    = GridBagConstraints.BOTH;
+        g.gridy   = 0;
+        g.weighty = 1.0;
+        g.insets  = new Insets(0, 1, 0, 1);
+
+        JComboBox<String> typeCombo = new JComboBox<>(new String[]{"Car", "Motor"});
+        typeCombo.setSelectedItem(vehicleType);
+        typeCombo.setFont(new Font("SansSerif", Font.PLAIN, 11));
+
+        JTextField plateF  = makeSmallField(plate);
+        JTextField brandF  = makeSmallField(brand);
+        JTextField yearF   = makeSmallField(year);
+        JTextField colourF = makeSmallField(colour);
+
+        g.gridx = 0; g.weightx = 0;   g.ipadx = 28; fieldRow.add(labelWrap("Type",   typeCombo), g);
+        g.gridx = 1; g.weightx = 0;   g.ipadx = 40; fieldRow.add(labelWrap("Plate",  plateF),    g);
+        g.gridx = 2; g.weightx = 0.7; g.ipadx = 0;  fieldRow.add(labelWrap("Brand",  brandF),    g);
+        g.gridx = 3; g.weightx = 0;   g.ipadx = 26; fieldRow.add(labelWrap("Year",   yearF),     g);
+        g.gridx = 4; g.weightx = 0;   g.ipadx = 34; fieldRow.add(labelWrap("Colour", colourF),   g);
+        card.add(fieldRow, BorderLayout.CENTER);
+
+        JPanel btns = new JPanel(new GridBagLayout());
+        btns.setOpaque(false);
+        GridBagConstraints bc = new GridBagConstraints();
+        bc.gridy  = 0;
+        bc.anchor = GridBagConstraints.CENTER;
+        bc.insets = new Insets(0, 4, 0, 0);
+        JButton saveBtn   = makeFilledButton("Save",   GREEN,    Color.WHITE);
+        JButton cancelBtn = makeFilledButton("Cancel", GREY_BTN, Color.WHITE);
+        saveBtn.setPreferredSize(new Dimension(65, 30));
+        cancelBtn.setPreferredSize(new Dimension(80, 30));
+        bc.gridx = 0; btns.add(saveBtn,   bc);
+        bc.gridx = 1; btns.add(cancelBtn, bc);
+        card.add(btns, BorderLayout.EAST);
+
+        card.putClientProperty("typeCombo", typeCombo);
+        card.putClientProperty("plate",     plateF);
+        card.putClientProperty("brand",     brandF);
+        card.putClientProperty("year",      yearF);
+        card.putClientProperty("colour",    colourF);
+        card.putClientProperty("saveBtn",   saveBtn);
+        card.putClientProperty("cancelBtn", cancelBtn);
+        return card;
+    }
+
+
+    // =========================================================
+    // VIEW ALL DIALOG
+    // =========================================================
+
+    private void showViewAllDialog(List<String[]> initial) {
+        JDialog dlg = new JDialog((Frame) SwingUtilities.getWindowAncestor(this),
+                "All My Vehicles", true);
+        dlg.setSize(820, 520);
+        dlg.setLocationRelativeTo(this);
+        dlg.setLayout(new BorderLayout());
+        dlg.setResizable(false);
+
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(Color.WHITE);
+        header.setBorder(new EmptyBorder(16, 22, 12, 22));
+        JLabel titleLbl = new JLabel("All My Vehicles");
+        titleLbl.setFont(new Font("SansSerif", Font.BOLD, 15));
+        titleLbl.setForeground(TEXT_DARK);
+        header.add(titleLbl, BorderLayout.WEST);
+        JLabel countLbl = new JLabel(initial.size() + " vehicles");
+        countLbl.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        countLbl.setForeground(TEXT_GREY);
+        header.add(countLbl, BorderLayout.EAST);
+        dlg.add(header, BorderLayout.NORTH);
+
+        JPanel listPanel = new JPanel();
+        listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
+        listPanel.setBackground(Color.WHITE);
+        listPanel.setBorder(new EmptyBorder(8, 18, 18, 18));
+
+        Runnable[] refresh = {null};
+        refresh[0] = () -> {
+            User user = app.getLoggedInUserObj();
+            List<String[]> latest = (user != null)
+                    ? vehicleController.getAllVehiclesForUser(user.getUserId())
+                    : new java.util.ArrayList<>();
+            countLbl.setText(latest.size() + " vehicles");
+            listPanel.removeAll();
+            if (latest.isEmpty()) {
+                listPanel.add(makeEmptyLabel("No vehicles registered."));
+            } else {
+                for (int i = 0; i < latest.size(); i++) {
+                    JPanel row = buildDialogRow(latest.get(i), dlg, refresh[0]);
+                    row.setAlignmentX(Component.LEFT_ALIGNMENT);
+                    listPanel.add(row);
+                    if (i < latest.size() - 1) listPanel.add(Box.createVerticalStrut(6));
+                }
+            }
+            listPanel.revalidate();
+            listPanel.repaint();
+            loadVehicles();
+            if (latest.size() <= MAX_VISIBLE) dlg.dispose();
+        };
+
+        for (int i = 0; i < initial.size(); i++) {
+            JPanel row = buildDialogRow(initial.get(i), dlg, refresh[0]);
+            row.setAlignmentX(Component.LEFT_ALIGNMENT);
+            listPanel.add(row);
+            if (i < initial.size() - 1) listPanel.add(Box.createVerticalStrut(6));
+        }
+
+        JScrollPane scroll = new JScrollPane(listPanel);
+        scroll.setBorder(null);
+        scroll.getViewport().setBackground(Color.WHITE);
+        scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        dlg.add(scroll, BorderLayout.CENTER);
+
+        JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 18, 10));
+        footer.setBackground(Color.WHITE);
+        footer.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, CARD_BORDER));
+        JButton closeBtn = makeFilledButton("Close", new Color(108, 117, 125), Color.WHITE);
+        closeBtn.setPreferredSize(new Dimension(78, 32));
+        closeBtn.addActionListener(e -> dlg.dispose());
+        footer.add(closeBtn);
+        dlg.add(footer, BorderLayout.SOUTH);
+
+        dlg.setVisible(true);
+    }
+
+    private JPanel buildDialogRow(String[] v, JDialog dlg, Runnable onChanged) {
+        String vType  = v[1];
+        String plate  = v[2];
+        String brand  = v[3];
+        String year   = v[4];
+        String colour = v[5];
+
+        JPanel display = new JPanel(new BorderLayout(0, 0));
+        display.setOpaque(false);
+        display.setBorder(new EmptyBorder(10, 12, 10, 12));
+
+        // ── VEHICLE ICON ──────────────────────────────────────────
+        String iconText = "Motor".equalsIgnoreCase(vType) ? ICON_MOTOR : ICON_CAR;
+        JLabel iconLbl  = new JLabel(iconText, SwingConstants.CENTER);
+        iconLbl.setFont(new Font("SansSerif", Font.PLAIN, 24));
+        iconLbl.setPreferredSize(new Dimension(ICON_SIZE, ICON_SIZE));
+        iconLbl.setMinimumSize  (new Dimension(ICON_SIZE, ICON_SIZE));
+        iconLbl.setMaximumSize  (new Dimension(ICON_SIZE, ICON_SIZE));
+        display.add(iconLbl, BorderLayout.WEST);
+
+        JPanel info = new JPanel();
+        info.setLayout(new BoxLayout(info, BoxLayout.Y_AXIS));
+        info.setOpaque(false);
+        info.setBorder(new EmptyBorder(0, 10, 0, 0));
+
+        JLabel brandLbl = new JLabel(brand);
+        brandLbl.setFont(new Font("SansSerif", Font.BOLD, 13));
+        brandLbl.setForeground(TEXT_DARK);
+        brandLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel detailLbl = new JLabel(plate + "  \u00B7  " + year + "  \u00B7  " + colour);
+        detailLbl.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        detailLbl.setForeground(TEXT_GREY);
+        detailLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        info.add(Box.createVerticalGlue());
+        info.add(brandLbl);
+        info.add(Box.createVerticalStrut(3));
+        info.add(detailLbl);
+        info.add(Box.createVerticalGlue());
+        display.add(info, BorderLayout.CENTER);
+
+        JPanel acts = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        acts.setOpaque(false);
+        JButton editBtn   = makeFilledButton("Edit",   BLUE, Color.WHITE);
+        JButton removeBtn = makeFilledButton("Remove", RED,  Color.WHITE);
+        editBtn.setPreferredSize(new Dimension(70, 30));
+        removeBtn.setPreferredSize(new Dimension(85, 30));
+        acts.add(editBtn);
+        acts.add(removeBtn);
+        display.add(acts, BorderLayout.EAST);
+
+        JPanel     editCard   = buildEditCard(vType, plate, brand, year, colour);
+        CardLayout switcher   = new CardLayout();
+        JPanel     switchPanel = new JPanel(switcher);
+        switchPanel.setOpaque(false);
+        switchPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
+        switchPanel.add(display,  "display");
+        switchPanel.add(editCard, "edit");
+        switcher.show(switchPanel, "display");
+
+        JPanel wrapper = new JPanel(new BorderLayout());
+        wrapper.setOpaque(false);
+        wrapper.setBorder(BorderFactory.createLineBorder(CARD_BORDER, 1));
+        wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
+        wrapper.add(switchPanel, BorderLayout.CENTER);
+
+        JComboBox<String> eType   = (JComboBox<String>) editCard.getClientProperty("typeCombo");
+        JTextField        ePlate  = (JTextField)        editCard.getClientProperty("plate");
+        JTextField        eBrand  = (JTextField)        editCard.getClientProperty("brand");
+        JTextField        eYear   = (JTextField)        editCard.getClientProperty("year");
+        JTextField        eColour = (JTextField)        editCard.getClientProperty("colour");
+        JButton           eSave   = (JButton)           editCard.getClientProperty("saveBtn");
+        JButton           eCancel = (JButton)           editCard.getClientProperty("cancelBtn");
+
+        editBtn.addActionListener(e -> {
+            if (eType   != null) eType.setSelectedItem(vType);
+            if (ePlate  != null) ePlate.setText(plate);
+            if (eBrand  != null) eBrand.setText(brand);
+            if (eYear   != null) eYear.setText(year);
+            if (eColour != null) eColour.setText(colour);
+            switchPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, EDIT_H));
+            wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, EDIT_H));
+            switcher.show(switchPanel, "edit");
+            if (ePlate != null) ePlate.requestFocusInWindow();
+            if (wrapper.getParent() != null) wrapper.getParent().revalidate();
+        });
+
+        if (eCancel != null) {
+            eCancel.addActionListener(e -> {
+                switchPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
+                wrapper.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H));
+                switcher.show(switchPanel, "display");
+                if (wrapper.getParent() != null) wrapper.getParent().revalidate();
+            });
+        }
+
+        Runnable doSave = () -> {
+            String nt = (eType   != null) ? (String) eType.getSelectedItem() : vType;
+            String np = (ePlate  != null) ? ePlate.getText().trim()  : plate;
+            String nb = (eBrand  != null) ? eBrand.getText().trim()  : brand;
+            String ny = (eYear   != null) ? eYear.getText().trim()   : year;
+            String nc = (eColour != null) ? eColour.getText().trim() : colour;
+            if (nt.equals(vType) && np.equals(plate) && nb.equals(brand)
+                    && ny.equals(year) && nc.equals(colour)) {
+                JOptionPane.showMessageDialog(dlg, "No changes were made.", "No Changes",
+                        JOptionPane.INFORMATION_MESSAGE);
+                if (eCancel != null) eCancel.doClick();
+                return;
+            }
+            if (vehicleController.handleEdit(plate, new String[]{nt, np, nb, ny, nc})) {
+                JOptionPane.showMessageDialog(dlg, "Vehicle updated successfully.", "Success",
                         JOptionPane.INFORMATION_MESSAGE);
                 onChanged.run();
             }
         };
         if (eSave != null) eSave.addActionListener(e -> doSave.run());
 
-        KeyAdapter enterSave = new KeyAdapter() {
+        KeyAdapter enter = new KeyAdapter() {
             @Override public void keyPressed(KeyEvent e) {
                 if (e.getKeyCode() == KeyEvent.VK_ENTER) doSave.run();
             }
         };
-        if (ePlate  != null) ePlate.addKeyListener(enterSave);
-        if (eBrand  != null) eBrand.addKeyListener(enterSave);
-        if (eYear   != null) eYear.addKeyListener(enterSave);
-        if (eColour != null) eColour.addKeyListener(enterSave);
+        if (ePlate  != null) ePlate.addKeyListener(enter);
+        if (eBrand  != null) eBrand.addKeyListener(enter);
+        if (eYear   != null) eYear.addKeyListener(enter);
+        if (eColour != null) eColour.addKeyListener(enter);
 
-        removeLink.addActionListener(e -> {
-            int choice = JOptionPane.showConfirmDialog(parentDialog,
-                    "Remove " + brand + " (" + plate + ")?", "Confirm Remove",
-                    JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
-            if (choice == JOptionPane.YES_OPTION) {
-                User user = app.getLoggedInUserObj();
-                if (user != null && vehicleService.deleteVehicle(user.getUserId(), plate)) {
-                    JOptionPane.showMessageDialog(parentDialog,
-                            brand + " removed successfully.", "Removed",
+        removeBtn.addActionListener(e -> {
+            int ch = JOptionPane.showConfirmDialog(dlg,
+                    "Remove " + brand + " (" + plate + ")?",
+                    "Confirm Remove", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+            if (ch == JOptionPane.YES_OPTION) {
+                User u = app.getLoggedInUserObj();
+                if (u != null && vehicleService.deleteVehicle(u.getUserId(), plate)) {
+                    JOptionPane.showMessageDialog(dlg, brand + " removed.", "Removed",
                             JOptionPane.INFORMATION_MESSAGE);
                     onChanged.run();
                 } else {
-                    JOptionPane.showMessageDialog(parentDialog,
-                            "Failed to remove vehicle.", "Error", JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(dlg, "Failed to remove vehicle.", "Error",
+                            JOptionPane.ERROR_MESSAGE);
                 }
             }
         });
@@ -1422,9 +1203,9 @@ public class ViewProfile extends JPanel {
     }
 
 
-    // ==========================================================
+    // =========================================================
     // IMAGE PICKERS
-    // ==========================================================
+    // =========================================================
 
     private void pickProfileImage() {
         User user = app.getLoggedInUserObj();
@@ -1436,15 +1217,15 @@ public class ViewProfile extends JPanel {
         fd.setVisible(true);
         if (fd.getFile() == null) return;
         try {
-            BufferedImage img = ImageIO.read(new java.io.File(fd.getDirectory(), fd.getFile()));
+            BufferedImage img = ImageIO.read(new File(fd.getDirectory(), fd.getFile()));
             if (img == null) {
-                JOptionPane.showMessageDialog(app, "Could not read the selected image.",
-                        "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(app, "Could not read image.", "Error",
+                        JOptionPane.ERROR_MESSAGE);
                 return;
             }
             if (!profilePicStorage.saveImage(user.getUserId(), img)) {
-                JOptionPane.showMessageDialog(app, "Failed to save the picture.",
-                        "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(app, "Failed to save picture.", "Error",
+                        JOptionPane.ERROR_MESSAGE);
                 return;
             }
             profileImage = img;
@@ -1462,15 +1243,15 @@ public class ViewProfile extends JPanel {
         fd.setVisible(true);
         if (fd.getFile() == null) return;
         try {
-            BufferedImage img = ImageIO.read(new java.io.File(fd.getDirectory(), fd.getFile()));
+            BufferedImage img = ImageIO.read(new File(fd.getDirectory(), fd.getFile()));
             if (img == null) {
-                JOptionPane.showMessageDialog(app, "Could not read the selected image.",
-                        "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(app, "Could not read image.", "Error",
+                        JOptionPane.ERROR_MESSAGE);
                 return;
             }
             if (!backgroundStorage.saveImage(user.getUserId(), img)) {
-                JOptionPane.showMessageDialog(app, "Failed to save the image.",
-                        "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(app, "Failed to save image.", "Error",
+                        JOptionPane.ERROR_MESSAGE);
                 return;
             }
             bannerImage = img;
@@ -1479,14 +1260,13 @@ public class ViewProfile extends JPanel {
     }
 
 
-    // ==========================================================
-    // HELPER METHODS
-    // ==========================================================
+    // =========================================================
+    // HELPERS
+    // =========================================================
 
     private JPanel makeCard() {
         JPanel card = new JPanel() {
-            @Override
-            protected void paintComponent(Graphics g) {
+            @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setColor(CARD_BG);
@@ -1508,19 +1288,19 @@ public class ViewProfile extends JPanel {
         return sep;
     }
 
-    private JPanel makeReadRow(String fieldName, String value) {
+    private JPanel makeReadRow(String label, String value) {
         JPanel row = new JPanel(new BorderLayout(10, 0));
         row.setOpaque(false);
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
-        JLabel nameLabel = new JLabel(fieldName);
-        nameLabel.setFont(new Font("SansSerif", Font.PLAIN, 13));
-        nameLabel.setForeground(TEXT_GREY);
-        nameLabel.setPreferredSize(new Dimension(90, 18));
-        JLabel valueLabel = new JLabel(value);
-        valueLabel.setFont(new Font("SansSerif", Font.PLAIN, 13));
-        valueLabel.setForeground(TEXT_DARK);
-        row.add(nameLabel,  BorderLayout.WEST);
-        row.add(valueLabel, BorderLayout.CENTER);
+        JLabel lbl = new JLabel(label);
+        lbl.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        lbl.setForeground(TEXT_GREY);
+        lbl.setPreferredSize(new Dimension(90, 18));
+        JLabel val = new JLabel(value);
+        val.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        val.setForeground(TEXT_DARK);
+        row.add(lbl, BorderLayout.WEST);
+        row.add(val, BorderLayout.CENTER);
         return row;
     }
 
@@ -1537,42 +1317,42 @@ public class ViewProfile extends JPanel {
         return lbl;
     }
 
-    private void styleTextField(JTextField field) {
-        field.setFont(new Font("SansSerif", Font.PLAIN, 13));
-        field.setBorder(BorderFactory.createCompoundBorder(
+    private void styleField(JTextField f) {
+        f.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        f.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(BLUE, 2),
                 new EmptyBorder(2, 6, 2, 6)));
     }
 
-    private JTextField makeSmallTextField(String value) {
-        JTextField field = new JTextField(value);
-        field.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        field.setBorder(BorderFactory.createCompoundBorder(
+    private JTextField makeSmallField(String value) {
+        JTextField f = new JTextField(value);
+        f.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        f.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(BLUE, 1),
                 new EmptyBorder(2, 3, 2, 3)));
-        return field;
+        return f;
     }
 
-    private JPanel wrapWithLabel(String label, JTextField field) {
-        JPanel panel = new JPanel(new BorderLayout(0, 1));
-        panel.setOpaque(false);
+    private JPanel labelWrap(String label, JTextField field) {
+        JPanel p = new JPanel(new BorderLayout(0, 1));
+        p.setOpaque(false);
         JLabel lbl = new JLabel(label);
         lbl.setFont(new Font("SansSerif", Font.BOLD, 9));
         lbl.setForeground(TEXT_GREY);
-        panel.add(lbl,   BorderLayout.NORTH);
-        panel.add(field, BorderLayout.CENTER);
-        return panel;
+        p.add(lbl,   BorderLayout.NORTH);
+        p.add(field, BorderLayout.CENTER);
+        return p;
     }
 
-    private JPanel wrapWithLabel(String label, JComboBox<String> combo) {
-        JPanel panel = new JPanel(new BorderLayout(0, 1));
-        panel.setOpaque(false);
+    private JPanel labelWrap(String label, JComboBox<String> combo) {
+        JPanel p = new JPanel(new BorderLayout(0, 1));
+        p.setOpaque(false);
         JLabel lbl = new JLabel(label);
         lbl.setFont(new Font("SansSerif", Font.BOLD, 9));
         lbl.setForeground(TEXT_GREY);
-        panel.add(lbl,   BorderLayout.NORTH);
-        panel.add(combo, BorderLayout.CENTER);
-        return panel;
+        p.add(lbl,   BorderLayout.NORTH);
+        p.add(combo, BorderLayout.CENTER);
+        return p;
     }
 
     private JButton makeLinkButton(String text, Color color) {
@@ -1582,25 +1362,24 @@ public class ViewProfile extends JPanel {
         btn.setContentAreaFilled(false);
         btn.setBorderPainted(false);
         btn.setFocusPainted(false);
-        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         btn.setMargin(new Insets(0, 4, 0, 4));
         return btn;
     }
 
     private JButton makeFilledButton(String text, Color bg, Color fg) {
         JButton btn = new JButton(text) {
-            private boolean hovered = false;
+            private boolean hov = false;
             {
                 addMouseListener(new MouseAdapter() {
-                    public void mouseEntered(MouseEvent e) { hovered = true;  repaint(); }
-                    public void mouseExited (MouseEvent e) { hovered = false; repaint(); }
+                    public void mouseEntered(MouseEvent e) { hov = true;  repaint(); }
+                    public void mouseExited (MouseEvent e) { hov = false; repaint(); }
                 });
             }
-            @Override
-            protected void paintComponent(Graphics g) {
+            @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(hovered ? bg.darker() : bg);
+                g2.setColor(hov ? bg.darker() : bg);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
                 g2.dispose();
                 super.paintComponent(g);
@@ -1612,12 +1391,12 @@ public class ViewProfile extends JPanel {
         btn.setBorderPainted(false);
         btn.setFocusPainted(false);
         btn.setPreferredSize(new Dimension(70, 28));
-        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         return btn;
     }
 
-    private JLabel makeEmptyLabel(String message) {
-        JLabel lbl = new JLabel(message);
+    private JLabel makeEmptyLabel(String msg) {
+        JLabel lbl = new JLabel(msg);
         lbl.setFont(new Font("SansSerif", Font.PLAIN, 13));
         lbl.setForeground(TEXT_GREY);
         lbl.setAlignmentX(Component.CENTER_ALIGNMENT);
@@ -1625,13 +1404,10 @@ public class ViewProfile extends JPanel {
         return lbl;
     }
 
-    private void clearAllTextFields(Container container) {
-        for (Component comp : container.getComponents()) {
-            if (comp instanceof JTextField) {
-                ((JTextField) comp).setText("");
-            } else if (comp instanceof Container) {
-                clearAllTextFields((Container) comp);
-            }
+    private void clearFields(Container c) {
+        for (Component comp : c.getComponents()) {
+            if (comp instanceof JTextField) ((JTextField) comp).setText("");
+            else if (comp instanceof Container) clearFields((Container) comp);
         }
     }
 }
