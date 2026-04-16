@@ -3,14 +3,20 @@ package view;
 import model.AccountService;
 import model.AppointmentService;
 import model.AppointmentService.Appointment;
+import model.BackgroundImageStorage;
+import model.NotificationService;
 import model.PaymentService;
+import model.ProfilePicStorage;
 import model.User;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.geom.Ellipse2D;
+import java.awt.image.BufferedImage;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.TextStyle;
@@ -37,19 +43,18 @@ public class CounterStaffDashboard extends JPanel {
     private JTextField profileNameField;
     private JTextField profileEmailField;
     private JLabel profileRoleLabel;
-    private JLabel profileAvatarDisplay;
-    private int selectedAvatarIndex = 0;
-    private JPanel avatarSelectionPanel;
 
-    private static final Color[] AVATAR_COLORS = {
-            new Color(80, 110, 230), new Color(230, 80, 80),  new Color(80, 190, 110),
-            new Color(230, 160, 40), new Color(160, 80, 230), new Color(40, 180, 200),
-            new Color(230, 80, 160), new Color(100, 100, 120),
-    };
-    private static final String[] AVATAR_ICONS = {
-            "\u263A", "\u2605", "\u2665", "\u2666",
-            "\u263C", "\u2708", "\u266B", "\u2618"
-    };
+    // ── Profile picture & banner ──
+    private BufferedImage profileImage = null;
+    private BufferedImage bannerImage  = null;
+    private JPanel profileBanner;
+    private JLabel profilePicLabel;
+    private final ProfilePicStorage      profilePicStorage    = new ProfilePicStorage();
+    private final BackgroundImageStorage backgroundStorage    = new BackgroundImageStorage();
+    private final NotificationService    notificationService  = new NotificationService();
+
+    private static final Color BRAND_BLUE  = new Color(80, 110, 230);
+    private static final Color BANNER_BLUE = new Color(100, 130, 240);
 
     private static final String[] NAV_ITEMS = {
             "Dashboard", "Customer Management", "Appointments", "Calendar", "Payment Collection"
@@ -99,8 +104,13 @@ public class CounterStaffDashboard extends JPanel {
         if (profileLabel  != null) profileLabel.setText(name);
 
         User user = app.getLoggedInUserObj();
-        if (user != null) selectedAvatarIndex = user.getProfilePicture();
-        if (avatarLabel != null) { avatarLabel.setText(AVATAR_ICONS[selectedAvatarIndex]); avatarLabel.repaint(); }
+        if (user != null) {
+            profileImage = profilePicStorage.loadImage(user.getEmail());
+            bannerImage  = backgroundStorage.loadImage(user.getEmail());
+            if (profileBanner  != null) profileBanner.repaint();
+            if (profilePicLabel != null) profilePicLabel.repaint();
+        }
+        if (avatarLabel != null) avatarLabel.repaint();
     }
 
     // ─── Placeholder page ─────────────────────────────────────────
@@ -147,17 +157,43 @@ public class CounterStaffDashboard extends JPanel {
     }
 
     private JPanel buildProfileArea() {
-        JPanel profileArea = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 12));
+        JPanel profileArea = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 12));
         profileArea.setBackground(UIConstants.BG_HEADER);
 
-        avatarLabel = new JLabel(AVATAR_ICONS[selectedAvatarIndex]) {
+        // ── Notification bell ────────────────────────────────────────
+        JLabel bellLabel = new JLabel("\uD83D\uDD14");
+        bellLabel.setFont(new Font("SansSerif", Font.PLAIN, 20));
+        bellLabel.setPreferredSize(new Dimension(38, 38));
+        bellLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        bellLabel.setVerticalAlignment(SwingConstants.CENTER);
+        bellLabel.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        bellLabel.setToolTipText("Notifications");
+        bellLabel.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) { showNotifications(bellLabel); }
+        });
+
+        avatarLabel = new JLabel() {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(AVATAR_COLORS[selectedAvatarIndex]);
-                g2.fillOval(0, 0, 38, 38);
+                if (profileImage != null) {
+                    int imgW  = profileImage.getWidth();
+                    int imgH  = profileImage.getHeight();
+                    int crop  = Math.min(imgW, imgH);
+                    int cropX = (imgW - crop) / 2;
+                    int cropY = (imgH - crop) / 2;
+                    g2.setClip(new Ellipse2D.Float(0, 0, 38, 38));
+                    g2.drawImage(profileImage, 0, 0, 38, 38,
+                            cropX, cropY, cropX + crop, cropY + crop, null);
+                    g2.setClip(null);
+                } else {
+                    g2.setColor(BRAND_BLUE);
+                    g2.fillOval(0, 0, 38, 38);
+                    g2.dispose();
+                    super.paintComponent(g);
+                    return;
+                }
                 g2.dispose();
-                super.paintComponent(g);
             }
         };
         avatarLabel.setFont(new Font("SansSerif", Font.PLAIN, 18));
@@ -214,8 +250,37 @@ public class CounterStaffDashboard extends JPanel {
             }
         });
 
+        profileArea.add(bellLabel);
         profileArea.add(profileBtn);
         return profileArea;
+    }
+
+    private void showNotifications(JLabel anchor) {
+        JPopupMenu popup = new JPopupMenu();
+        popup.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(220, 220, 225), 1),
+                new EmptyBorder(8, 0, 8, 0)));
+        popup.setBackground(Color.WHITE);
+
+        JLabel title = new JLabel("  Notifications");
+        title.setFont(UIConstants.FONT_BODY_BOLD);
+        title.setForeground(UIConstants.TEXT_PRIMARY);
+        title.setBorder(new EmptyBorder(4, 12, 8, 12));
+        popup.add(title);
+        popup.addSeparator();
+
+        User user = app.getLoggedInUserObj();
+        java.util.List<String> notifs = notificationService.getNotifications(user != null ? user.getRole() : "staff");
+        for (String n : notifs) {
+            JMenuItem item = new JMenuItem(n);
+            item.setFont(UIConstants.FONT_SMALL);
+            item.setForeground(UIConstants.TEXT_DARK);
+            item.setBackground(Color.WHITE);
+            item.setBorder(new EmptyBorder(8, 16, 8, 20));
+            item.setEnabled(false);
+            popup.add(item);
+        }
+        popup.show(anchor, -popup.getPreferredSize().width + anchor.getWidth(), anchor.getHeight());
     }
 
     private JMenuItem menuItem(String text) {
@@ -1651,99 +1716,232 @@ public class CounterStaffDashboard extends JPanel {
             String r = user.getRole();
             profileRoleLabel.setText(r.substring(0, 1).toUpperCase() + r.substring(1));
         }
-        selectedAvatarIndex = user.getProfilePicture();
-        updateAvatarSelection();
+        profileImage = profilePicStorage.loadImage(user.getEmail());
+        bannerImage  = backgroundStorage.loadImage(user.getEmail());
+        if (profileBanner   != null) profileBanner.repaint();
+        if (profilePicLabel != null) profilePicLabel.repaint();
     }
 
-    private void updateAvatarSelection() {
-        if (profileAvatarDisplay != null) { profileAvatarDisplay.setText(AVATAR_ICONS[selectedAvatarIndex]); profileAvatarDisplay.repaint(); }
-        if (avatarSelectionPanel != null) {
-            Component[] avatars = avatarSelectionPanel.getComponents();
-            for (int i = 0; i < avatars.length; i++) {
-                if (avatars[i] instanceof JLabel) {
-                    ((JLabel) avatars[i]).setBorder(i == selectedAvatarIndex
-                            ? BorderFactory.createLineBorder(UIConstants.PRIMARY, 3)
-                            : BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1));
-                }
-            }
-        }
-        if (avatarLabel != null) { avatarLabel.setText(AVATAR_ICONS[selectedAvatarIndex]); avatarLabel.repaint(); }
-    }
+    // ─── Profile page (banner hero + form card, matching Admin style) ─────
 
     private JPanel buildProfileContent() {
         JPanel page = new JPanel(new BorderLayout());
         page.setBackground(UIConstants.BG_CONTENT);
 
+        JPanel inner = new JPanel();
+        inner.setLayout(new BoxLayout(inner, BoxLayout.Y_AXIS));
+        inner.setBackground(UIConstants.BG_CONTENT);
+        inner.setBorder(new EmptyBorder(0, 0, 40, 0));
+
+        inner.add(buildBannerHero());
+        inner.add(Box.createVerticalStrut(24));
+
         JPanel center = new JPanel(new GridBagLayout());
         center.setBackground(UIConstants.BG_CONTENT);
+        center.add(buildProfileFormCard());
+        inner.add(center);
 
-        JPanel card = UIFactory.createCard();
-        card.setBorder(new EmptyBorder(40, 50, 40, 50));
+        JScrollPane scroll = new JScrollPane(inner);
+        scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scroll.setBorder(null);
+        scroll.getViewport().setBackground(UIConstants.BG_CONTENT);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        page.add(scroll, BorderLayout.CENTER);
+        return page;
+    }
 
-        // Large avatar display
-        profileAvatarDisplay = new JLabel(AVATAR_ICONS[0]) {
+    private JPanel buildBannerHero() {
+        JPanel hero = new JPanel(null);
+        hero.setOpaque(false);
+        hero.setPreferredSize(new Dimension(0, 200));
+        hero.setMaximumSize(new Dimension(Integer.MAX_VALUE, 200));
+
+        boolean[] bannerHovered = {false};
+        boolean[] avatarHovered = {false};
+
+        profileBanner = new JPanel() {
+            @Override protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                if (bannerImage != null) {
+                    g2.drawImage(bannerImage, 0, 0, getWidth(), getHeight(), null);
+                } else {
+                    GradientPaint gradient = new GradientPaint(
+                            0, 0, BANNER_BLUE, getWidth(), getHeight(), new Color(60, 90, 210));
+                    g2.setPaint(gradient);
+                    g2.fillRect(0, 0, getWidth(), getHeight());
+                }
+                if (bannerHovered[0]) {
+                    g2.setColor(new Color(0, 0, 0, 110));
+                    g2.fillRect(0, 0, getWidth(), getHeight());
+                    int cx = getWidth() / 2, cy = getHeight() / 2 - 10;
+                    drawCameraIcon(g2, cx, cy, 28, Color.WHITE);
+                    g2.setColor(Color.WHITE);
+                    g2.setFont(new Font("SansSerif", Font.BOLD, 13));
+                    FontMetrics fm = g2.getFontMetrics();
+                    String msg = "Click to change";
+                    g2.drawString(msg, cx - fm.stringWidth(msg) / 2, cy + 44);
+                }
+                g2.dispose();
+            }
+        };
+        profileBanner.setOpaque(false);
+        profileBanner.setLayout(null);
+        profileBanner.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        profileBanner.addMouseListener(new MouseAdapter() {
+            @Override public void mouseEntered(MouseEvent e) { bannerHovered[0] = true;  profileBanner.repaint(); }
+            @Override public void mouseExited (MouseEvent e) { bannerHovered[0] = false; profileBanner.repaint(); }
+            @Override public void mouseClicked(MouseEvent e) { chooseBannerImage(); }
+        });
+
+        profilePicLabel = new JLabel() {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(AVATAR_COLORS[selectedAvatarIndex]);
-                g2.fillOval(0, 0, 80, 80);
+                int size = Math.min(getWidth(), getHeight());
+                if (profileImage != null) {
+                    int imgW  = profileImage.getWidth();
+                    int imgH  = profileImage.getHeight();
+                    int crop  = Math.min(imgW, imgH);
+                    int cropX = (imgW - crop) / 2;
+                    int cropY = (imgH - crop) / 2;
+                    g2.setClip(new Ellipse2D.Float(0, 0, size, size));
+                    g2.drawImage(profileImage, 0, 0, size, size,
+                            cropX, cropY, cropX + crop, cropY + crop, null);
+                    g2.setClip(null);
+                } else {
+                    drawDefaultAvatar(g2, size);
+                }
+                if (avatarHovered[0]) {
+                    g2.setClip(new Ellipse2D.Float(0, 0, size, size));
+                    g2.setColor(new Color(0, 0, 0, 110));
+                    g2.fillOval(0, 0, size, size);
+                    g2.setClip(null);
+                    drawCameraIcon(g2, size / 2, size / 2, 20, Color.WHITE);
+                }
+                g2.setColor(Color.WHITE);
+                g2.setStroke(new BasicStroke(4));
+                g2.drawOval(2, 2, size - 4, size - 4);
                 g2.dispose();
-                super.paintComponent(g);
             }
         };
-        profileAvatarDisplay.setFont(new Font("SansSerif", Font.PLAIN, 36));
-        profileAvatarDisplay.setForeground(Color.WHITE);
-        profileAvatarDisplay.setHorizontalAlignment(SwingConstants.CENTER);
-        profileAvatarDisplay.setVerticalAlignment(SwingConstants.CENTER);
-        profileAvatarDisplay.setPreferredSize(new Dimension(80, 80));
-        profileAvatarDisplay.setMaximumSize(new Dimension(80, 80));
-        profileAvatarDisplay.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(profileAvatarDisplay);
+        profilePicLabel.setPreferredSize(new Dimension(110, 110));
+        profilePicLabel.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        profilePicLabel.addMouseListener(new MouseAdapter() {
+            @Override public void mouseEntered(MouseEvent e) { avatarHovered[0] = true;  profilePicLabel.repaint(); }
+            @Override public void mouseExited (MouseEvent e) { avatarHovered[0] = false; profilePicLabel.repaint(); }
+            @Override public void mouseClicked(MouseEvent e) { chooseProfileImage(); }
+        });
+
+        hero.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override public void componentResized(java.awt.event.ComponentEvent e) {
+                profileBanner.setBounds(0, 0, hero.getWidth(), 170);
+                profilePicLabel.setBounds(30, 90, 110, 110);
+            }
+        });
+        profileBanner.setBounds(0, 0, 800, 170);
+        profilePicLabel.setBounds(30, 90, 110, 110);
+
+        hero.add(profileBanner);
+        hero.add(profilePicLabel);
+        hero.setComponentZOrder(profilePicLabel, 0);
+        hero.setComponentZOrder(profileBanner,   1);
+        return hero;
+    }
+
+    private void drawCameraIcon(Graphics2D g2, int cx, int cy, int size, Color color) {
+        g2.setColor(color);
+        g2.setStroke(new BasicStroke(size / 10f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        int bw = size, bh = size * 7 / 10, bx = cx - bw / 2, by = cy - bh / 2;
+        g2.drawRoundRect(bx, by, bw, bh, size / 5, size / 5);
+        int lr = size * 22 / 100;
+        g2.drawOval(cx - lr, cy - lr + size / 20, lr * 2, lr * 2);
+        g2.drawRoundRect(bx + size / 6, by - size / 6, size / 4, size / 6, 2, 2);
+    }
+
+    private void drawDefaultAvatar(Graphics2D g2, int size) {
+        g2.setColor(BRAND_BLUE);
+        g2.fillOval(0, 0, size, size);
+        g2.setColor(Color.WHITE);
+        g2.setStroke(new BasicStroke(size / 18f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        int eyeY = size * 38 / 100, eyeOff = size * 18 / 100, eyeR = size / 14;
+        g2.fillOval(size / 2 - eyeOff - eyeR, eyeY - eyeR, eyeR * 2, eyeR * 2);
+        g2.fillOval(size / 2 + eyeOff - eyeR, eyeY - eyeR, eyeR * 2, eyeR * 2);
+        g2.drawArc(size * 28 / 100, size * 44 / 100, size * 44 / 100, size * 26 / 100, 200, 140);
+    }
+
+    private void chooseProfileImage() {
+        User user = app.getLoggedInUserObj();
+        if (user == null) return;
+        FileDialog fd = new FileDialog(
+                (Frame) SwingUtilities.getWindowAncestor(this),
+                "Choose Profile Picture", FileDialog.LOAD);
+        fd.setFile("*.jpg;*.jpeg;*.png;*.gif;*.bmp");
+        fd.setVisible(true);
+        if (fd.getFile() == null) return;
+        try {
+            BufferedImage image = ImageIO.read(new java.io.File(fd.getDirectory(), fd.getFile()));
+            if (image == null) {
+                JOptionPane.showMessageDialog(app, "Could not read the selected image.", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            if (!profilePicStorage.saveImage(user.getEmail(), image)) {
+                JOptionPane.showMessageDialog(app, "Failed to save profile picture.", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            profileImage = image;
+            if (profilePicLabel != null) profilePicLabel.repaint();
+            if (avatarLabel     != null) avatarLabel.repaint();
+        } catch (java.io.IOException ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(app, "Failed to read the selected image.", "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void chooseBannerImage() {
+        User user = app.getLoggedInUserObj();
+        if (user == null) return;
+        FileDialog fd = new FileDialog(
+                (Frame) SwingUtilities.getWindowAncestor(this),
+                "Choose Background Image", FileDialog.LOAD);
+        fd.setFile("*.jpg;*.jpeg;*.png;*.gif;*.bmp");
+        fd.setVisible(true);
+        if (fd.getFile() == null) return;
+        try {
+            BufferedImage image = ImageIO.read(new java.io.File(fd.getDirectory(), fd.getFile()));
+            if (image == null) {
+                JOptionPane.showMessageDialog(app, "Could not read the selected image.", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            if (!backgroundStorage.saveImage(user.getEmail(), image)) {
+                JOptionPane.showMessageDialog(app, "Failed to save background image.", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            bannerImage = image;
+            if (profileBanner != null) profileBanner.repaint();
+        } catch (java.io.IOException ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(app, "Failed to read the selected image.", "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private JPanel buildProfileFormCard() {
+        JPanel card = UIFactory.createCard();
+        card.setBorder(new EmptyBorder(32, 50, 40, 50));
+
+        JLabel sectionLabel = new JLabel("Profile Information");
+        sectionLabel.setFont(new Font("SansSerif", Font.BOLD, 16));
+        sectionLabel.setForeground(UIConstants.TEXT_PRIMARY);
+        sectionLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        card.add(sectionLabel);
         card.add(Box.createVerticalStrut(20));
 
-        JLabel chooseLabel = new JLabel("Choose Profile Picture");
-        chooseLabel.setFont(UIConstants.FONT_SMALL_BOLD);
-        chooseLabel.setForeground(UIConstants.TEXT_DARK);
-        chooseLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(chooseLabel);
-        card.add(Box.createVerticalStrut(12));
-
-        // Avatar picker grid
-        avatarSelectionPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
-        avatarSelectionPanel.setOpaque(false);
-        avatarSelectionPanel.setMaximumSize(new Dimension(460, 60));
-        for (int i = 0; i < AVATAR_COLORS.length; i++) {
-            final int idx = i;
-            JLabel av = new JLabel(AVATAR_ICONS[i]) {
-                @Override protected void paintComponent(Graphics g) {
-                    Graphics2D g2 = (Graphics2D) g.create();
-                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    g2.setColor(AVATAR_COLORS[idx]);
-                    g2.fillOval(2, 2, 42, 42);
-                    g2.dispose();
-                    super.paintComponent(g);
-                }
-            };
-            av.setFont(new Font("SansSerif", Font.PLAIN, 20));
-            av.setForeground(Color.WHITE);
-            av.setHorizontalAlignment(SwingConstants.CENTER);
-            av.setVerticalAlignment(SwingConstants.CENTER);
-            av.setPreferredSize(new Dimension(46, 46));
-            av.setCursor(new Cursor(Cursor.HAND_CURSOR));
-            av.setBorder(BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1));
-            av.addMouseListener(new MouseAdapter() {
-                @Override public void mouseClicked(MouseEvent e) { selectedAvatarIndex = idx; updateAvatarSelection(); }
-            });
-            avatarSelectionPanel.add(av);
-        }
-        card.add(avatarSelectionPanel);
-        card.add(Box.createVerticalStrut(28));
-
-        JSeparator sep = new JSeparator();
-        sep.setForeground(UIConstants.BORDER_DEFAULT);
-        sep.setMaximumSize(new Dimension(380, 1));
-        sep.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(sep);
+        JSeparator topSep = new JSeparator();
+        topSep.setForeground(UIConstants.BORDER_DEFAULT);
+        topSep.setMaximumSize(new Dimension(380, 1));
+        topSep.setAlignmentX(Component.CENTER_ALIGNMENT);
+        card.add(topSep);
         card.add(Box.createVerticalStrut(22));
 
         card.add(UIFactory.createFieldLabel("Name")); card.add(Box.createVerticalStrut(6));
@@ -1768,12 +1966,7 @@ public class CounterStaffDashboard extends JPanel {
         saveBtn.addActionListener(e -> handleProfileSave());
         card.add(saveBtn);
 
-        center.add(card);
-        JScrollPane scroll = new JScrollPane(center);
-        scroll.setBorder(null);
-        scroll.getViewport().setBackground(UIConstants.BG_CONTENT);
-        page.add(scroll, BorderLayout.CENTER);
-        return page;
+        return card;
     }
 
     private void handleProfileSave() {
@@ -1797,7 +1990,7 @@ public class CounterStaffDashboard extends JPanel {
             JOptionPane.showMessageDialog(app, "An account with this email already exists.", "Error", JOptionPane.ERROR_MESSAGE); return;
         }
 
-        User updated = new User(user.getUserId(), newName, newEmail, user.getPassword(), user.getRole(), selectedAvatarIndex);
+        User updated = new User(user.getUserId(), newName, newEmail, user.getPassword(), user.getRole(), 0);
         if (svc.updateUser(user.getEmail(), updated)) {
             app.setLoggedInUser(newName);
             app.setLoggedInUserObj(updated);
