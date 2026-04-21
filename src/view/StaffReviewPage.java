@@ -10,11 +10,17 @@ import javax.swing.table.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 /**
  * StaffReviewPage
+ *
+ * RESPONSIBILITY — GUI only.
+ * All data access, filtering, sorting, and star-string building
+ * are delegated to StaffReviewService. This class:
+ *   - Builds and lays out every Swing component.
+ *   - Calls service methods to get data and processed lists.
+ *   - Puts results into the table and summary cards.
  *
  * CHANGE FROM PREVIOUS VERSION:
  *   - Removed the CardLayout / empty-state panel entirely.
@@ -24,6 +30,9 @@ import java.util.List;
  *       + the review table (showing no rows when there is no data).
  *   - This matches the Dashboard behaviour where 0 values are
  *     displayed instead of a special "no data" card.
+ *   - applyFilters() now calls service.filterReviews() and
+ *     service.sortReviews() instead of containing that logic inline.
+ *   - buildStarString() now delegates to service.buildStarString().
  */
 public class StaffReviewPage extends JPanel {
 
@@ -37,8 +46,8 @@ public class StaffReviewPage extends JPanel {
     private static final Color YELLOW_STAR  = new Color(255, 193, 7);
 
     // Left bar colours for the two summary cards
-    private static final Color BAR_COLOR_AVERAGE   = YELLOW_STAR;   // soft blue;
-    private static final Color BAR_COLOR_BREAKDOWN = BLUE_ACCENT;   // calm teal;
+    private static final Color BAR_COLOR_AVERAGE   = YELLOW_STAR;   // soft blue
+    private static final Color BAR_COLOR_BREAKDOWN = BLUE_ACCENT;   // calm teal
 
     // ── Service + logged-in user ───────────────────────────────────
     private final StaffReviewService service = new StaffReviewService();
@@ -107,6 +116,7 @@ public class StaffReviewPage extends JPanel {
     public void refresh() {
         String customerId = (loggedInUser != null) ? loggedInUser.getUserId() : null;
 
+        // ── Data loading — delegated to StaffReviewService ────────
         if (customerId != null) {
             allReviews = service.getReviewsByCustomer(customerId);
         } else {
@@ -220,7 +230,10 @@ public class StaffReviewPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // updateAverageCard() — fills labels with real or zero values
+    // updateAverageCard() — fills labels with real or zero values.
+    //
+    // Calls service.calculateAverageRating() and
+    // service.buildStarString() — no calculation logic here.
     // ─────────────────────────────────────────────────────────────
     private void updateAverageCard(List<StaffReview> reviews) {
         if (reviews.isEmpty()) {
@@ -229,10 +242,11 @@ public class StaffReviewPage extends JPanel {
             avgStarsLabel.setText("\u2606\u2606\u2606\u2606\u2606");
             avgCountLabel.setText("average rating from 0 reviews");
         } else {
+            // ── Delegated to StaffReviewService ──────────────────
             double avg   = service.calculateAverageRating(reviews);
             int    total = reviews.size();
             avgNumberLabel.setText(String.format("%.1f", avg));
-            avgStarsLabel.setText(buildStarString(avg));
+            avgStarsLabel.setText(service.buildStarString(avg)); // <-- moved to service
             String word = (total == 1) ? "review" : "reviews";
             avgCountLabel.setText("average rating from " + total + " " + word);
         }
@@ -270,7 +284,9 @@ public class StaffReviewPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // fillBreakdownBars() — rebuilds the 5 bar rows with real counts
+    // fillBreakdownBars() — rebuilds the 5 bar rows with real counts.
+    //
+    // Calls service.countByStarLevel() — no counting logic here.
     // ─────────────────────────────────────────────────────────────
     private void fillBreakdownBars(List<StaffReview> reviews) {
         if (barsPanel == null) return;
@@ -280,6 +296,7 @@ public class StaffReviewPage extends JPanel {
         int total = reviews.size(); // 0 when no data
 
         for (int star = 5; star >= 1; star--) {
+            // ── Delegated to StaffReviewService ──────────────────
             int count = reviews.isEmpty() ? 0 : service.countByStarLevel(reviews, star);
             barsPanel.add(buildOneBarRow(star, count, Math.max(total, 1)));
             barsPanel.add(Box.createVerticalStrut(6));
@@ -501,85 +518,22 @@ public class StaffReviewPage extends JPanel {
     // applyFilters()
     //
     // Called whenever the search text, dropdown, or a column header
-    // changes. Filters + sorts allReviews and puts the result into
-    // the table.
+    // changes. Delegates filtering and sorting to StaffReviewService,
+    // then puts the result into the table.
     // ─────────────────────────────────────────────────────────────
     private void applyFilters() {
-        // Step 1: read keyword (lowercase for case-insensitive match)
-        String keyword = (searchField != null)
-                ? searchField.getText().trim().toLowerCase()
-                : "";
+        // Read current UI state
+        String keyword = (searchField  != null) ? searchField.getText() : "";
+        int ratingIndex = (ratingFilter != null) ? ratingFilter.getSelectedIndex() : 0;
 
-        // Step 2: read selected rating band
-        int ratingIndex = (ratingFilter != null)
-                ? ratingFilter.getSelectedIndex()
-                : 0;
+        // ── Filtering delegated to StaffReviewService ─────────────
+        List<StaffReview> filtered = service.filterReviews(allReviews, keyword, ratingIndex);
 
-        // Step 3: build filtered list
-        List<StaffReview> filtered = new ArrayList<>();
-        for (StaffReview review : allReviews) {
+        // ── Sorting delegated to StaffReviewService ───────────────
+        service.sortReviews(filtered, sortColumnIndex, sortAscending);
 
-            // Does the keyword appear in any column?
-            boolean keywordMatch = keyword.isEmpty()
-                    || review.commentId     .toLowerCase().contains(keyword)
-                    || review.staffName     .toLowerCase().contains(keyword)
-                    || review.technicianName.toLowerCase().contains(keyword)
-                    || review.appointmentId .toLowerCase().contains(keyword)
-                    || review.vehicleType   .toLowerCase().contains(keyword)
-                    || review.carPlate      .toLowerCase().contains(keyword)
-                    || review.feedbackText  .toLowerCase().contains(keyword)
-                    || review.date          .toLowerCase().contains(keyword)
-                    || String.valueOf(review.rating).contains(keyword);
-
-            // Does the rating fall in the selected band?
-            boolean ratingMatch;
-            switch (ratingIndex) {
-                case 1:  ratingMatch = (review.rating >= 4.5);                        break;
-                case 2:  ratingMatch = (review.rating >= 3.5 && review.rating < 4.5); break;
-                case 3:  ratingMatch = (review.rating >= 2.5 && review.rating < 3.5); break;
-                case 4:  ratingMatch = (review.rating >= 1.5 && review.rating < 2.5); break;
-                case 5:  ratingMatch = (review.rating  < 1.5);                        break;
-                default: ratingMatch = true; // "All Ratings"
-            }
-
-            if (keywordMatch && ratingMatch) {
-                filtered.add(review);
-            }
-        }
-
-        // Step 4: sort the filtered list
-        applySortToList(filtered);
-
-        // Step 5: update the table
+        // Update the table
         fillTableFromList(filtered);
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // applySortToList() — sorts in place using sortColumnIndex
-    // ─────────────────────────────────────────────────────────────
-    private void applySortToList(List<StaffReview> list) {
-        if (sortColumnIndex < 0) return;
-
-        Comparator<StaffReview> comparator;
-
-        switch (sortColumnIndex) {
-            case 0:  comparator = Comparator.comparing(r -> r.commentId);      break;
-            case 1:  comparator = Comparator.comparing(r -> r.staffName);      break;
-            case 2:  comparator = Comparator.comparing(r -> r.technicianName); break;
-            case 3:  comparator = Comparator.comparing(r -> r.appointmentId);  break;
-            case 4:  comparator = Comparator.comparing(r -> r.vehicleType);    break;
-            case 5:  comparator = Comparator.comparing(r -> r.carPlate);       break;
-            case 6:  comparator = Comparator.comparingDouble(r -> r.rating);   break;
-            case 7:  comparator = Comparator.comparing(r -> r.feedbackText);   break;
-            case 8:  comparator = Comparator.comparing(r -> r.date);           break;
-            default: comparator = Comparator.comparing(r -> r.commentId);      break;
-        }
-
-        if (!sortAscending) {
-            comparator = comparator.reversed();
-        }
-
-        list.sort(comparator);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -603,8 +557,8 @@ public class StaffReviewPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // fillTable() — fills the table AND rebuilds the breakdown bars
-    // Called by refresh()
+    // fillTable() — fills the table AND rebuilds the breakdown bars.
+    // Called by refresh().
     // ─────────────────────────────────────────────────────────────
     private void fillTable(List<StaffReview> reviews) {
         fillTableFromList(reviews);
@@ -612,8 +566,8 @@ public class StaffReviewPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // fillTableFromList() — puts any list of reviews into the table
-    // Used by both fillTable() and applyFilters()
+    // fillTableFromList() — puts any list of reviews into the table.
+    // Used by both fillTable() and applyFilters().
     // ─────────────────────────────────────────────────────────────
     private void fillTableFromList(List<StaffReview> reviews) {
         tableModel.setRowCount(0); // clear existing rows
@@ -633,20 +587,6 @@ public class StaffReviewPage extends JPanel {
                 review.date
             });
         }
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // buildStarString() — converts a number to ★ / ½ / ☆ symbols
-    // e.g. 4.4 → "★★★★½"
-    // ─────────────────────────────────────────────────────────────
-    private String buildStarString(double rating) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 1; i <= 5; i++) {
-            if      (rating >= i)       sb.append("\u2605"); // ★ full
-            else if (rating >= i - 0.5) sb.append("\u00BD"); // ½ half
-            else                        sb.append("\u2606"); // ☆ empty
-        }
-        return sb.toString();
     }
 
     // ═══════════════════════════════════════════════════════════════

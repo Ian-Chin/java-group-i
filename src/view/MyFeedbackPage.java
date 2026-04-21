@@ -12,20 +12,25 @@ import java.awt.*;
 import java.awt.event.*;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * MyFeedbackPage
  *
- * CHANGE FROM PREVIOUS VERSION:
- *   - Removed the CardLayout / empty-state panel from BOTH tabs.
- *   - Each tab now ALWAYS shows its full layout:
- *       Pending Feedback tab  — table (empty when no pending items)
- *       Feedback History tab  — table (empty when no history)
- *   - This matches the Dashboard behaviour where 0/empty values are
- *     displayed instead of a special "no data" card.
+ * Pure GUI class — all data loading, searching, sorting, filtering,
+ * and table-row building are delegated to MyFeedbackService.
+ *
+ * What this file is responsible for:
+ *   - Building and laying out every Swing component
+ *   - Responding to user interactions (button clicks, key presses)
+ *   - Calling MyFeedbackService methods to obtain the data it needs
+ *   - Rendering the feedback popup dialog
+ *
+ * What this file does NOT do (see MyFeedbackService for these):
+ *   - Read or write any .txt files
+ *   - Search / filter / sort data lists
+ *   - Convert star ratings to condition labels
+ *   - Build table row arrays from model objects
  *
  * HOW THE "FEEDBACK" BUTTON HOVER CURSOR WORKS:
  *   A JTable cell renderer is NOT a real on-screen component.
@@ -47,6 +52,8 @@ public class MyFeedbackPage extends JPanel {
     private static final Color YELLOW_STAR  = new Color(255, 193, 7);
 
     // ── Service ───────────────────────────────────────────────────
+    // All file I/O, searching, sorting, filtering, and row-building
+    // logic lives in MyFeedbackService — this page only calls it.
     private final MyFeedbackService service = new MyFeedbackService();
 
     // ── Logged-in customer ────────────────────────────────────────
@@ -68,6 +75,9 @@ public class MyFeedbackPage extends JPanel {
     private JTable historyTable;
 
     // ── Full data lists (kept so search/sort can re-apply) ────────
+    // These are loaded once per refresh(); the service's
+    // filterAndSortPending() / filterAndSortHistory() then derive
+    // the displayed subset from them on every search/sort change.
     private List<AppointmentRow> currentPending = new ArrayList<>();
     private List<MyFeedback>     currentHistory = new ArrayList<>();
 
@@ -117,12 +127,18 @@ public class MyFeedbackPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // refresh() — reloads all data and updates both tables
+    // refresh()
+    //
+    // Reloads all data via the service and updates both tables.
+    // Delegates the actual file reading to:
+    //   service.getCompletedAppointmentsWithoutFeedback()
+    //   service.getFeedbackByCustomer()
     // ─────────────────────────────────────────────────────────────
     public void refresh() {
         String customerId = (loggedInUser != null) ? loggedInUser.getUserId() : null;
 
         if (customerId != null) {
+            // ── Data loading — handled entirely by MyFeedbackService ──
             currentPending = service.getCompletedAppointmentsWithoutFeedback(customerId);
             currentHistory = service.getFeedbackByCustomer(customerId);
         } else {
@@ -438,75 +454,40 @@ public class MyFeedbackPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // applyPendingSearchAndSort() — filters + sorts currentPending
-    // and fills the pending table. Table is empty if no records.
+    // applyPendingSearchAndSort()
+    //
+    // Reads the current search text and sort selection, delegates
+    // the actual filtering/sorting to:
+    //   service.filterAndSortPending()
+    // then fills the table via fillPendingTable().
     // ─────────────────────────────────────────────────────────────
     private void applyPendingSearchAndSort() {
         if (pendingSearchField == null || pendingSortCombo == null) return;
 
         String raw   = pendingSearchField.getText().trim();
         String query = (raw.equals("Search...") || raw.isEmpty()) ? "" : raw.toLowerCase();
-
-        // Filter
-        List<AppointmentRow> filtered = currentPending.stream()
-            .filter(a -> {
-                if (query.isEmpty()) return true;
-                return a.appointmentId.toLowerCase().contains(query)
-                    || a.serviceType.toLowerCase().contains(query)
-                    || a.dateTime.toLowerCase().contains(query)
-                    || a.duration.toLowerCase().contains(query);
-            })
-            .collect(Collectors.toList());
-
-        // Sort
         String sortOption = (String) pendingSortCombo.getSelectedItem();
-        if (sortOption != null) {
-            switch (sortOption) {
-                case "Sort by Date (Newest First)":
-                    filtered.sort(Comparator.comparing(
-                            (AppointmentRow a) -> a.dateTime).reversed());
-                    break;
-                case "Sort by Date (Oldest First)":
-                    filtered.sort(Comparator.comparing(a -> a.dateTime));
-                    break;
-                case "Sort by Service Type (A-Z)":
-                    filtered.sort(Comparator.comparing(a -> a.serviceType.toLowerCase()));
-                    break;
-                case "Sort by Duration (Shortest First)":
-                    filtered.sort(Comparator.comparingDouble(a -> parseDuration(a.duration)));
-                    break;
-                case "Sort by Duration (Longest First)":
-                    filtered.sort(Comparator.comparingDouble(
-                            (AppointmentRow a) -> parseDuration(a.duration)).reversed());
-                    break;
-            }
-        }
 
-        // Fill table — rows are just empty when filtered is empty
+        // ── Search + Sort logic — handled by MyFeedbackService ────
+        List<AppointmentRow> filtered =
+                service.filterAndSortPending(currentPending, query, sortOption);
+
         fillPendingTable(filtered);
     }
 
-    private double parseDuration(String duration) {
-        try {
-            return Double.parseDouble(duration.replaceAll("[^0-9.]", ""));
-        } catch (NumberFormatException e) {
-            return 0;
-        }
-    }
-
     // ─────────────────────────────────────────────────────────────
-    // fillPendingTable() — adds one row per pending appointment
+    // fillPendingTable()
+    //
+    // Clears the pending table model and repopulates it.
+    // Row data is built by service.buildPendingTableRows() so that
+    // no model-to-display mapping logic lives in this file.
     // ─────────────────────────────────────────────────────────────
     private void fillPendingTable(List<AppointmentRow> pending) {
         pendingTableModel.setRowCount(0);
-        for (AppointmentRow appt : pending) {
-            pendingTableModel.addRow(new Object[]{
-                appt.appointmentId,
-                appt.serviceType,
-                appt.dateTime,
-                appt.duration + " hr(s)",
-                "Feedback"
-            });
+        // ── Row building — handled by MyFeedbackService ───────────
+        Object[][] rows = service.buildPendingTableRows(pending);
+        for (Object[] row : rows) {
+            pendingTableModel.addRow(row);
         }
     }
 
@@ -672,81 +653,40 @@ public class MyFeedbackPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // applyHistorySearchAndSort() — filters + sorts currentHistory
+    // applyHistorySearchAndSort()
+    //
+    // Reads the current search text and sort selection, delegates
+    // the actual filtering/sorting to:
+    //   service.filterAndSortHistory()
+    // then fills the table via fillHistoryTable().
     // ─────────────────────────────────────────────────────────────
     private void applyHistorySearchAndSort() {
         if (historySearchField == null || historySortCombo == null) return;
 
         String raw   = historySearchField.getText().trim();
         String query = (raw.equals("Search...") || raw.isEmpty()) ? "" : raw.toLowerCase();
-
-        // Filter
-        List<MyFeedback> filtered = currentHistory.stream()
-            .filter(fb -> {
-                if (query.isEmpty()) return true;
-                return fb.feedbackId      .toLowerCase().contains(query)
-                    || fb.appointmentId   .toLowerCase().contains(query)
-                    || fb.vehicleType     .toLowerCase().contains(query)
-                    || fb.carPlate        .toLowerCase().contains(query)
-                    || fb.technicianName  .toLowerCase().contains(query)
-                    || fb.condition       .toLowerCase().contains(query)
-                    || fb.feedbackText    .toLowerCase().contains(query)
-                    || fb.date            .toLowerCase().contains(query);
-            })
-            .collect(Collectors.toList());
-
-        // Sort / filter by dropdown
         String sortOption = (String) historySortCombo.getSelectedItem();
-        if (sortOption != null) {
-            switch (sortOption) {
-                case "Sort by Date (Newest First)":
-                    filtered.sort(Comparator.comparing(
-                            (MyFeedback fb) -> fb.date).reversed());
-                    break;
-                case "Sort by Date (Oldest First)":
-                    filtered.sort(Comparator.comparing(fb -> fb.date));
-                    break;
-                case "Filter: Excellent Only":
-                    filtered = filtered.stream()
-                            .filter(fb -> fb.condition.equalsIgnoreCase("Excellent"))
-                            .collect(Collectors.toList());
-                    break;
-                case "Filter: Good Only":
-                    filtered = filtered.stream()
-                            .filter(fb -> fb.condition.equalsIgnoreCase("Good"))
-                            .collect(Collectors.toList());
-                    break;
-                case "Filter: Average Only":
-                    filtered = filtered.stream()
-                            .filter(fb -> fb.condition.equalsIgnoreCase("Average"))
-                            .collect(Collectors.toList());
-                    break;
-                case "Sort by Technician (A-Z)":
-                    filtered.sort(Comparator.comparing(
-                            fb -> fb.technicianName.toLowerCase()));
-                    break;
-            }
-        }
+
+        // ── Search + Sort + Filter logic — handled by MyFeedbackService ──
+        List<MyFeedback> filtered =
+                service.filterAndSortHistory(currentHistory, query, sortOption);
 
         fillHistoryTable(filtered);
     }
 
     // ─────────────────────────────────────────────────────────────
-    // fillHistoryTable() — adds one row per submitted feedback
+    // fillHistoryTable()
+    //
+    // Clears the history table model and repopulates it.
+    // Row data is built by service.buildHistoryTableRows() so that
+    // no model-to-display mapping logic lives in this file.
     // ─────────────────────────────────────────────────────────────
     private void fillHistoryTable(List<MyFeedback> feedbackList) {
         historyTableModel.setRowCount(0);
-        for (MyFeedback fb : feedbackList) {
-            historyTableModel.addRow(new Object[]{
-                fb.feedbackId,
-                fb.appointmentId,
-                fb.vehicleType,
-                fb.carPlate,
-                fb.technicianName,
-                fb.condition,
-                fb.feedbackText,
-                fb.date
-            });
+        // ── Row building — handled by MyFeedbackService ───────────
+        Object[][] rows = service.buildHistoryTableRows(feedbackList);
+        for (Object[] row : rows) {
+            historyTableModel.addRow(row);
         }
     }
 
@@ -999,14 +939,13 @@ public class MyFeedbackPage extends JPanel {
                 return;
             }
 
-            // Convert star count to a condition label
-            String condition;
-            if      (selectedRating[0] == 5) condition = "Excellent";
-            else if (selectedRating[0] >= 3) condition = "Good";
-            else                             condition = "Average";
+            // ── Convert star rating to condition label ─────────────
+            // Conversion logic lives in MyFeedbackService
+            String condition = service.convertStarsToCondition(selectedRating[0]);
 
             String today = LocalDate.now().toString();
 
+            // ── Save feedback — handled by MyFeedbackService ───────
             boolean saved = service.saveFeedback(
                     loggedInUser.getUserId(),
                     appt.appointmentId,

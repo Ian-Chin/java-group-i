@@ -1,8 +1,7 @@
 package view;
 
-import model.AccountService;
 import model.ServiceHistoryService;
-import model.VehicleService;
+import model.ServiceHistoryService.SummaryStats;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -10,13 +9,29 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * ServiceHistoryPage
+ *
+ * RESPONSIBILITIES (view only):
+ *   - Builds and displays all GUI components (stat cards, search bar, table).
+ *   - Delegates ALL data loading, filtering, ID resolution, and stat
+ *     computation to ServiceHistoryService.
+ *
+ * DATA FLOW:
+ *   refresh()
+ *     └─► serviceHistoryService.getRecordsForCustomer()  → filtered rows
+ *     └─► serviceHistoryService.getSummaryStats()        → SummaryStats object
+ *     └─► serviceHistoryService.buildTableRows()         → display-ready Object[] rows
+ *
+ * METHODS REMOVED (moved to ServiceHistoryService.java):
+ *   - resolveTechnicianName()   → ServiceHistoryService.resolveTechnicianName()
+ *   - resolveVehicleType()      → ServiceHistoryService.resolveVehicleType()
+ *   - resolveCarPlate()         → ServiceHistoryService.resolveCarPlate()
+ *   - updateStatsCards()        → ServiceHistoryService.getSummaryStats()
+ *   - fillTable()               → ServiceHistoryService.buildTableRows()
+ *   - inline customer filter    → ServiceHistoryService.getRecordsForCustomer()
  *
  * CHANGE FROM PREVIOUS VERSION:
  *   - Removed the CardLayout / empty-state panel entirely.
@@ -28,10 +43,10 @@ import java.util.Map;
  */
 public class ServiceHistoryPage extends JPanel {
 
-    // ── Data-layer services ───────────────────────────────────────
+    // ── Data-layer service ────────────────────────────────────────
+    // Only ONE service is needed now — AccountService and VehicleService
+    // have been moved inside ServiceHistoryService.
     private final ServiceHistoryService serviceHistoryService = new ServiceHistoryService();
-    private final AccountService        accountService        = new AccountService();
-    private final VehicleService        vehicleService        = new VehicleService();
 
     // ── Stat card value labels — updated by refresh() ─────────────
     private JLabel totalServicesValueLabel;
@@ -263,7 +278,7 @@ public class ServiceHistoryPage extends JPanel {
             "Car Plate", "Payment ID", "Technician", "Date", "Status"
         };
 
-        // Non-editable table model — rows are added by fillTable()
+        // Non-editable table model — rows are added by refresh()
         tableModel = new DefaultTableModel(columns, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
@@ -437,8 +452,8 @@ public class ServiceHistoryPage extends JPanel {
     // refresh()
     //
     // Called when the page becomes visible or the user logs in.
-    // Loads service history records for the logged-in customer,
-    // updates the stat cards, and fills the table.
+    // Delegates all data loading and computation to
+    // ServiceHistoryService, then applies the results to the GUI.
     //
     // If there are no records the stat cards show "0" / "—" and
     // the table shows an empty grid — no special empty-state panel.
@@ -455,26 +470,29 @@ public class ServiceHistoryPage extends JPanel {
             return;
         }
 
+        // ── 1. Load this customer's records via the service layer ──
         String customerId = loggedInUser.getUserId();
-        List<String[]> allRecords = serviceHistoryService.getAllRecords();
-
-        // Keep only rows that belong to this customer
-        List<String[]> myRecords = new ArrayList<>();
-        for (String[] row : allRecords) {
-            if (row[1].trim().equalsIgnoreCase(customerId)) {
-                myRecords.add(row);
-            }
-        }
+        List<String[]> myRecords = serviceHistoryService.getRecordsForCustomer(customerId);
 
         if (myRecords.isEmpty()) {
-            // Customer exists but has no service records yet
-            // Show zero values in the stat cards and an empty table
+            // Customer exists but has no service records yet —
+            // show zero values in the stat cards and an empty table
             resetStatsToZero();
             tableModel.setRowCount(0);
         } else {
-            // Fill stat cards and table with real data
-            updateStatsCards(myRecords);
-            fillTable(myRecords);
+            // ── 2. Update stat cards using data from the service layer ──
+            SummaryStats stats = serviceHistoryService.getSummaryStats(myRecords);
+            totalServicesValueLabel.setText(String.valueOf(stats.totalServices));
+            latestServiceValueLabel.setText(stats.latestServiceDate);
+            latestServiceSubLabel.setText(stats.latestServiceSubText);
+            favTechValueLabel.setText(stats.favTechName);
+            favTechSubLabel.setText(stats.favTechSubText);
+
+            // ── 3. Fill the table using display-ready rows from the service layer ──
+            tableModel.setRowCount(0); // clear old rows first
+            for (Object[] row : serviceHistoryService.buildTableRows(myRecords)) {
+                tableModel.addRow(row);
+            }
         }
 
         // Reset the search field back to the placeholder
@@ -502,88 +520,11 @@ public class ServiceHistoryPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // updateStatsCards() — fills the stat card labels with real data
+    // getLoggedInUser()
+    //
+    // Walks up the Swing parent chain to find the AppFrame,
+    // then returns the currently logged-in User object.
     // ─────────────────────────────────────────────────────────────
-    private void updateStatsCards(List<String[]> records) {
-        // Card 1: total count
-        totalServicesValueLabel.setText(String.valueOf(records.size()));
-
-        // Card 2: latest service — last row in the list
-        String[] latest = records.get(records.size() - 1);
-        latestServiceValueLabel.setText(latest[6].trim());
-        latestServiceSubLabel.setText(latest[2].trim() + " — " + latest[7].trim());
-
-        // Card 3: technician seen most often
-        Map<String, Integer> techCount = new HashMap<>();
-        for (String[] row : records) {
-            String id = row[5].trim();
-            techCount.put(id, techCount.getOrDefault(id, 0) + 1);
-        }
-
-        String favId    = "";
-        int    favCount = 0;
-        for (Map.Entry<String, Integer> e : techCount.entrySet()) {
-            if (e.getValue() > favCount) {
-                favId    = e.getKey();
-                favCount = e.getValue();
-            }
-        }
-
-        favTechValueLabel.setText(resolveTechnicianName(favId));
-        favTechSubLabel.setText(favCount + " service" + (favCount > 1 ? "s" : "") + " handled");
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // fillTable() — clears the table and adds one row per record
-    // ─────────────────────────────────────────────────────────────
-    private void fillTable(List<String[]> records) {
-        tableModel.setRowCount(0); // clear old rows first
-
-        for (String[] row : records) {
-            String historyId     = row[0].trim();
-            String appointmentId = row[2].trim();
-            String vehicleId     = row[3].trim();
-            String paymentId     = row[4].trim();
-            String techId        = row[5].trim();
-            String date          = row[6].trim();
-            String status        = row[7].trim();
-
-            String techName       = resolveTechnicianName(techId);
-            String vehicleType    = resolveVehicleType(vehicleId);
-            String carPlate       = resolveCarPlate(vehicleId);
-            String paymentDisplay = paymentId.equalsIgnoreCase("NULL") ? "—" : paymentId;
-
-            tableModel.addRow(new Object[]{
-                historyId, appointmentId, vehicleType, carPlate,
-                paymentDisplay, techName, date, status
-            });
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // Data lookup helpers
-    // ─────────────────────────────────────────────────────────────
-
-    private String resolveTechnicianName(String techId) {
-        for (model.User user : accountService.getAllUsers()) {
-            if (user.getUserId().equalsIgnoreCase(techId)) {
-                return user.getName();
-            }
-        }
-        return techId; // fallback: show the raw ID if name not found
-    }
-
-    private String resolveVehicleType(String vehicleId) {
-        String label = vehicleService.getVehiclePlate(vehicleId);
-        return label.contains(" · ") ? label.split(" · ", 2)[0].trim() : vehicleId;
-    }
-
-    private String resolveCarPlate(String vehicleId) {
-        String label = vehicleService.getVehiclePlate(vehicleId);
-        return label.contains(" · ") ? label.split(" · ", 2)[1].trim() : vehicleId;
-    }
-
-    // Walks up the Swing parent chain to find the AppFrame
     private model.User getLoggedInUser() {
         Container parent = getParent();
         while (parent != null) {

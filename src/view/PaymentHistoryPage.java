@@ -1,6 +1,7 @@
 package view;
 
 import model.AccountService;
+import model.PaymentService;
 import model.VehicleService;
 
 import javax.swing.*;
@@ -9,18 +10,15 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * PaymentHistoryPage
+ *
+ * GUI-only panel that displays the current customer's payment history.
+ * All data loading and business logic is delegated to PaymentService.
  *
  * CHANGE FROM PREVIOUS VERSION:
  *   - Removed the CardLayout / empty-state panel entirely.
@@ -29,17 +27,21 @@ import java.util.Map;
  *       + the payments table (showing no rows when there is no data).
  *   - This matches the Dashboard behaviour where 0 values are
  *     displayed instead of a special "no data" card.
+ *
+ * REFACTOR: Data/logic methods moved to PaymentService:
+ *   - readPaymentsFromFile()   → PaymentService.readPaymentsFromFile()
+ *   - getPaymentsForCustomer() → PaymentService.getPaymentsForCustomer()
+ *   - calcTotalPaidAmount()    → PaymentService.calcTotalPaidAmount()
+ *   - countPaidRows()          → PaymentService.countPaidRows()
+ *   - countPendingRows()       → PaymentService.countPendingRows()
+ *   - getPreferredMethod()     → PaymentService.getPreferredMethod()
  */
 public class PaymentHistoryPage extends JPanel {
 
-    // ── File path and expected column count ───────────────────────
-    private static final String PAYMENTS_FILE =
-        "src" + File.separator + "TxtFile" + File.separator + "payments.txt";
-    private static final int EXPECTED_COLUMNS = 9;
-
     // ── Data-layer services ───────────────────────────────────────
-    private final VehicleService vehicleService = new VehicleService();
-    private final AccountService accountService = new AccountService();
+    private final PaymentService  paymentService  = new PaymentService();
+    private final VehicleService  vehicleService  = new VehicleService();
+    private final AccountService  accountService  = new AccountService();
 
     // ── Stat card value labels — updated by refresh() ─────────────
     private JLabel totalPaidValueLabel;
@@ -492,7 +494,7 @@ public class PaymentHistoryPage extends JPanel {
     // ═══════════════════════════════════════════════════════════════
     // refresh()
     //
-    // Loads payment records for the logged-in customer.
+    // Loads payment records for the logged-in customer via PaymentService.
     // If there are no records the stat cards show zero values and
     // the table is empty — no special empty-state panel is shown.
     // ═══════════════════════════════════════════════════════════════
@@ -506,16 +508,9 @@ public class PaymentHistoryPage extends JPanel {
             return;
         }
 
-        String customerId      = loggedInUser.getUserId();
-        List<String[]> allPay  = readPaymentsFromFile();
-
-        // Keep only rows that belong to this customer
-        currentRows = new ArrayList<>();
-        for (String[] row : allPay) {
-            if (row[1].trim().equalsIgnoreCase(customerId)) {
-                currentRows.add(row);
-            }
-        }
+        // Delegate data loading and filtering to PaymentService
+        String customerId = loggedInUser.getUserId();
+        currentRows = paymentService.getPaymentsForCustomer(customerId);
 
         if (currentRows.isEmpty()) {
             // No payments yet — show zero values, empty table
@@ -551,53 +546,32 @@ public class PaymentHistoryPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // updateStatsCards() — fills stat card labels with real data
+    // updateStatsCards() — fills stat card labels with real data.
+    // Stat calculations are delegated to PaymentService.
     // ─────────────────────────────────────────────────────────────
     private void updateStatsCards(List<String[]> rows) {
-        // Card 1: total paid
-        double totalPaid = 0.0;
-        int    paidCount = 0;
-        for (String[] row : rows) {
-            if (row[8].trim().equalsIgnoreCase("Paid")) {
-                try {
-                    totalPaid += Double.parseDouble(row[5].trim());
-                    paidCount++;
-                } catch (NumberFormatException ignored) {}
-            }
-        }
+        // Card 1: total paid — via PaymentService
+        double totalPaid = paymentService.calcTotalPaidAmount(rows);
+        int    paidCount = paymentService.countPaidRows(rows);
         totalPaidValueLabel.setText(String.format("RM %.2f", totalPaid));
         totalPaidSubLabel.setText(
                 "across " + paidCount + " payment" + (paidCount != 1 ? "s" : ""));
 
-        // Card 2: record count + pending count
+        // Card 2: record count + pending count — via PaymentService
         int total   = rows.size();
-        int pending = 0;
-        for (String[] row : rows) {
-            if (row[8].trim().equalsIgnoreCase("Pending")) pending++;
-        }
+        int pending = paymentService.countPendingRows(rows);
         paymentCountValueLabel.setText(String.valueOf(total));
         paymentCountSubLabel.setText(pending > 0 ? pending + " pending" : "all completed");
 
-        // Card 3: most-used payment method
-        Map<String, Integer> methodCount = new HashMap<>();
-        for (String[] row : rows) {
-            String method = row[7].trim();
-            methodCount.put(method, methodCount.getOrDefault(method, 0) + 1);
-        }
-        String favMethod = "—";
-        int    favCount  = 0;
-        for (Map.Entry<String, Integer> entry : methodCount.entrySet()) {
-            if (entry.getValue() > favCount) {
-                favMethod = entry.getKey();
-                favCount  = entry.getValue();
-            }
-        }
+        // Card 3: most-used payment method — via PaymentService
+        String favMethod = paymentService.getPreferredMethod(rows);
         prefMethodValueLabel.setText(favMethod);
         prefMethodSubLabel.setText("used most frequently");
     }
 
     // ─────────────────────────────────────────────────────────────
-    // fillTable() — adds one row per payment record
+    // fillTable() — adds one row per payment record to the table.
+    // Vehicle type and plate are resolved via VehicleService.
     // ─────────────────────────────────────────────────────────────
     private void fillTable(List<String[]> rows) {
         tableModel.setRowCount(0);
@@ -631,30 +605,8 @@ public class PaymentHistoryPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // readPaymentsFromFile() — reads payments.txt into a list
-    // ─────────────────────────────────────────────────────────────
-    private List<String[]> readPaymentsFromFile() {
-        List<String[]> list = new ArrayList<>();
-        File file = new File(PAYMENTS_FILE);
-        if (!file.exists()) return list;
-
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (line.isBlank() || line.trim().startsWith("#")) continue;
-                String[] columns = line.split(",", EXPECTED_COLUMNS);
-                if (columns.length == EXPECTED_COLUMNS) {
-                    list.add(columns);
-                }
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return list;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // Vehicle helpers
+    // Vehicle helpers — resolve vehicleId to type and plate label
+    // via VehicleService
     // ─────────────────────────────────────────────────────────────
     private String resolveVehicleType(String vehicleId) {
         String label = vehicleService.getVehiclePlate(vehicleId);
@@ -672,7 +624,9 @@ public class PaymentHistoryPage extends JPanel {
         return vehicleId;
     }
 
-    // Walks up the Swing parent chain to find the AppFrame
+    // ─────────────────────────────────────────────────────────────
+    // getLoggedInUser() — walks up the Swing parent chain to find AppFrame
+    // ─────────────────────────────────────────────────────────────
     private model.User getLoggedInUser() {
         Container parent = getParent();
         while (parent != null) {

@@ -19,16 +19,37 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Ellipse2D;
 import java.awt.image.BufferedImage;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * CustomerDashboard — the main GUI panel for the Customer role.
+ *
+ * This class is responsible ONLY for building and displaying the UI.
+ * All business logic (data loading, calculations) has been moved to the
+ * appropriate controller/service class:
+ *
+ *   APPOINTMENT logic  → AppointmentSectionController
+ *     countThisMonth()         → appointmentController.countThisMonth()
+ *     buildMonthlyCounts()     → appointmentController.buildMonthlyCounts()
+ *     buildServiceBreakdown()  → appointmentController.buildServiceBreakdown()
+ *     getNextAppointmentDate() → appointmentController.getNextAppointmentDate()
+ *     getDaysUntilLabel()      → appointmentController.getDaysUntilLabel()
+ *
+ *   PAYMENT logic      → PaymentService
+ *     calcPendingAmount()  → paymentService.calcPendingAmount()
+ *     calcTotalSpent()     → paymentService.calcTotalSpent()
+ *
+ *   VEHICLE logic      → VehicleService
+ *     getVehicleLabel()      → vehicleService.getVehicleLabel()
+ *     buildVehicleSubtitle() → vehicleService.buildVehicleSubtitle()
+ *
+ *   SERVICE HISTORY logic → ServiceHistoryService
+ *     findServiceHistoryId() → serviceHistoryService.findServiceHistoryId()
+ *                              (called internally by PaymentService.savePayment())
+ */
 public class CustomerDashboard extends JPanel {
 
     // ── Reference to the main application window ──────────────────
@@ -85,30 +106,19 @@ public class CustomerDashboard extends JPanel {
     private static final Color COLOR_AMBER = new Color(230, 160, 40);
     private static final Color COLOR_TEAL  = new Color(40, 180, 200);
 
-    // ── Nav items — same order as NAV_ICONS below ─────────────────
+    // ── Nav items ─────────────────────────────────────────────────
     private static final String[] NAV_ITEMS = {
             "Dashboard", "Service History", "Payment History", "Staff Review", "My Feedback"
     };
 
     // ── Unicode icons for the left sidebar navigation ─────────────
-    //
-    //   CHANGES MADE:
-    //   • Service History : changed from ♻ (\u267B) to ↺ (\u21BA)  — a repeat/refresh arrow
-    //   • Payment History : changed from ⚖ (\u2696) to $  (\u0024) — a dollar / money sign
-    //   • My Feedback     : changed from ✉ (\u2709) to 💬 (emoji)  — a chat speech bubble
-    //
-    //   Dashboard  and Staff Review icons are unchanged.
-    //
     private static final String[] NAV_ICONS = {
-            "\u2302",			// 	⌂    Dashboard			— house symbol
-            "\uD83D\uDD04",		//  🔄   Service History		— circular arrows
-            "\uD83D\uDCB5",		// 	💵   Payment History		— banknote with dollar sign
-            "\u2605",			// 	★   Staff Review		— star
-            "\uD83D\uDCAC"		// 	💬   My Feedback			— chat speech bubble
+            "\u2302",           // ⌂    Dashboard
+            "\uD83D\uDD04",     // 🔄   Service History
+            "\uD83D\uDCB5",     // 💵   Payment History
+            "\u2605",           // ★   Staff Review
+            "\uD83D\uDCAC"      // 💬   My Feedback
     };
-
-    private static final DateTimeFormatter DATE_TIME_FORMAT =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     // ═══════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -228,6 +238,7 @@ public class CustomerDashboard extends JPanel {
     private JPanel buildDashboardInner() {
         User user = app.getLoggedInUserObj();
 
+        // ── Load data via controllers (no file reading here) ──────
         List<String[]> allAppts = appointmentController.getAllAppointmentsForUser();
         List<String[]> upcoming = appointmentController.getPendingAppointments();
         Set<String>    paidIds  = appointmentController.getPaidAppointmentIds();
@@ -236,10 +247,13 @@ public class CustomerDashboard extends JPanel {
                 ? vehicleService.getVehiclesByUserId(user.getUserId())
                 : new ArrayList<>();
 
-        int    totalAppts    = allAppts.size();
-        double pendingAmount = calcPendingAmount(unpaid);
-        int    vehicleCount  = vehicles.size();
-        String nextApptDate  = getNextAppointmentDate(upcoming);
+        // ── Appointment calculations → appointmentController ──────
+        int    totalAppts   = allAppts.size();
+        int    vehicleCount = vehicles.size();
+        String nextApptDate = appointmentController.getNextAppointmentDate(upcoming);
+
+        // ── Payment calculations → paymentService ─────────────────
+        double pendingAmount = paymentService.calcPendingAmount(unpaid, appointmentController);
 
         JPanel outer = new JPanel();
         outer.setLayout(new BoxLayout(outer, BoxLayout.Y_AXIS));
@@ -256,7 +270,7 @@ public class CustomerDashboard extends JPanel {
         outer.add(Box.createVerticalStrut(14));
 
         JPanel row1 = buildStatCardsRow(totalAppts, pendingAmount,
-                unpaid.size(), vehicleCount, vehicles, nextApptDate, upcoming);
+                unpaid.size(), vehicleCount, vehicles, nextApptDate, upcoming, allAppts);
         row1.setAlignmentX(Component.LEFT_ALIGNMENT);
         outer.add(row1);
         outer.add(Box.createVerticalStrut(14));
@@ -280,28 +294,35 @@ public class CustomerDashboard extends JPanel {
                                      int pendingCount, int vehicleCount,
                                      List<String[]> vehicles,
                                      String nextApptDate,
-                                     List<String[]> upcoming) {
+                                     List<String[]> upcoming,
+                                     List<String[]> allAppts) {
 
         JPanel row = new JPanel(new GridLayout(1, 4, 12, 0));
         row.setOpaque(false);
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 115));
 
-        int    thisMonth = countThisMonth(appointmentController.getAllAppointmentsForUser());
+        // ── Appointment stat card helpers → appointmentController ─
+        int    thisMonth = appointmentController.countThisMonth(allAppts);
         String sub1      = thisMonth > 0 ? "\u25B2 " + thisMonth + " this month" : "No new this month";
         Color  sub1Color = thisMonth > 0 ? COLOR_GREEN : UIConstants.TEXT_MUTED;
         row.add(buildStatCard("Total appointments", String.valueOf(totalAppts),
                 sub1, sub1Color, BRAND_BLUE));
 
+        // ── Pending payment card — amount already calculated in buildDashboardInner ──
         String amtText   = String.format("RM %,.0f", pendingAmount);
         String sub2      = pendingCount + " invoice" + (pendingCount == 1 ? "" : "s") + " due";
         Color  sub2Color = pendingCount > 0 ? COLOR_AMBER : UIConstants.TEXT_MUTED;
         row.add(buildStatCard("Pending payment", amtText, sub2, sub2Color, COLOR_AMBER));
 
-        String sub3 = vehicleCount == 0 ? "No vehicles" : buildVehicleSubtitle(vehicles);
+        // ── Vehicle subtitle → vehicleService ────────────────────
+        String sub3 = vehicleCount == 0 ? "No vehicles"
+                : vehicleService.buildVehicleSubtitle(vehicles);
         row.add(buildStatCard("Registered vehicles", String.valueOf(vehicleCount),
                 sub3, UIConstants.TEXT_MUTED, COLOR_GREEN));
 
-        String sub4      = upcoming.isEmpty() ? "" : getDaysUntilLabel(upcoming.get(0)[5]);
+        // ── Days-until label → appointmentController ──────────────
+        String sub4      = upcoming.isEmpty() ? ""
+                : appointmentController.getDaysUntilLabel(upcoming.get(0)[5]);
         Color  sub4Color = upcoming.isEmpty() ? UIConstants.TEXT_MUTED : BRAND_BLUE;
         row.add(buildStatCard("Next appointment",
                 nextApptDate.isEmpty() ? "None" : nextApptDate,
@@ -320,17 +341,12 @@ public class CustomerDashboard extends JPanel {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
                         RenderingHints.VALUE_ANTIALIAS_ON);
-
-                // White rounded background
                 g2.setColor(UIConstants.BG_CARD);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14);
-
-                // Coloured left accent bar, clipped to rounded shape
                 g2.setClip(new java.awt.geom.RoundRectangle2D.Float(
                         0, 0, getWidth(), getHeight(), 14, 14));
                 g2.setColor(accentColor);
                 g2.fillRect(0, 0, 5, getHeight());
-
                 g2.dispose();
             }
         };
@@ -386,12 +402,14 @@ public class CustomerDashboard extends JPanel {
         title.setBorder(new EmptyBorder(0, 0, 6, 0));
         card.add(title, BorderLayout.NORTH);
 
-        Map<String, Integer> monthlyCounts = buildMonthlyCounts(allAppts, 6);
+        // ── Bar chart data → appointmentController ────────────────
+        Map<String, Integer> monthlyCounts = appointmentController.buildMonthlyCounts(allAppts, 6);
         BarChartPanel chartPanel = new BarChartPanel(monthlyCounts);
         chartPanel.setOpaque(false);
         card.add(chartPanel, BorderLayout.CENTER);
 
-        double totalSpent  = calcTotalSpent(allAppts, paidIds);
+        // ── Total spent → paymentService ─────────────────────────
+        double totalSpent  = paymentService.calcTotalSpent(allAppts, paidIds, appointmentController);
         double avgPerVisit = allAppts.isEmpty() ? 0 : totalSpent / allAppts.size();
 
         JPanel statsRow = new JPanel(new GridLayout(1, 3, 0, 0));
@@ -447,7 +465,8 @@ public class CustomerDashboard extends JPanel {
         title.setBorder(new EmptyBorder(0, 0, 6, 0));
         card.add(title, BorderLayout.NORTH);
 
-        Map<String, Integer> breakdown = buildServiceBreakdown(allAppts);
+        // ── Donut data → appointmentController ───────────────────
+        Map<String, Integer> breakdown = appointmentController.buildServiceBreakdown(allAppts);
         int totalSvc = allAppts.size();
 
         DonutChartPanel donut = new DonutChartPanel(breakdown, totalSvc);
@@ -593,6 +612,9 @@ public class CustomerDashboard extends JPanel {
         return card;
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // buildUpcomingRow() — pure UI row for one upcoming appointment
+    // ─────────────────────────────────────────────────────────────
     private JPanel buildUpcomingRow(String[] row) {
         String apptId      = row[0];
         String vehicleId   = row[1];
@@ -600,8 +622,11 @@ public class CustomerDashboard extends JPanel {
         String serviceType = row[3];
         String status      = row[4];
         String dateTime    = row[5];
-        String techName    = resolveUserName(techId);
-        String vehicleLbl  = appointmentController.getVehicleLabel(vehicleId);
+
+        // ── Lookups → vehicleService / appointmentController ─────
+        String techName   = appointmentController.resolveUserName(
+                app.getAccountService().getAllUsers(), techId);
+        String vehicleLbl = vehicleService.getVehicleLabel(vehicleId);
 
         JPanel panel = new JPanel(new BorderLayout(8, 0));
         panel.setOpaque(false);
@@ -684,14 +709,20 @@ public class CustomerDashboard extends JPanel {
         return panel;
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // buildPaymentRow() — pure UI row for one pending payment
+    // ─────────────────────────────────────────────────────────────
     private JPanel buildPaymentRow(String[] row, JDialog parentDialog) {
         String apptId      = row[0];
         String vehicleId   = row[1];
         String techId      = row[2];
         String serviceType = row[3];
         String duration    = row[6];
-        String techName    = resolveUserName(techId);
-        String amountStr   = appointmentController.calculateAmount(serviceType, duration);
+
+        // ── Amount → appointmentController (pricing rule is in appointments) ──
+        String techName  = appointmentController.resolveUserName(
+                app.getAccountService().getAllUsers(), techId);
+        String amountStr = appointmentController.calculateAmount(serviceType, duration);
 
         JPanel panel = new JPanel(new BorderLayout(8, 0));
         panel.setOpaque(false);
@@ -793,9 +824,11 @@ public class CustomerDashboard extends JPanel {
         if (user == null) return;
 
         String customerName = user.getName();
-        String techName     = resolveUserName(row[2]);
+        String techName     = appointmentController.resolveUserName(
+                app.getAccountService().getAllUsers(), row[2]);
         String dateTime     = row[5];
-        String vehicleLabel = appointmentController.getVehicleLabel(vehicleId);
+        // ── Vehicle label → vehicleService ────────────────────────
+        String vehicleLabel = vehicleService.getVehicleLabel(vehicleId);
 
         int hours = 1;
         try { hours = Integer.parseInt(duration.trim()); } catch (NumberFormatException ignored) {}
@@ -931,6 +964,7 @@ public class CustomerDashboard extends JPanel {
         confirmBtn.setPreferredSize(new Dimension(460, 42));
         confirmBtn.addActionListener(e -> {
             String  method = (String) methodCombo.getSelectedItem();
+            // ── Save payment → appointmentController (which delegates to paymentService) ──
             boolean saved  = appointmentController.savePayment(apptId, vehicleId, fas, method);
             if (saved) {
                 dialog.dispose();
@@ -1002,6 +1036,9 @@ public class CustomerDashboard extends JPanel {
         return outer;
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // VIEW ALL DIALOG — shared by Upcoming and Pending Payments
+    // ═══════════════════════════════════════════════════════════════
     private void showViewAllDialog(String dialogTitle,
                                    List<String[]> allRows,
                                    boolean isPayment) {
@@ -1076,7 +1113,6 @@ public class CustomerDashboard extends JPanel {
         JPanel profileArea = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 12));
         profileArea.setBackground(UIConstants.BG_HEADER);
 
-        // ── Notification bell ────────────────────────────────────────
         JLabel bellLabel = new JLabel("\uD83D\uDD14");
         bellLabel.setFont(new Font("SansSerif", Font.PLAIN, 20));
         bellLabel.setPreferredSize(new Dimension(38, 38));
@@ -1203,7 +1239,8 @@ public class CustomerDashboard extends JPanel {
         popup.addSeparator();
 
         User user = app.getLoggedInUserObj();
-        java.util.List<String> notifs = notificationService.getNotifications(user != null ? user.getRole() : "customer");
+        java.util.List<String> notifs = notificationService.getNotifications(
+                user != null ? user.getRole() : "customer");
         for (String n : notifs) {
             JMenuItem item = new JMenuItem(n);
             item.setFont(UIConstants.FONT_SMALL);
@@ -1304,9 +1341,6 @@ public class CustomerDashboard extends JPanel {
             area.add(fallback);
         }
 
-        // ── CHANGE: "APU" → "APU Customer" ────────────────────────
-        // This label appears below the logo image in the sidebar header.
-        // We simply updated the text string from "APU" to "APU Customer".
         JLabel brandName = new JLabel("APU ASC Customer");
         brandName.setFont(UIConstants.FONT_SIDEBAR);
         brandName.setForeground(Color.WHITE);
@@ -1359,119 +1393,7 @@ public class CustomerDashboard extends JPanel {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // DATA HELPERS
-    // ═══════════════════════════════════════════════════════════════
-
-    private double calcPendingAmount(List<String[]> unpaid) {
-        double total = 0;
-        for (String[] row : unpaid) {
-            try {
-                total += Double.parseDouble(
-                        appointmentController.calculateAmount(row[3], row[6]));
-            } catch (NumberFormatException ignored) {}
-        }
-        return total;
-    }
-
-    private double calcTotalSpent(List<String[]> allAppts, Set<String> paidIds) {
-        double total = 0;
-        for (String[] row : allAppts) {
-            if (row[4].equalsIgnoreCase("Completed") && paidIds.contains(row[0])) {
-                try {
-                    total += Double.parseDouble(
-                            appointmentController.calculateAmount(row[3], row[6]));
-                } catch (NumberFormatException ignored) {}
-            }
-        }
-        return total;
-    }
-
-    private String getNextAppointmentDate(List<String[]> upcoming) {
-        if (upcoming.isEmpty()) return "";
-        try {
-            return LocalDateTime.parse(upcoming.get(0)[5], DATE_TIME_FORMAT)
-                    .format(DateTimeFormatter.ofPattern("d MMM yyyy"));
-        } catch (DateTimeParseException e) {
-            String dt = upcoming.get(0)[5];
-            return dt.length() > 10 ? dt.substring(0, 10) : dt;
-        }
-    }
-
-    private String getDaysUntilLabel(String dateTimeStr) {
-        try {
-            LocalDate appt = LocalDateTime.parse(dateTimeStr, DATE_TIME_FORMAT).toLocalDate();
-            long days = LocalDate.now().until(appt, java.time.temporal.ChronoUnit.DAYS);
-            if (days == 0) return "Today";
-            if (days == 1) return "Tomorrow";
-            if (days > 1)  return "In " + days + " days";
-        } catch (DateTimeParseException ignored) {}
-        return "";
-    }
-
-    private int countThisMonth(List<String[]> appts) {
-        LocalDate today = LocalDate.now();
-        int count = 0;
-        for (String[] row : appts) {
-            try {
-                LocalDateTime ldt = LocalDateTime.parse(row[5], DATE_TIME_FORMAT);
-                if (ldt.getYear() == today.getYear() && ldt.getMonth() == today.getMonth())
-                    count++;
-            } catch (DateTimeParseException ignored) {}
-        }
-        return count;
-    }
-
-    private Map<String, Integer> buildMonthlyCounts(List<String[]> appts, int months) {
-        Map<String, Integer> counts = new LinkedHashMap<>();
-        LocalDate today = LocalDate.now();
-        for (int i = months - 1; i >= 0; i--)
-            counts.put(today.minusMonths(i).format(DateTimeFormatter.ofPattern("MMM")), 0);
-        for (String[] row : appts) {
-            try {
-                LocalDateTime ldt = LocalDateTime.parse(row[5], DATE_TIME_FORMAT);
-                for (int i = months - 1; i >= 0; i--) {
-                    LocalDate d = today.minusMonths(i);
-                    if (ldt.getYear() == d.getYear() && ldt.getMonth() == d.getMonth()) {
-                        String key = d.format(DateTimeFormatter.ofPattern("MMM"));
-                        counts.put(key, counts.get(key) + 1);
-                        break;
-                    }
-                }
-            } catch (DateTimeParseException ignored) {}
-        }
-        return counts;
-    }
-
-    private Map<String, Integer> buildServiceBreakdown(List<String[]> appts) {
-        Map<String, Integer> raw = new LinkedHashMap<>();
-        for (String[] row : appts) raw.merge(row[3], 1, Integer::sum);
-        Map<String, Integer> result = new LinkedHashMap<>();
-        int otherCount = 0, rank = 0;
-        for (Map.Entry<String, Integer> e : raw.entrySet()) {
-            if (rank < 3) result.put(e.getKey(), e.getValue());
-            else          otherCount += e.getValue();
-            rank++;
-        }
-        if (otherCount > 0) result.put("Other", otherCount);
-        return result;
-    }
-
-    private String buildVehicleSubtitle(List<String[]> vehicles) {
-        boolean hasCar   = vehicles.stream().anyMatch(v -> "Car".equalsIgnoreCase(v[1]));
-        boolean hasMotor = vehicles.stream().anyMatch(v -> "Motor".equalsIgnoreCase(v[1]));
-        if (hasCar && hasMotor) return "Cars & motorcycles";
-        if (hasCar)   return "Car"        + (vehicles.size() > 1 ? "s" : "");
-        if (hasMotor) return "Motorcycle" + (vehicles.size() > 1 ? "s" : "");
-        return "";
-    }
-
-    private String resolveUserName(String userId) {
-        return appointmentController.resolveUserName(
-                app.getAccountService().getAllUsers(), userId);
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // INNER CLASS — BarChartPanel
+    // INNER CLASS — BarChartPanel (pure rendering, no business logic)
     // ═══════════════════════════════════════════════════════════════
     private static class BarChartPanel extends JPanel {
         private final Map<String, Integer> data;
@@ -1525,7 +1447,7 @@ public class CustomerDashboard extends JPanel {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // INNER CLASS — DonutChartPanel
+    // INNER CLASS — DonutChartPanel (pure rendering, no business logic)
     // ═══════════════════════════════════════════════════════════════
     static class DonutChartPanel extends JPanel {
         static final Color[] SEGMENT_COLORS = {
@@ -1584,7 +1506,7 @@ public class CustomerDashboard extends JPanel {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // SHARED UI HELPERS
+    // SHARED UI HELPERS (pure layout/styling — no business logic)
     // ═══════════════════════════════════════════════════════════════
 
     private JPanel createCard() {

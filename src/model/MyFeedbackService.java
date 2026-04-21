@@ -2,15 +2,23 @@ package model;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * MyFeedbackService
  *
- * Reads feedback data from feedback.txt and looks up names and vehicle
- * info from accounts.txt and vehicles.txt.
+ * Handles ALL data logic for the MyFeedbackPage:
+ *   - Reading / writing feedback.txt
+ *   - Reading appointments.txt, accounts.txt, vehicles.txt
+ *   - Searching, filtering, and sorting Pending and History data
+ *   - Generating the next Feedback ID
  *
- * feedback.txt format — 9 fields separated by commas:
+ * MyFeedbackPage only calls the public methods here and uses the
+ * returned lists to fill its tables — keeping GUI and logic separated.
+ *
+ * feedback.txt format — 8 fields separated by commas:
  *   [0] feedbackID
  *   [1] customerID
  *   [2] appointmentID
@@ -23,8 +31,9 @@ import java.util.List;
  * Example line:
  *   FB1,C1,AP1,V1,T1,Good,Full service completed - engine oil changed.,2026-03-05
  *
- * appointments.txt is also read so we can look up the service type
- * that belongs to a given appointmentID (used for the "Feedback" button table).
+ * appointments.txt format (8 columns):
+ *   [0] appointmentID  [1] customerID  [2] vehicleID  [3] technicianID
+ *   [4] serviceType    [5] status      [6] dateTime   [7] duration
  */
 public class MyFeedbackService {
 
@@ -52,7 +61,7 @@ public class MyFeedbackService {
         public String customerId;       // e.g. "C1"
         public String appointmentId;    // e.g. "AP1"
         public String vehicleId;        // e.g. "V1"
-        public String vehicleType;      // e.g. "Car"    — looked up from vehicles.txt
+        public String vehicleType;      // e.g. "Car"     — looked up from vehicles.txt
         public String carPlate;         // e.g. "WXY1234" — looked up from vehicles.txt
         public String technicianId;     // e.g. "T1"
         public String technicianName;   // e.g. "Mike Tan" — looked up from accounts.txt
@@ -125,7 +134,8 @@ public class MyFeedbackService {
             System.out.println("[MyFeedbackService] Error reading feedback.txt: " + e.getMessage());
         }
 
-        System.out.println("[MyFeedbackService] Feedback found for " + customerId + ": " + result.size());
+        System.out.println("[MyFeedbackService] Feedback found for " + customerId
+                + ": " + result.size());
         return result;
     }
 
@@ -205,13 +215,14 @@ public class MyFeedbackService {
                 // Split into at least 3 parts to read customerId and appointmentId
                 String[] parts = line.split(",", EXPECTED_COLUMNS);
                 if (parts.length >= 3) {
-                    boolean customerMatch     = parts[1].trim().equalsIgnoreCase(customerId);
-                    boolean appointmentMatch  = parts[2].trim().equalsIgnoreCase(appointmentId);
+                    boolean customerMatch    = parts[1].trim().equalsIgnoreCase(customerId);
+                    boolean appointmentMatch = parts[2].trim().equalsIgnoreCase(appointmentId);
                     if (customerMatch && appointmentMatch) return true;
                 }
             }
         } catch (IOException e) {
-            System.out.println("[MyFeedbackService] Error in hasFeedbackForAppointment: " + e.getMessage());
+            System.out.println("[MyFeedbackService] Error in hasFeedbackForAppointment: "
+                    + e.getMessage());
         }
 
         return false;
@@ -255,20 +266,20 @@ public class MyFeedbackService {
                 String[] cols = line.split(",", 8);
                 if (cols.length < 8) continue;
 
-                String apptId       = cols[0].trim();
-                String apptCustId   = cols[1].trim();
-                String vehicleId    = cols[2].trim();
-                String techId       = cols[3].trim();
-                String serviceType  = cols[4].trim();
-                String status       = cols[5].trim();
-                String dateTime     = cols[6].trim();
-                String duration     = cols[7].trim();
+                String apptId      = cols[0].trim();
+                String apptCustId  = cols[1].trim();
+                String vehicleId   = cols[2].trim();
+                String techId      = cols[3].trim();
+                String serviceType = cols[4].trim();
+                String status      = cols[5].trim();
+                String dateTime    = cols[6].trim();
+                String duration    = cols[7].trim();
 
                 // Only include Completed appointments for THIS customer
                 // that do not already have feedback submitted
-                boolean isThisCustomer  = apptCustId.equalsIgnoreCase(customerId);
-                boolean isCompleted     = status.equalsIgnoreCase("Completed");
-                boolean noFeedbackYet   = !hasFeedbackForAppointment(customerId, apptId);
+                boolean isThisCustomer = apptCustId.equalsIgnoreCase(customerId);
+                boolean isCompleted    = status.equalsIgnoreCase("Completed");
+                boolean noFeedbackYet  = !hasFeedbackForAppointment(customerId, apptId);
 
                 if (isThisCustomer && isCompleted && noFeedbackYet) {
                     AppointmentRow row = new AppointmentRow();
@@ -282,7 +293,8 @@ public class MyFeedbackService {
                 }
             }
         } catch (IOException e) {
-            System.out.println("[MyFeedbackService] Error reading appointments.txt: " + e.getMessage());
+            System.out.println("[MyFeedbackService] Error reading appointments.txt: "
+                    + e.getMessage());
         }
 
         System.out.println("[MyFeedbackService] Pending feedback appointments for "
@@ -291,8 +303,231 @@ public class MyFeedbackService {
     }
 
     // ═════════════════════════════════════════════════════════════
+    // PUBLIC — SEARCH / SORT / FILTER  (moved from MyFeedbackPage)
+    // ═════════════════════════════════════════════════════════════
+
+    // ─────────────────────────────────────────────────────────────
+    // filterAndSortPending()
+    //
+    // Applies a text search query and a sort option to a list of
+    // pending AppointmentRow objects and returns the resulting list.
+    //
+    // Called by MyFeedbackPage.applyPendingSearchAndSort().
+    //
+    // Parameters:
+    //   source     — the full currentPending list held by the page
+    //   query      — lower-cased search text; empty string = no filter
+    //   sortOption — one of the strings shown in pendingSortCombo
+    // ─────────────────────────────────────────────────────────────
+    public List<AppointmentRow> filterAndSortPending(List<AppointmentRow> source,
+                                                     String query,
+                                                     String sortOption) {
+        // ── 1. Filter ─────────────────────────────────────────────
+        List<AppointmentRow> filtered = source.stream()
+            .filter(a -> {
+                if (query == null || query.isEmpty()) return true;
+                return a.appointmentId.toLowerCase().contains(query)
+                    || a.serviceType  .toLowerCase().contains(query)
+                    || a.dateTime     .toLowerCase().contains(query)
+                    || a.duration     .toLowerCase().contains(query);
+            })
+            .collect(Collectors.toList());
+
+        // ── 2. Sort ───────────────────────────────────────────────
+        if (sortOption != null) {
+            switch (sortOption) {
+                case "Sort by Date (Newest First)":
+                    filtered.sort(Comparator.comparing(
+                            (AppointmentRow a) -> a.dateTime).reversed());
+                    break;
+                case "Sort by Date (Oldest First)":
+                    filtered.sort(Comparator.comparing(a -> a.dateTime));
+                    break;
+                case "Sort by Service Type (A-Z)":
+                    filtered.sort(Comparator.comparing(a -> a.serviceType.toLowerCase()));
+                    break;
+                case "Sort by Duration (Shortest First)":
+                    filtered.sort(Comparator.comparingDouble(a -> parseDuration(a.duration)));
+                    break;
+                case "Sort by Duration (Longest First)":
+                    filtered.sort(Comparator.comparingDouble(
+                            (AppointmentRow a) -> parseDuration(a.duration)).reversed());
+                    break;
+                // "Default Order" — no sorting needed
+            }
+        }
+
+        return filtered;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // filterAndSortHistory()
+    //
+    // Applies a text search query and a sort/filter option to a list
+    // of MyFeedback objects and returns the resulting list.
+    //
+    // Called by MyFeedbackPage.applyHistorySearchAndSort().
+    //
+    // Parameters:
+    //   source     — the full currentHistory list held by the page
+    //   query      — lower-cased search text; empty string = no filter
+    //   sortOption — one of the strings shown in historySortCombo
+    // ─────────────────────────────────────────────────────────────
+    public List<MyFeedback> filterAndSortHistory(List<MyFeedback> source,
+                                                 String query,
+                                                 String sortOption) {
+        // ── 1. Filter by search text ──────────────────────────────
+        List<MyFeedback> filtered = source.stream()
+            .filter(fb -> {
+                if (query == null || query.isEmpty()) return true;
+                return fb.feedbackId    .toLowerCase().contains(query)
+                    || fb.appointmentId .toLowerCase().contains(query)
+                    || fb.vehicleType   .toLowerCase().contains(query)
+                    || fb.carPlate      .toLowerCase().contains(query)
+                    || fb.technicianName.toLowerCase().contains(query)
+                    || fb.condition     .toLowerCase().contains(query)
+                    || fb.feedbackText  .toLowerCase().contains(query)
+                    || fb.date          .toLowerCase().contains(query);
+            })
+            .collect(Collectors.toList());
+
+        // ── 2. Sort / secondary filter by dropdown ────────────────
+        if (sortOption != null) {
+            switch (sortOption) {
+                case "Sort by Date (Newest First)":
+                    filtered.sort(Comparator.comparing(
+                            (MyFeedback fb) -> fb.date).reversed());
+                    break;
+                case "Sort by Date (Oldest First)":
+                    filtered.sort(Comparator.comparing(fb -> fb.date));
+                    break;
+                case "Filter: Excellent Only":
+                    filtered = filtered.stream()
+                            .filter(fb -> fb.condition.equalsIgnoreCase("Excellent"))
+                            .collect(Collectors.toList());
+                    break;
+                case "Filter: Good Only":
+                    filtered = filtered.stream()
+                            .filter(fb -> fb.condition.equalsIgnoreCase("Good"))
+                            .collect(Collectors.toList());
+                    break;
+                case "Filter: Average Only":
+                    filtered = filtered.stream()
+                            .filter(fb -> fb.condition.equalsIgnoreCase("Average"))
+                            .collect(Collectors.toList());
+                    break;
+                case "Sort by Technician (A-Z)":
+                    filtered.sort(Comparator.comparing(
+                            fb -> fb.technicianName.toLowerCase()));
+                    break;
+                // "Default Order" — no sorting needed
+            }
+        }
+
+        return filtered;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // convertStarsToCondition()
+    //
+    // Converts a 1-5 star integer rating chosen by the customer in
+    // the feedback popup into a human-readable condition label that
+    // is stored in feedback.txt.
+    //
+    //   5 stars  → "Excellent"
+    //   3-4 stars → "Good"
+    //   1-2 stars → "Average"
+    //
+    // Called by MyFeedbackPage when the Submit button is pressed.
+    // ─────────────────────────────────────────────────────────────
+    public String convertStarsToCondition(int stars) {
+        if      (stars == 5) return "Excellent";
+        else if (stars >= 3) return "Good";
+        else                 return "Average";
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // buildPendingTableRows()
+    //
+    // Converts a list of AppointmentRow objects into a 2-D Object
+    // array ready to be inserted directly into a DefaultTableModel.
+    //
+    // Each row has 5 elements matching the pending table columns:
+    //   [0] Appointment ID
+    //   [1] Service Type
+    //   [2] Date / Time
+    //   [3] Duration  (e.g. "1 hr(s)")
+    //   [4] "Feedback"  (button label placeholder)
+    //
+    // Called by MyFeedbackPage.fillPendingTable().
+    // ─────────────────────────────────────────────────────────────
+    public Object[][] buildPendingTableRows(List<AppointmentRow> pending) {
+        Object[][] rows = new Object[pending.size()][5];
+        for (int i = 0; i < pending.size(); i++) {
+            AppointmentRow appt = pending.get(i);
+            rows[i][0] = appt.appointmentId;
+            rows[i][1] = appt.serviceType;
+            rows[i][2] = appt.dateTime;
+            rows[i][3] = appt.duration + " hr(s)";
+            rows[i][4] = "Feedback";
+        }
+        return rows;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // buildHistoryTableRows()
+    //
+    // Converts a list of MyFeedback objects into a 2-D Object array
+    // ready to be inserted directly into a DefaultTableModel.
+    //
+    // Each row has 8 elements matching the history table columns:
+    //   [0] Feedback ID
+    //   [1] Appointment ID
+    //   [2] Vehicle Type
+    //   [3] Car Plate
+    //   [4] Technician
+    //   [5] Condition
+    //   [6] Feedback Text
+    //   [7] Date
+    //
+    // Called by MyFeedbackPage.fillHistoryTable().
+    // ─────────────────────────────────────────────────────────────
+    public Object[][] buildHistoryTableRows(List<MyFeedback> feedbackList) {
+        Object[][] rows = new Object[feedbackList.size()][8];
+        for (int i = 0; i < feedbackList.size(); i++) {
+            MyFeedback fb = feedbackList.get(i);
+            rows[i][0] = fb.feedbackId;
+            rows[i][1] = fb.appointmentId;
+            rows[i][2] = fb.vehicleType;
+            rows[i][3] = fb.carPlate;
+            rows[i][4] = fb.technicianName;
+            rows[i][5] = fb.condition;
+            rows[i][6] = fb.feedbackText;
+            rows[i][7] = fb.date;
+        }
+        return rows;
+    }
+
+    // ═════════════════════════════════════════════════════════════
     // PRIVATE HELPERS
     // ═════════════════════════════════════════════════════════════
+
+    // ─────────────────────────────────────────────────────────────
+    // parseDuration()
+    //
+    // Extracts the numeric part of a duration string so rows can be
+    // sorted by duration length.
+    //   e.g. "1.5 hr(s)" → 1.5,  "2" → 2.0,  "abc" → 0.0
+    //
+    // Used internally by filterAndSortPending().
+    // ─────────────────────────────────────────────────────────────
+    private double parseDuration(String duration) {
+        try {
+            return Double.parseDouble(duration.replaceAll("[^0-9.]", ""));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
 
     // ─────────────────────────────────────────────────────────────
     // parseFeedbackLine()
@@ -363,7 +598,8 @@ public class MyFeedbackService {
                 }
             }
         } catch (IOException e) {
-            System.out.println("[MyFeedbackService] Error reading accounts.txt: " + e.getMessage());
+            System.out.println("[MyFeedbackService] Error reading accounts.txt: "
+                    + e.getMessage());
         }
 
         return userId; // fallback
@@ -400,7 +636,8 @@ public class MyFeedbackService {
                 }
             }
         } catch (IOException e) {
-            System.out.println("[MyFeedbackService] Error reading vehicles.txt: " + e.getMessage());
+            System.out.println("[MyFeedbackService] Error reading vehicles.txt: "
+                    + e.getMessage());
         }
 
         return fallback;
@@ -433,7 +670,8 @@ public class MyFeedbackService {
                     }
                 }
             } catch (IOException e) {
-                System.out.println("[MyFeedbackService] Error generating next ID: " + e.getMessage());
+                System.out.println("[MyFeedbackService] Error generating next ID: "
+                        + e.getMessage());
             }
         }
 

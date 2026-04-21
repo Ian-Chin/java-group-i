@@ -15,21 +15,17 @@ import java.util.List;
  *   V7,C3,Motor,AJH1312,Yamaha,2013,Blue
  *
  * getVehiclesByUserId() returns a 6-element array per vehicle:
- *   [0] vehicleID    e.g. "V3"
- *   [1] vehicleType  e.g. "Car" or "Motor"
- *   [2] plate        e.g. "LIN110"
- *   [3] brand        e.g. "Mercedes AMG Coupe"
- *   [4] year         e.g. "2025"
- *   [5] colour       e.g. "White"
+ *   [0] vehicleID    [1] vehicleType  [2] plate
+ *   [3] brand        [4] year         [5] colour
  *
- * CHANGE in deleteVehicle():
- *   After removing the vehicle from vehicles.txt, it now also calls
- *   AppointmentService.deletePendingByVehicleId() to automatically
- *   cancel any "Pending" or "In Progress" appointments for that vehicle.
- *
- *   "Completed" appointments are intentionally left alone — the customer
- *   still owes payment for services that were already performed, even if
- *   they no longer own or have registered that vehicle.
+ * METHODS MOVED FROM AppointmentSectionController.java:
+ *  - getVehicleLabel()      : converts a vehicleId to "Car · LIN110" display string
+ *                             (was a pass-through wrapper — belongs here because it
+ *                              reads vehicles.txt via getVehiclePlate())
+ *  - buildVehicleSubtitle() : builds "Cars", "Motorcycles", or "Cars & motorcycles"
+ *                             subtitle for the Registered Vehicles stat card
+ *                             (belongs here because it only inspects vehicle type
+ *                              data from this service — no appointment dependency)
  */
 public class VehicleService {
 
@@ -73,13 +69,8 @@ public class VehicleService {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // getVehicleIdByUserAndPlate — looks up the vehicleID for a given
-    // userId + plate combination.
-    //
-    // Used inside deleteVehicle() so we know WHICH vehicleID (e.g. "V4")
-    // to pass to AppointmentService when cancelling pending appointments.
-    //
-    // Returns null if no match is found.
+    // getVehicleIdByUserAndPlate — looks up the vehicleID for a
+    // given userId + plate combination. Returns null if not found.
     // ─────────────────────────────────────────────────────────────
     public String getVehicleIdByUserAndPlate(String userId, String plate) {
         File file = new File(FILE_PATH);
@@ -92,22 +83,21 @@ public class VehicleService {
                 String[] cols = line.split(",", EXPECTED_COLUMNS);
                 if (cols.length != EXPECTED_COLUMNS) continue;
 
-                // cols[1] = userID,  cols[3] = plate,  cols[0] = vehicleID
                 boolean userMatches  = cols[1].trim().equalsIgnoreCase(userId);
                 boolean plateMatches = cols[3].trim().equalsIgnoreCase(plate);
 
                 if (userMatches && plateMatches) {
-                    return cols[0].trim(); // return the vehicleID e.g. "V4"
+                    return cols[0].trim();
                 }
             }
         } catch (IOException e) { e.printStackTrace(); }
 
-        return null; // not found
+        return null;
     }
 
     // ─────────────────────────────────────────────────────────────
-    // getVehiclePlate — looks up a vehicle by its ID and returns
-    // a short display label like "Car · LIN110"
+    // getVehiclePlate — looks up a vehicle by ID and returns a
+    // short display label like "Car · LIN110".
     // ─────────────────────────────────────────────────────────────
     public String getVehiclePlate(String vehicleId) {
         File file = new File(FILE_PATH);
@@ -120,12 +110,66 @@ public class VehicleService {
                 String[] cols = line.split(",", EXPECTED_COLUMNS);
                 if (cols.length == EXPECTED_COLUMNS
                         && cols[0].trim().equalsIgnoreCase(vehicleId)) {
-                    return cols[2].trim() + " · " + cols[3].trim();
+                    return cols[2].trim() + " \u00B7 " + cols[3].trim();
                 }
             }
         } catch (IOException e) { e.printStackTrace(); }
 
-        return vehicleId; // fallback if vehicle not found
+        return vehicleId;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // DASHBOARD VEHICLE DISPLAY HELPERS
+    // (moved from AppointmentSectionController.java)
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Returns a short display label for a vehicle given its ID.
+     * Example:  "Car · LIN110"  or  "Motor · AJH1312"
+     *
+     * MOVED FROM: AppointmentSectionController.getVehicleLabel()
+     * Reason: purely a vehicle data lookup — reads vehicles.txt via
+     *         getVehiclePlate(), so it belongs here in VehicleService.
+     *
+     * Called by:
+     *   CustomerDashboard.buildUpcomingRow()         — vehicle label in appointment row
+     *   CustomerDashboard.showPaymentInvoiceDialog() — vehicle label on invoice
+     *
+     * @param vehicleId  e.g. "V4"
+     * @return display label, or the vehicleId itself as a fallback if not found
+     */
+    public String getVehicleLabel(String vehicleId) {
+        return getVehiclePlate(vehicleId);
+    }
+
+    /**
+     * Builds the subtitle text for the "Registered Vehicles" stat card
+     * on the Customer Dashboard.
+     *
+     * Examples:
+     *   one car only        → "Car"
+     *   multiple cars       → "Cars"
+     *   one motorcycle      → "Motorcycle"
+     *   multiple bikes      → "Motorcycles"
+     *   mix of both         → "Cars & motorcycles"
+     *
+     * MOVED FROM: AppointmentSectionController.buildVehicleSubtitle()
+     * Reason: only reads vehicle type data ([1] vehicleType) from vehicle
+     *         rows — no appointment dependency at all. Belongs here.
+     *
+     * Called by:
+     *   CustomerDashboard.buildStatCardsRow() — subtitle under vehicle count card
+     *
+     * @param vehicles  list of vehicle rows from getVehiclesByUserId()
+     * @return subtitle string, or empty string if the list is empty
+     */
+    public String buildVehicleSubtitle(List<String[]> vehicles) {
+        boolean hasCar   = vehicles.stream().anyMatch(v -> "Car".equalsIgnoreCase(v[1]));
+        boolean hasMotor = vehicles.stream().anyMatch(v -> "Motor".equalsIgnoreCase(v[1]));
+        if (hasCar && hasMotor) return "Cars & motorcycles";
+        if (hasCar)   return "Car"        + (vehicles.size() > 1 ? "s" : "");
+        if (hasMotor) return "Motorcycle" + (vehicles.size() > 1 ? "s" : "");
+        return "";
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -153,31 +197,13 @@ public class VehicleService {
     // ─────────────────────────────────────────────────────────────
     // deleteVehicle — removes the vehicle from vehicles.txt AND
     //                 cancels any Pending appointments for it.
-    //
-    // CHANGE: After deleting the vehicle row, this method now calls
-    //   AppointmentService.deletePendingByVehicleId(vehicleId)
-    //   to automatically remove all "Pending" / "In Progress"
-    //   appointments for that vehicle.
-    //
-    //   "Completed" appointments are intentionally preserved so that
-    //   the Pending Payment card still shows them — the customer owes
-    //   payment for services already performed.
-    //
-    // Step-by-step:
-    //   1. Find the vehicleID (e.g. "V4") for the given userId + plate
-    //   2. Remove the vehicle row from vehicles.txt
-    //   3. Cancel pending appointments in appointments.txt for that vehicleID
     // ─────────────────────────────────────────────────────────────
     public boolean deleteVehicle(String userId, String plate) {
         File file = new File(FILE_PATH);
         if (!file.exists()) return false;
 
-        // ── Step 1: Find the vehicleID before deleting ────────────
-        // We need the vehicleID (e.g. "V4") to cancel appointments.
-        // We look it up BEFORE modifying the file so we can still read it.
         String vehicleId = getVehicleIdByUserAndPlate(userId, plate);
 
-        // ── Step 2: Remove the vehicle row from vehicles.txt ──────
         List<String> keep = new ArrayList<>();
         boolean found = false;
 
@@ -189,16 +215,15 @@ public class VehicleService {
                 if (cols.length == EXPECTED_COLUMNS
                         && cols[1].trim().equalsIgnoreCase(userId)
                         && cols[3].trim().equalsIgnoreCase(plate)) {
-                    found = true; // this is the vehicle to delete — skip it
+                    found = true;
                 } else {
-                    keep.add(line); // keep everything else
+                    keep.add(line);
                 }
             }
         } catch (IOException e) { e.printStackTrace(); return false; }
 
-        if (!found) return false; // vehicle not found — nothing to delete
+        if (!found) return false;
 
-        // Rewrite vehicles.txt without the deleted vehicle
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(file, false))) {
             for (String ln : keep) {
                 writer.write(ln);
@@ -206,15 +231,9 @@ public class VehicleService {
             }
         } catch (IOException e) { e.printStackTrace(); return false; }
 
-        // ── Step 3: Cancel pending appointments for this vehicle ──
-        // Only do this if we found a valid vehicleID in Step 1.
-        // If vehicleId is null (vehicle was not in the file), skip this step.
         if (vehicleId != null) {
             AppointmentService appointmentService = new AppointmentService();
             appointmentService.deletePendingByVehicleId(vehicleId);
-            // Note: we do NOT delete Completed appointments here.
-            // Completed appointments stay so the customer can still pay
-            // for services that were already performed on the vehicle.
         }
 
         return true;
@@ -222,7 +241,6 @@ public class VehicleService {
 
     // ─────────────────────────────────────────────────────────────
     // updateVehicle — replaces the line matching userID + oldPlate
-    //                 with updated values
     // ─────────────────────────────────────────────────────────────
     public boolean updateVehicle(String userId, String oldPlate,
                                  String newType, String newPlate,
@@ -241,7 +259,6 @@ public class VehicleService {
                 if (cols.length == EXPECTED_COLUMNS
                         && cols[1].trim().equalsIgnoreCase(userId)
                         && cols[3].trim().equalsIgnoreCase(oldPlate)) {
-                    // Keep same vehicleID, replace everything else
                     updated.add(cols[0].trim() + "," + userId.trim()
                             + "," + newType.trim() + "," + newPlate.trim()
                             + "," + newBrand.trim() + "," + newYear.trim()

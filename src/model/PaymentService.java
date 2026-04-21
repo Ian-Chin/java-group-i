@@ -2,31 +2,44 @@ package model;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
  * PaymentService reads and writes payment data from payments.txt.
  *
- * NEW File format — each line now has 9 values (vehicleID was added):
+ * File format — each line has 9 values:
  *   PaymentID , CustomerID , ServiceHistoryID , AppointmentID ,
  *   VehicleID , Amount , PaymentDate , Method , Status
  *
  * Example:
  *   PY1,C1,SH1,AP1,V1,120.00,2026-03-05,Cash,Paid
  *
- * CHANGE FROM OLD FORMAT:
- *   Old (8 cols): PaymentID, CustomerID, SH_ID, ApptID, Amount, Date, Method, Status
- *   New (9 cols): PaymentID, CustomerID, SH_ID, ApptID, VehicleID, Amount, Date, Method, Status
- *   VehicleID was inserted at position 4, pushing Amount to position 5.
+ * METHODS MOVED FROM CustomerDashboard.java:
+ *  - calcPendingAmount()  : totals RM due across all unpaid appointment rows
+ *  - calcTotalSpent()     : totals RM for completed + paid appointments (for charts)
+ *
+ * METHODS MOVED FROM PaymentHistoryPage.java:
+ *  - readPaymentsFromFile()    : reads all payment rows from payments.txt
+ *  - getPaymentsForCustomer()  : filters rows by customer ID
+ *  - calcTotalPaidAmount()     : sums RM for all "Paid" rows
+ *  - countPaidRows()           : counts rows with status "Paid"
+ *  - countPendingRows()        : counts rows with status "Pending"
+ *  - getPreferredMethod()      : finds the most-used payment method
+ *
+ * CHANGE: findServiceHistoryId() has been removed from this class.
+ *   It was a private method that read serviceHistory.txt — that file is owned
+ *   by ServiceHistoryService, so the method now lives there as a public method.
+ *   savePayment() now calls serviceHistoryService.findServiceHistoryId() instead.
  */
 public class PaymentService {
 
     private static final String FILE_PATH = "src" + File.separator
             + "TxtFile" + File.separator + "payments.txt";
 
-    // CHANGE: was 8 columns, now 9 because VehicleID was added
     private static final int EXPECTED_COLUMNS = 9;
 
     // ─────────────────────────────────────────────────────────────
@@ -58,11 +71,103 @@ public class PaymentService {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // readPaymentsFromFile() — reads all payment rows from payments.txt.
+    // Alias of getAllPayments(); kept as a named method for clarity
+    // when called from PaymentHistoryPage.
+    //
+    // MOVED FROM: PaymentHistoryPage.readPaymentsFromFile()
+    // ─────────────────────────────────────────────────────────────
+    public List<String[]> readPaymentsFromFile() {
+        return getAllPayments();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // getPaymentsForCustomer() — filters all payment rows to only
+    // those that belong to the given customer ID.
+    //
+    // MOVED FROM: PaymentHistoryPage.refresh() (inline filter loop)
+    // ─────────────────────────────────────────────────────────────
+    public List<String[]> getPaymentsForCustomer(String customerId) {
+        List<String[]> result = new ArrayList<>();
+        for (String[] row : readPaymentsFromFile()) {
+            if (row[1].trim().equalsIgnoreCase(customerId)) {
+                result.add(row);
+            }
+        }
+        return result;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // calcTotalPaidAmount() — sums the RM amount for every row
+    // whose status is "Paid".
+    //
+    // MOVED FROM: PaymentHistoryPage.updateStatsCards() (inline loop)
+    // ─────────────────────────────────────────────────────────────
+    public double calcTotalPaidAmount(List<String[]> rows) {
+        double total = 0.0;
+        for (String[] row : rows) {
+            if (row[8].trim().equalsIgnoreCase("Paid")) {
+                try {
+                    total += Double.parseDouble(row[5].trim());
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+        return total;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // countPaidRows() — returns the number of rows with status "Paid".
+    //
+    // MOVED FROM: PaymentHistoryPage.updateStatsCards() (inline loop)
+    // ─────────────────────────────────────────────────────────────
+    public int countPaidRows(List<String[]> rows) {
+        int count = 0;
+        for (String[] row : rows) {
+            if (row[8].trim().equalsIgnoreCase("Paid")) count++;
+        }
+        return count;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // countPendingRows() — returns the number of rows with status "Pending".
+    //
+    // MOVED FROM: PaymentHistoryPage.updateStatsCards() (inline loop)
+    // ─────────────────────────────────────────────────────────────
+    public int countPendingRows(List<String[]> rows) {
+        int count = 0;
+        for (String[] row : rows) {
+            if (row[8].trim().equalsIgnoreCase("Pending")) count++;
+        }
+        return count;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // getPreferredMethod() — returns the payment method that appears
+    // most frequently in the given list of rows.
+    // Returns "—" if the list is empty.
+    //
+    // MOVED FROM: PaymentHistoryPage.updateStatsCards() (inline loop)
+    // ─────────────────────────────────────────────────────────────
+    public String getPreferredMethod(List<String[]> rows) {
+        Map<String, Integer> methodCount = new HashMap<>();
+        for (String[] row : rows) {
+            String method = row[7].trim();
+            methodCount.put(method, methodCount.getOrDefault(method, 0) + 1);
+        }
+        String favMethod = "—";
+        int    favCount  = 0;
+        for (Map.Entry<String, Integer> entry : methodCount.entrySet()) {
+            if (entry.getValue() > favCount) {
+                favMethod = entry.getKey();
+                favCount  = entry.getValue();
+            }
+        }
+        return favMethod;
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // getPaidAppointmentIds() — returns a set of appointment IDs
     // that a given customer has already paid for.
-    //
-    // Used to filter out already-paid appointments from the
-    // Pending Payment card.
     // ─────────────────────────────────────────────────────────────
     public Set<String> getPaidAppointmentIds(String userId) {
         Set<String> paidIds = new HashSet<>();
@@ -76,7 +181,6 @@ public class PaymentService {
                 String[] columns = line.split(",", EXPECTED_COLUMNS);
                 if (columns.length != EXPECTED_COLUMNS) continue;
 
-                // [1] = CustomerID, [3] = AppointmentID, [8] = Status
                 String customerIdInFile = columns[1].trim();
                 String appointmentId    = columns[3].trim();
                 String status           = columns[8].trim();
@@ -106,7 +210,6 @@ public class PaymentService {
                 if (line.isBlank() || line.trim().startsWith("#")) continue;
                 String[] columns = line.split(",", EXPECTED_COLUMNS);
                 if (columns.length != EXPECTED_COLUMNS) continue;
-                // [3] = AppointmentID
                 if (columns[3].trim().equalsIgnoreCase(appointmentId)) {
                     return columns;
                 }
@@ -119,8 +222,6 @@ public class PaymentService {
 
     // ─────────────────────────────────────────────────────────────
     // generateNextPaymentId() — returns the next PY number.
-    // Scans payments.txt for the highest existing PY number, adds 1.
-    // Example: if PY7 is the highest, returns "PY8".
     // ─────────────────────────────────────────────────────────────
     public String generateNextPaymentId() {
         int highestNumber = 0;
@@ -149,19 +250,6 @@ public class PaymentService {
     // ─────────────────────────────────────────────────────────────
     // savePayment() — saves a new payment to payments.txt and
     //                 updates the matching row in serviceHistory.txt.
-    //
-    // Steps:
-    //   1. Generate the next PY ID (e.g. "PY8")
-    //   2. Find the SH ID for this appointment from serviceHistory.txt
-    //   3. Append a new row to payments.txt (now 9 columns with vehicleID)
-    //   4. Update serviceHistory.txt PaymentID from "NULL" to the PY ID
-    //
-    // Parameters:
-    //   userId        - customer ID e.g. "C3"
-    //   appointmentId - the appointment being paid e.g. "AP4"
-    //   vehicleId     - the vehicle ID e.g. "V4"   ← NEW
-    //   amount        - amount string e.g. "1050.00"
-    //   method        - "Cash", "Card", or "Online"
     // ─────────────────────────────────────────────────────────────
     public boolean savePayment(String userId, String appointmentId,
                                String vehicleId, String amount, String method) {
@@ -169,24 +257,23 @@ public class PaymentService {
         try {
             file.getParentFile().mkdirs();
 
-            // Today's date in Malaysia time
             java.time.LocalDate today = java.time.LocalDate.now(
                     java.time.ZoneId.of("Asia/Kuala_Lumpur"));
-            String paymentDate = today.toString(); // e.g. "2026-03-27"
+            String paymentDate = today.toString();
 
-            String newPaymentId = generateNextPaymentId(); // e.g. "PY8"
+            String newPaymentId = generateNextPaymentId();
+            // ── SH ID lookup delegated to ServiceHistoryService ───
+            // findServiceHistoryId() reads serviceHistory.txt — that file
+            // is owned by ServiceHistoryService, so the method lives there.
+            ServiceHistoryService shService = new ServiceHistoryService();
+            String shId = shService.findServiceHistoryId(appointmentId);
 
-            // Get the SH ID for this appointment
-            String shId = findServiceHistoryId(appointmentId);
-
-            // Append to payments.txt — now 9 columns including vehicleID
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(file, true))) {
-                // Format: PY8,C3,SH4,AP4,V4,1050.00,2026-03-27,Cash,Paid
                 writer.write(newPaymentId  + ","
                            + userId        + ","
-                           + shId          + ","   // "SH4" or "NULL"
+                           + shId          + ","
                            + appointmentId + ","
-                           + vehicleId     + ","   // NEW: vehicleID
+                           + vehicleId     + ","
                            + amount        + ","
                            + paymentDate   + ","
                            + method        + ","
@@ -195,7 +282,6 @@ public class PaymentService {
             }
 
             // Update serviceHistory.txt: change "NULL" paymentID to real PY ID
-            ServiceHistoryService shService = new ServiceHistoryService();
             shService.updatePaymentId(appointmentId, newPaymentId);
 
             return true;
@@ -206,39 +292,65 @@ public class PaymentService {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // findServiceHistoryId() — searches serviceHistory.txt for the
-    // SH row that matches a given appointment ID, returns its SH ID.
-    //
-    // serviceHistory.txt new format (8 columns):
-    //   SH1, C1, AP1, V1, PY1, T1, 2026-03-05, Completed
-    //   col0  col1  col2  col3  col4  col5  col6  col7
-    //   ↑           ↑
-    //   SH_ID       AppointmentID (column 2)
-    //
-    // Returns "NULL" if no matching record is found.
-    // ─────────────────────────────────────────────────────────────
-    private String findServiceHistoryId(String appointmentId) {
-        String shFilePath = "src" + File.separator
-                + "TxtFile" + File.separator + "serviceHistory.txt";
-        File shFile = new File(shFilePath);
-        if (!shFile.exists()) return "NULL";
+    // ═══════════════════════════════════════════════════════════════
+    // DASHBOARD PAYMENT STAT HELPERS
+    // (moved from CustomerDashboard.java)
+    // ═══════════════════════════════════════════════════════════════
 
-        try (BufferedReader reader = new BufferedReader(new FileReader(shFile))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (line.isBlank() || line.trim().startsWith("#")) continue;
-                String[] cols = line.split(",", 8); // 8 columns now
-                if (cols.length >= 3) {
-                    // Column 2 = AppointmentID
-                    if (cols[2].trim().equalsIgnoreCase(appointmentId)) {
-                        return cols[0].trim(); // Column 0 = ServiceHistoryID e.g. "SH4"
-                    }
-                }
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
+    /**
+     * Totals the RM amount due across all unpaid appointments.
+     * Used by the "Pending Payment" stat card (e.g. shows "RM 1,200").
+     *
+     * Called from CustomerDashboard.buildDashboardInner() via:
+     *   paymentService.calcPendingAmount(unpaid, appointmentController)
+     *
+     * Each row in unpaid has:
+     *   [3] serviceType   [6] duration
+     * The amount per row is calculated using AppointmentSectionController.calculateAmount().
+     *
+     * @param unpaid                list of unpaid appointment rows
+     * @param appointmentController used to calculate the RM amount per appointment
+     * @return total pending amount as a double
+     */
+    public double calcPendingAmount(List<String[]> unpaid,
+                                    AppointmentSectionController appointmentController) {
+        double total = 0;
+        for (String[] row : unpaid) {
+            try {
+                total += Double.parseDouble(
+                        appointmentController.calculateAmount(row[3], row[6]));
+            } catch (NumberFormatException ignored) {}
         }
-        return "NULL";
+        return total;
+    }
+
+    /**
+     * Calculates the total RM spent on completed AND paid appointments.
+     * Used by the Service Activity chart stats row ("Total Spent").
+     *
+     * Called from CustomerDashboard.buildActivityChartCard() via:
+     *   paymentService.calcTotalSpent(allAppts, paidIds, appointmentController)
+     *
+     * Only appointments with status "Completed" that also appear in paidIds are counted.
+     * The amount per appointment is calculated using calculateAmount().
+     *
+     * @param allAppts              list of all appointment rows for the user
+     * @param paidIds               set of appointment IDs that have been paid
+     * @param appointmentController used to calculate the RM amount per appointment
+     * @return total amount spent as a double
+     */
+    public double calcTotalSpent(List<String[]> allAppts,
+                                  Set<String> paidIds,
+                                  AppointmentSectionController appointmentController) {
+        double total = 0;
+        for (String[] row : allAppts) {
+            if (row[4].equalsIgnoreCase("Completed") && paidIds.contains(row[0])) {
+                try {
+                    total += Double.parseDouble(
+                            appointmentController.calculateAmount(row[3], row[6]));
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+        return total;
     }
 }

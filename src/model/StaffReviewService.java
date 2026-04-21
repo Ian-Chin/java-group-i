@@ -2,13 +2,20 @@ package model;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
  * StaffReviewService
  *
- * Reads review data from comments.txt and looks up names/vehicle info
- * from accounts.txt and vehicles.txt.
+ * Handles ALL business logic and data access for the Staff Review feature:
+ *   - Reading review data from comments.txt
+ *   - Looking up names from accounts.txt
+ *   - Looking up vehicle info from vehicles.txt
+ *   - Filtering reviews by keyword and rating band
+ *   - Sorting reviews by any column
+ *   - Calculating average ratings and star-level counts
+ *   - Building star symbol strings (★ / ½ / ☆)
  *
  * comments.txt format — 9 fields separated by commas:
  *   [0] commentID
@@ -368,5 +375,121 @@ public class StaffReviewService {
         }
 
         return count;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // buildStarString()
+    //
+    // Converts a numeric rating to a string of ★ / ½ / ☆ symbols.
+    // e.g. 4.4 → "★★★★½"
+    //
+    // Moved here from StaffReviewPage so all review-related logic
+    // lives in the service layer.
+    // ─────────────────────────────────────────────────────────────
+    public String buildStarString(double rating) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 1; i <= 5; i++) {
+            if      (rating >= i)       sb.append("\u2605"); // ★ full
+            else if (rating >= i - 0.5) sb.append("\u00BD"); // ½ half
+            else                        sb.append("\u2606"); // ☆ empty
+        }
+        return sb.toString();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // filterReviews()
+    //
+    // Returns a filtered sub-list of the given reviews based on:
+    //   keyword    — case-insensitive match against all text fields
+    //   ratingIndex — 0 = All, 1 = 5★, 2 = 4★, 3 = 3★, 4 = 2★, 5 = 1★
+    //
+    // Moved here from StaffReviewPage.applyFilters() so the page
+    // only needs to call one method and bind the result to the table.
+    // ─────────────────────────────────────────────────────────────
+    public List<StaffReview> filterReviews(List<StaffReview> reviews,
+                                           String keyword,
+                                           int ratingIndex) {
+
+        // Normalise keyword for case-insensitive search
+        String kw = (keyword == null) ? "" : keyword.trim().toLowerCase();
+
+        List<StaffReview> filtered = new ArrayList<>();
+
+        for (StaffReview review : reviews) {
+
+            // Does the keyword appear in any column?
+            boolean keywordMatch = kw.isEmpty()
+                    || review.commentId     .toLowerCase().contains(kw)
+                    || review.staffName     .toLowerCase().contains(kw)
+                    || review.technicianName.toLowerCase().contains(kw)
+                    || review.appointmentId .toLowerCase().contains(kw)
+                    || review.vehicleType   .toLowerCase().contains(kw)
+                    || review.carPlate      .toLowerCase().contains(kw)
+                    || review.feedbackText  .toLowerCase().contains(kw)
+                    || review.date          .toLowerCase().contains(kw)
+                    || String.valueOf(review.rating).contains(kw);
+
+            // Does the rating fall in the selected band?
+            boolean ratingMatch;
+            switch (ratingIndex) {
+                case 1:  ratingMatch = (review.rating >= 4.5);                        break;
+                case 2:  ratingMatch = (review.rating >= 3.5 && review.rating < 4.5); break;
+                case 3:  ratingMatch = (review.rating >= 2.5 && review.rating < 3.5); break;
+                case 4:  ratingMatch = (review.rating >= 1.5 && review.rating < 2.5); break;
+                case 5:  ratingMatch = (review.rating  < 1.5);                        break;
+                default: ratingMatch = true; // "All Ratings"
+            }
+
+            if (keywordMatch && ratingMatch) {
+                filtered.add(review);
+            }
+        }
+
+        return filtered;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // sortReviews()
+    //
+    // Sorts the given list IN PLACE by the specified column index
+    // (matching the column order used in StaffReviewPage's table):
+    //
+    //   0 = Comment ID      5 = Car Plate
+    //   1 = Staff Name      6 = Rating
+    //   2 = Technician Name 7 = Feedback
+    //   3 = Appointment ID  8 = Date
+    //   4 = Vehicle Type
+    //
+    // Pass sortColumnIndex = -1 to skip sorting entirely.
+    //
+    // Moved here from StaffReviewPage.applySortToList() so the page
+    // only handles display and delegates all ordering logic here.
+    // ─────────────────────────────────────────────────────────────
+    public void sortReviews(List<StaffReview> list,
+                            int sortColumnIndex,
+                            boolean ascending) {
+
+        if (sortColumnIndex < 0) return; // no sort requested
+
+        Comparator<StaffReview> comparator;
+
+        switch (sortColumnIndex) {
+            case 0:  comparator = Comparator.comparing(r -> r.commentId);      break;
+            case 1:  comparator = Comparator.comparing(r -> r.staffName);      break;
+            case 2:  comparator = Comparator.comparing(r -> r.technicianName); break;
+            case 3:  comparator = Comparator.comparing(r -> r.appointmentId);  break;
+            case 4:  comparator = Comparator.comparing(r -> r.vehicleType);    break;
+            case 5:  comparator = Comparator.comparing(r -> r.carPlate);       break;
+            case 6:  comparator = Comparator.comparingDouble(r -> r.rating);   break;
+            case 7:  comparator = Comparator.comparing(r -> r.feedbackText);   break;
+            case 8:  comparator = Comparator.comparing(r -> r.date);           break;
+            default: comparator = Comparator.comparing(r -> r.commentId);      break;
+        }
+
+        if (!ascending) {
+            comparator = comparator.reversed();
+        }
+
+        list.sort(comparator);
     }
 }
