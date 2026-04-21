@@ -15,37 +15,26 @@ import java.util.List;
  * ServiceHistoryPage
  *
  * RESPONSIBILITIES (view only):
- *   - Builds and displays all GUI components (stat cards, search bar, table).
- *   - Delegates ALL data loading, filtering, ID resolution, and stat
+ *   - Builds and displays all GUI components (stat cards, search/sort bar, table).
+ *   - Delegates ALL data loading, filtering, sorting, ID resolution, and stat
  *     computation to ServiceHistoryService.
  *
  * DATA FLOW:
  *   refresh()
- *     └─► serviceHistoryService.getRecordsForCustomer()  → filtered rows
- *     └─► serviceHistoryService.getSummaryStats()        → SummaryStats object
- *     └─► serviceHistoryService.buildTableRows()         → display-ready Object[] rows
+ *     └─► serviceHistoryService.getRecordsForCustomer()   → filtered rows
+ *     └─► serviceHistoryService.getSummaryStats()         → SummaryStats object
+ *     └─► serviceHistoryService.buildTableRows()          → display-ready Object[] rows
  *
- * METHODS REMOVED (moved to ServiceHistoryService.java):
- *   - resolveTechnicianName()   → ServiceHistoryService.resolveTechnicianName()
- *   - resolveVehicleType()      → ServiceHistoryService.resolveVehicleType()
- *   - resolveCarPlate()         → ServiceHistoryService.resolveCarPlate()
- *   - updateStatsCards()        → ServiceHistoryService.getSummaryStats()
- *   - fillTable()               → ServiceHistoryService.buildTableRows()
- *   - inline customer filter    → ServiceHistoryService.getRecordsForCustomer()
+ *   applySort()
+ *     └─► serviceHistoryService.applySort()               → sets sort keys on rowSorter
+ *         (sort option labels come from serviceHistoryService.getAvailableSortOptions())
  *
- * CHANGE FROM PREVIOUS VERSION:
- *   - Removed the CardLayout / empty-state panel entirely.
- *   - The page now ALWAYS shows the full layout:
- *       stat cards (showing "0" or "—" when there is no data)
- *       + the table (showing no rows when there is no data).
- *   - This matches the Dashboard behaviour where 0 values are
- *     displayed instead of a special "no data" card.
+ *   applyFilter()
+ *     └─► serviceHistoryService.applyFilter()             → sets RowFilter on rowSorter
  */
 public class ServiceHistoryPage extends JPanel {
 
     // ── Data-layer service ────────────────────────────────────────
-    // Only ONE service is needed now — AccountService and VehicleService
-    // have been moved inside ServiceHistoryService.
     private final ServiceHistoryService serviceHistoryService = new ServiceHistoryService();
 
     // ── Stat card value labels — updated by refresh() ─────────────
@@ -59,10 +48,12 @@ public class ServiceHistoryPage extends JPanel {
     private DefaultTableModel tableModel;
     private TableRowSorter<DefaultTableModel> rowSorter;
 
-    // ── Search field ──────────────────────────────────────────────
-    private JTextField searchField;
+    // ── Search field and sort dropdown ────────────────────────────
+    // Both stored as fields so refresh() can reset them to defaults.
+    private JTextField        searchField;
+    private JComboBox<String> sortCombo;
 
-    // ── Design colours — same palette used across all pages ───────
+    // ── Design colours ────────────────────────────────────────────
     private static final Color COLOR_BG     = new Color(245, 246, 250);
     private static final Color COLOR_CARD   = Color.WHITE;
     private static final Color COLOR_BORDER = new Color(225, 228, 235);
@@ -81,17 +72,12 @@ public class ServiceHistoryPage extends JPanel {
         setLayout(new BorderLayout());
         setBackground(COLOR_BG);
 
-        // The entire page content sits inside a scroll pane so the
-        // user can scroll down if the window is too small.
+        // Entire page sits inside a scroll pane so small windows can scroll
         JPanel pageContent = new JPanel(new BorderLayout());
         pageContent.setBackground(COLOR_BG);
         pageContent.setBorder(new EmptyBorder(24, 28, 28, 28));
 
-        // Subtitle shown below the header title
         pageContent.add(buildPageHeader(), BorderLayout.NORTH);
-
-        // Main area: stat cards on top + table below
-        // This is ALWAYS shown, whether or not there is data.
         pageContent.add(buildDataPanel(), BorderLayout.CENTER);
 
         JScrollPane outerScroll = new JScrollPane(pageContent);
@@ -125,18 +111,15 @@ public class ServiceHistoryPage extends JPanel {
     // buildDataPanel()
     //
     // Holds the three stat cards (NORTH) and the table card (CENTER).
-    // This panel is always visible regardless of whether data exists.
+    // Always visible regardless of whether data exists.
     // ─────────────────────────────────────────────────────────────
     private JPanel buildDataPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setOpaque(false);
 
-        // Three stat cards side by side at the top
         JPanel statsRow = buildStatsRow();
         statsRow.setBorder(new EmptyBorder(0, 0, 18, 0));
-        panel.add(statsRow, BorderLayout.NORTH);
-
-        // The table card fills the remaining space
+        panel.add(statsRow,         BorderLayout.NORTH);
         panel.add(buildTableCard(), BorderLayout.CENTER);
 
         return panel;
@@ -145,17 +128,13 @@ public class ServiceHistoryPage extends JPanel {
     // ─────────────────────────────────────────────────────────────
     // buildStatsRow() — three summary stat cards side by side
     //
-    // Each card has a coloured left accent bar and shows a big value
-    // label plus a smaller subtitle label.
-    // The labels are stored in instance fields so refresh() can
-    // update them with real data later.
+    // Labels stored in instance fields so refresh() can update them.
     // ─────────────────────────────────────────────────────────────
     private JPanel buildStatsRow() {
         JPanel row = new JPanel(new GridLayout(1, 3, 14, 0));
         row.setOpaque(false);
 
         // Card 1: Total services — blue left bar
-        // Starts at "0" until refresh() loads real data
         totalServicesValueLabel = makeBigValueLabel("0");
         row.add(buildStatCard(
                 "Total services",
@@ -191,12 +170,9 @@ public class ServiceHistoryPage extends JPanel {
     // buildStatCard()
     //
     // Creates one white rounded card with a coloured left accent bar.
-    // The bar is drawn by clipping the Graphics context to the
-    // rounded rectangle shape, then filling the leftmost 4 pixels.
     // ─────────────────────────────────────────────────────────────
     private JPanel buildStatCard(String topText, JLabel valueLabel,
                                   JLabel subLabel, Color accentColor) {
-
         JPanel card = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
@@ -212,7 +188,7 @@ public class ServiceHistoryPage extends JPanel {
                 g2.setColor(COLOR_BORDER);
                 g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 14, 14);
 
-                // 3. Coloured left accent bar — clip so it stays inside rounded corners
+                // 3. Coloured left accent bar — clipped to rounded corners
                 g2.setClip(new java.awt.geom.RoundRectangle2D.Float(
                         0, 0, getWidth(), getHeight(), 14, 14));
                 g2.setColor(accentColor);
@@ -223,7 +199,6 @@ public class ServiceHistoryPage extends JPanel {
         };
         card.setOpaque(false);
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
-        // Left padding = 16 (4 px bar + 12 px gap); right = 20
         card.setBorder(new EmptyBorder(18, 16, 18, 20));
 
         JLabel topLabel = new JLabel(topText);
@@ -247,12 +222,11 @@ public class ServiceHistoryPage extends JPanel {
     // buildTableCard()
     //
     // White rounded card containing:
-    //   NORTH  — search bar
-    //   CENTER — the data table (empty rows when there is no data)
+    //   NORTH  — search + sort bar
+    //   CENTER — the data table (empty when there is no data)
     // ─────────────────────────────────────────────────────────────
     private JPanel buildTableCard() {
 
-        // Custom-painted white rounded card panel
         JPanel card = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
@@ -269,8 +243,8 @@ public class ServiceHistoryPage extends JPanel {
         card.setOpaque(false);
         card.setLayout(new BorderLayout());
 
-        // Search bar at the top of the card
-        card.add(buildSearchBar(), BorderLayout.NORTH);
+        // Search + sort bar at the top of the card
+        card.add(buildSearchSortBar(), BorderLayout.NORTH);
 
         // Table column headers
         String[] columns = {
@@ -282,13 +256,13 @@ public class ServiceHistoryPage extends JPanel {
         tableModel = new DefaultTableModel(columns, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
-                return false; // customers cannot edit anything
+                return false;
             }
         };
 
         JTable table = TableHelper.buildTable(tableModel);
 
-        // Row sorter enables the search filter to hide non-matching rows
+        // Row sorter enables both the search filter and the column sort
         rowSorter = new TableRowSorter<>(tableModel);
         table.setRowSorter(rowSorter);
 
@@ -366,16 +340,25 @@ public class ServiceHistoryPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // buildSearchBar()
+    // buildSearchSortBar()
     //
-    // A simple right-aligned search field that filters the table
-    // rows live as the user types.
+    // A bar at the top of the table card containing two controls:
+    //   • A text field  — live keyword search across all columns
+    //   • A JComboBox   — sorts the table by date or technician
+    //
+    // Layout: both controls are flush to the RIGHT edge of the bar,
+    // with 8 px between them. This mirrors PaymentHistoryPage exactly.
+    //
+    // The sort option labels are fetched from ServiceHistoryService
+    // so the view never hard-codes them here.
     // ─────────────────────────────────────────────────────────────
-    private JPanel buildSearchBar() {
-        JPanel bar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+    private JPanel buildSearchSortBar() {
+
+        // RIGHT-aligned flow with 8 px horizontal gap between controls
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         bar.setOpaque(false);
 
-        // Search text field
+        // ── Search text field ─────────────────────────────────────
         searchField = new JTextField(16);
         searchField.setFont(new Font("SansSerif", Font.PLAIN, 13));
         searchField.setBackground(Color.WHITE);
@@ -405,16 +388,34 @@ public class ServiceHistoryPage extends JPanel {
             }
         });
 
-        // Filter table on every keystroke
-        searchField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-            @Override public void insertUpdate(javax.swing.event.DocumentEvent e)  { applyFilter(); }
-            @Override public void removeUpdate(javax.swing.event.DocumentEvent e)  { applyFilter(); }
-            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { applyFilter(); }
-        });
+        // applyFilter() is called on every single keystroke
+        searchField.getDocument().addDocumentListener(
+            new javax.swing.event.DocumentListener() {
+                @Override public void insertUpdate(javax.swing.event.DocumentEvent e)  { applyFilter(); }
+                @Override public void removeUpdate(javax.swing.event.DocumentEvent e)  { applyFilter(); }
+                @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { applyFilter(); }
+            }
+        );
 
+        // ── Sort dropdown (JComboBox) ─────────────────────────────
+        // Labels come from the service layer — view stays logic-free
+        String[] sortOptions = serviceHistoryService.getAvailableSortOptions();
+
+        sortCombo = new JComboBox<>(sortOptions);
+        sortCombo.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        sortCombo.setBackground(Color.WHITE);
+        sortCombo.setForeground(COLOR_TEXT);
+        sortCombo.setPreferredSize(new Dimension(160, 30));
+        sortCombo.setBorder(BorderFactory.createLineBorder(COLOR_BORDER, 1, true));
+
+        // applySort() is called whenever the user picks a different option
+        sortCombo.addActionListener(e -> applySort());
+
+        // Add both controls to the bar (search first, then sort)
         bar.add(searchField);
+        bar.add(sortCombo);
 
-        // Bottom border divides the search bar from the table
+        // Bottom border divides the bar from the table rows below it
         bar.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, COLOR_BORDER),
                 new EmptyBorder(10, 16, 10, 16)
@@ -427,46 +428,40 @@ public class ServiceHistoryPage extends JPanel {
     // applyFilter()
     //
     // Called on every keystroke in the search field.
-    // Uses RowFilter to show only rows that contain the search text
-    // in any column. Case-insensitive.
+    // Delegates entirely to ServiceHistoryService — no filter logic
+    // lives in the view.
     // ─────────────────────────────────────────────────────────────
     private void applyFilter() {
-        if (rowSorter == null || searchField == null) return;
+        serviceHistoryService.applyFilter(rowSorter,
+                searchField != null ? searchField.getText() : "");
+    }
 
-        String text = searchField.getText().trim();
-        if (text.equals("Search...") || text.isEmpty()) {
-            rowSorter.setRowFilter(null); // remove filter — show all rows
-            return;
-        }
-
-        try {
-            // (?i) = case-insensitive; Pattern.quote = treat as literal text
-            rowSorter.setRowFilter(RowFilter.regexFilter(
-                    "(?i)" + java.util.regex.Pattern.quote(text)));
-        } catch (java.util.regex.PatternSyntaxException ignored) {
-            // Ignore if the user types regex special characters
-        }
+    // ─────────────────────────────────────────────────────────────
+    // applySort()
+    //
+    // Called when the user changes the selection in the sort dropdown.
+    // Delegates entirely to ServiceHistoryService — no sort logic
+    // lives in the view.
+    // ─────────────────────────────────────────────────────────────
+    private void applySort() {
+        serviceHistoryService.applySort(rowSorter,
+                sortCombo != null ? (String) sortCombo.getSelectedItem() : null);
     }
 
     // ═══════════════════════════════════════════════════════════════
     // refresh()
     //
     // Called when the page becomes visible or the user logs in.
-    // Delegates all data loading and computation to
-    // ServiceHistoryService, then applies the results to the GUI.
-    //
-    // If there are no records the stat cards show "0" / "—" and
-    // the table shows an empty grid — no special empty-state panel.
+    // Delegates all data loading and computation to ServiceHistoryService,
+    // then applies the results to the GUI labels and table.
     // ═══════════════════════════════════════════════════════════════
     public void refresh() {
-        // Walk up the Swing component tree to find the AppFrame
-        // which stores the logged-in user object
         model.User loggedInUser = getLoggedInUser();
 
         if (loggedInUser == null) {
             // No user logged in — reset everything to zero / dash
             resetStatsToZero();
-            tableModel.setRowCount(0); // clear any previous rows
+            tableModel.setRowCount(0);
             return;
         }
 
@@ -475,12 +470,11 @@ public class ServiceHistoryPage extends JPanel {
         List<String[]> myRecords = serviceHistoryService.getRecordsForCustomer(customerId);
 
         if (myRecords.isEmpty()) {
-            // Customer exists but has no service records yet —
-            // show zero values in the stat cards and an empty table
+            // Customer has no service records yet — show zero values
             resetStatsToZero();
             tableModel.setRowCount(0);
         } else {
-            // ── 2. Update stat cards using data from the service layer ──
+            // ── 2. Update stat cards ───────────────────────────────
             SummaryStats stats = serviceHistoryService.getSummaryStats(myRecords);
             totalServicesValueLabel.setText(String.valueOf(stats.totalServices));
             latestServiceValueLabel.setText(stats.latestServiceDate);
@@ -488,20 +482,30 @@ public class ServiceHistoryPage extends JPanel {
             favTechValueLabel.setText(stats.favTechName);
             favTechSubLabel.setText(stats.favTechSubText);
 
-            // ── 3. Fill the table using display-ready rows from the service layer ──
+            // ── 3. Fill the table ──────────────────────────────────
             tableModel.setRowCount(0); // clear old rows first
             for (Object[] row : serviceHistoryService.buildTableRows(myRecords)) {
                 tableModel.addRow(row);
             }
         }
 
-        // Reset the search field back to the placeholder
+        // ── Reset ALL controls to their default state ─────────────
+        // Runs whether or not there is data, so controls are always
+        // clean when the user returns to this page.
+
         if (searchField != null) {
             searchField.setForeground(COLOR_MUTED);
             searchField.setText("Search...");
         }
+
+        // Reset the sort dropdown back to the placeholder
+        if (sortCombo != null) {
+            sortCombo.setSelectedIndex(0);
+        }
+
         if (rowSorter != null) {
-            rowSorter.setRowFilter(null);
+            rowSorter.setRowFilter(null); // clear any active text filter
+            rowSorter.setSortKeys(null);  // clear any active column sort
         }
     }
 
@@ -522,7 +526,7 @@ public class ServiceHistoryPage extends JPanel {
     // ─────────────────────────────────────────────────────────────
     // getLoggedInUser()
     //
-    // Walks up the Swing parent chain to find the AppFrame,
+    // Walks up the Swing parent chain to find AppFrame,
     // then returns the currently logged-in User object.
     // ─────────────────────────────────────────────────────────────
     private model.User getLoggedInUser() {
@@ -539,7 +543,6 @@ public class ServiceHistoryPage extends JPanel {
     // ─────────────────────────────────────────────────────────────
     // Label factory helpers
     // ─────────────────────────────────────────────────────────────
-
     private JLabel makeBigValueLabel(String text) {
         JLabel label = new JLabel(text);
         label.setFont(new Font("SansSerif", Font.BOLD, 24));
@@ -559,7 +562,7 @@ public class ServiceHistoryPage extends JPanel {
     //
     // KEPT for backward compatibility — other pages (StaffReviewPage,
     // MyFeedbackPage) still call this static method.
-    // It is no longer used by ServiceHistoryPage itself.
+    // Not used by ServiceHistoryPage itself.
     // ═══════════════════════════════════════════════════════════════
     public static JPanel buildNoDataPanel(String iconUnicode, String title, String subtitle) {
         Color bgColor     = new Color(248, 249, 253);

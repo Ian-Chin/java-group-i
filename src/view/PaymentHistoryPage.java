@@ -35,6 +35,10 @@ import java.util.List;
  *   - countPaidRows()          → PaymentService.countPaidRows()
  *   - countPendingRows()       → PaymentService.countPendingRows()
  *   - getPreferredMethod()     → PaymentService.getPreferredMethod()
+ *
+ * REFACTOR: Search/sort/filter logic moved to PaymentService:
+ *   - applyFilter() keyword matching → PaymentService.filterByKeyword()
+ *   - applySort()   comparator logic → PaymentService.getSortComparator()
  */
 public class PaymentHistoryPage extends JPanel {
 
@@ -440,54 +444,96 @@ public class PaymentHistoryPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // applyFilter() — live keyword search across all columns
+    // applyFilter() — delegates keyword matching to PaymentService.
+    //
+    // The RowFilter is still set here (Swing concern) but the
+    // per-row match logic lives in PaymentService.matchesKeyword().
     // ─────────────────────────────────────────────────────────────
     private void applyFilter() {
         if (rowSorter == null || searchField == null) return;
 
         String text = searchField.getText().trim();
+
+        // Clear filter when the field is empty or shows the placeholder
+        if (paymentService.filterByKeyword(new ArrayList<>(), text).equals(new ArrayList<>())) {
+            // Blank / placeholder — remove filter
+        }
+
         if (text.equals("Search...") || text.isEmpty()) {
             rowSorter.setRowFilter(null);
             return;
         }
 
-        try {
-            rowSorter.setRowFilter(RowFilter.regexFilter(
-                    "(?i)" + java.util.regex.Pattern.quote(text)));
-        } catch (java.util.regex.PatternSyntaxException ignored) {}
+        // Delegate the per-row match check to PaymentService.matchesKeyword()
+        rowSorter.setRowFilter(new RowFilter<DefaultTableModel, Integer>() {
+            @Override
+            public boolean include(Entry<? extends DefaultTableModel, ? extends Integer> entry) {
+                // Build a temporary String[] from the visible table row so we
+                // can pass it to the service without coupling the service to Swing
+                int colCount = entry.getValueCount();
+                String[] rowData = new String[colCount];
+                for (int i = 0; i < colCount; i++) {
+                    Object val = entry.getValue(i);
+                    rowData[i] = val != null ? val.toString() : "";
+                }
+                return paymentService.matchesKeyword(rowData, text);
+            }
+        });
     }
 
     // ─────────────────────────────────────────────────────────────
-    // applySort() — sorts table rows by the selected dropdown option
+    // applySort() — delegates comparator construction to PaymentService.
+    //
+    // PaymentService.getSortComparator() maps the dropdown index to a
+    // Comparator<String[]>. This method wraps it in a Swing SortKey so
+    // the TableRowSorter can apply it; all ordering logic lives in the
+    // service.
     // ─────────────────────────────────────────────────────────────
     private void applySort() {
         if (rowSorter == null || sortCombo == null) return;
 
         int selectedIndex = sortCombo.getSelectedIndex();
 
-        // Column 5 = Amount: use numeric comparator so "120" < "350"
-        rowSorter.setComparator(5, (Comparator<Object>) (a, b) -> {
-            try {
-                return Double.compare(Double.parseDouble(a.toString()),
-                                      Double.parseDouble(b.toString()));
-            } catch (NumberFormatException e) {
-                return a.toString().compareTo(b.toString());
-            }
-        });
+        // Ask PaymentService for the appropriate Comparator
+        Comparator<String[]> comparator = paymentService.getSortComparator(selectedIndex);
 
-        List<RowSorter.SortKey> keys = new ArrayList<>();
+        if (comparator == null) {
+            // Index 0 "Sort by..." — clear all sort keys
+            rowSorter.setSortKeys(null);
+            return;
+        }
 
+        // Determine which column index the service is sorting on so we can
+        // register the comparator with the TableRowSorter for that column.
+        // Column mapping mirrors getSortComparator()'s switch:
+        //   1,2 → col 6 (Date)   3,4 → col 5 (Amount)
+        //   5   → col 7 (Method) 6   → col 0 (Payment ID)
+        int sortCol;
+        SortOrder sortOrder;
         switch (selectedIndex) {
-            case 0: rowSorter.setSortKeys(null); return;
-            case 1: keys.add(new RowSorter.SortKey(6, SortOrder.DESCENDING)); break; // Date newest
-            case 2: keys.add(new RowSorter.SortKey(6, SortOrder.ASCENDING));  break; // Date oldest
-            case 3: keys.add(new RowSorter.SortKey(5, SortOrder.DESCENDING)); break; // Amount high
-            case 4: keys.add(new RowSorter.SortKey(5, SortOrder.ASCENDING));  break; // Amount low
-            case 5: keys.add(new RowSorter.SortKey(7, SortOrder.ASCENDING));  break; // Method A-Z
-            case 6: keys.add(new RowSorter.SortKey(0, SortOrder.ASCENDING));  break; // Payment ID
+            case 1:  sortCol = 6; sortOrder = SortOrder.DESCENDING; break;
+            case 2:  sortCol = 6; sortOrder = SortOrder.ASCENDING;  break;
+            case 3:  sortCol = 5; sortOrder = SortOrder.DESCENDING; break;
+            case 4:  sortCol = 5; sortOrder = SortOrder.ASCENDING;  break;
+            case 5:  sortCol = 7; sortOrder = SortOrder.ASCENDING;  break;
+            case 6:  sortCol = 0; sortOrder = SortOrder.ASCENDING;  break;
             default: rowSorter.setSortKeys(null); return;
         }
 
+        // Wrap the service's Comparator<String[]> into a column-level
+        // Comparator<Object> that TableRowSorter expects
+        rowSorter.setComparator(sortCol, (Comparator<Object>) (a, b) -> {
+            // Reconstruct minimal String[] stubs containing only the
+            // relevant column so the service comparator can do its work
+            String[] rowA = new String[9];
+            String[] rowB = new String[9];
+            rowA[sortCol] = a != null ? a.toString() : "";
+            rowB[sortCol] = b != null ? b.toString() : "";
+            return comparator.compare(rowA, rowB);
+        });
+
+        List<RowSorter.SortKey> keys = new ArrayList<>();
+        keys.add(new RowSorter.SortKey(sortCol, sortOrder));
         rowSorter.setSortKeys(keys);
     }
 

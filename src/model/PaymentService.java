@@ -2,6 +2,7 @@ package model;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -29,6 +30,11 @@ import java.util.Set;
  *  - countPaidRows()           : counts rows with status "Paid"
  *  - countPendingRows()        : counts rows with status "Pending"
  *  - getPreferredMethod()      : finds the most-used payment method
+ *
+ * SEARCH / SORT / FILTER HELPERS (moved from PaymentHistoryPage.java):
+ *  - matchesKeyword()          : tests whether a row matches a keyword across all columns
+ *  - filterByKeyword()         : returns only the rows that match a keyword
+ *  - getSortComparator()       : returns the Comparator for a given sort-dropdown index
  *
  * CHANGE: findServiceHistoryId() has been removed from this class.
  *   It was a private method that read serviceHistory.txt — that file is owned
@@ -352,5 +358,121 @@ public class PaymentService {
             }
         }
         return total;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // SEARCH, SORT & FILTER HELPERS
+    // (moved from PaymentHistoryPage.java)
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * matchesKeyword() — returns true if any column in the row contains
+     * the keyword (case-insensitive, regex-quoted for safety).
+     *
+     * MOVED FROM: PaymentHistoryPage.applyFilter() (inline RowFilter logic)
+     *
+     * @param row     a single payment row (9-element String array)
+     * @param keyword the search term to match; must not be null or empty
+     * @return true if any column value contains the keyword
+     */
+    public boolean matchesKeyword(String[] row, String keyword) {
+        String pattern = "(?i)" + java.util.regex.Pattern.quote(keyword);
+        for (String cell : row) {
+            if (cell != null && cell.matches(".*" + pattern + ".*")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * filterByKeyword() — returns only the rows whose any column contains
+     * the keyword. Returns the original list unchanged when the keyword is
+     * null, empty, or the placeholder string "Search...".
+     *
+     * MOVED FROM: PaymentHistoryPage.applyFilter() (inline DocumentListener logic)
+     *
+     * @param rows    the full list of payment rows to search through
+     * @param keyword the search term; safe to pass directly from the search field
+     * @return a new list containing only matching rows, or the original list if
+     *         the keyword is blank / placeholder
+     */
+    public List<String[]> filterByKeyword(List<String[]> rows, String keyword) {
+        if (keyword == null || keyword.isBlank() || keyword.equals("Search...")) {
+            return rows;
+        }
+        List<String[]> filtered = new ArrayList<>();
+        for (String[] row : rows) {
+            if (matchesKeyword(row, keyword)) {
+                filtered.add(row);
+            }
+        }
+        return filtered;
+    }
+
+    /**
+     * getSortComparator() — maps the sort-dropdown selection index used in
+     * PaymentHistoryPage to a Comparator over String[] rows.
+     *
+     * Index mapping (mirrors the sortOptions array in PaymentHistoryPage):
+     *   0  "Sort by..."           → null  (no sort / natural order)
+     *   1  "Date (Newest)"        → col 6 descending
+     *   2  "Date (Oldest)"        → col 6 ascending
+     *   3  "Amount (High→Low)"    → col 5 descending (numeric)
+     *   4  "Amount (Low→High)"    → col 5 ascending  (numeric)
+     *   5  "Method"               → col 7 ascending  (alphabetic)
+     *   6  "Payment ID"           → col 0 ascending  (alphabetic)
+     *
+     * Amount comparisons use numeric ordering so that e.g. "120" < "350".
+     * All other comparisons are case-insensitive string ordering.
+     * Returns null for index 0 or any unrecognised index, which signals
+     * PaymentHistoryPage to clear the sort keys.
+     *
+     * MOVED FROM: PaymentHistoryPage.applySort() (inline switch-case logic)
+     *
+     * @param selectedIndex the selected index of the sort JComboBox
+     * @return a Comparator<String[]> for the chosen sort order, or null
+     */
+    public Comparator<String[]> getSortComparator(int selectedIndex) {
+        switch (selectedIndex) {
+            case 1: // Date (Newest) — col 6 descending
+                return (a, b) -> b[6].trim().compareTo(a[6].trim());
+
+            case 2: // Date (Oldest) — col 6 ascending
+                return (a, b) -> a[6].trim().compareTo(b[6].trim());
+
+            case 3: // Amount (High→Low) — col 5 descending, numeric
+                return (a, b) -> {
+                    try {
+                        return Double.compare(
+                                Double.parseDouble(b[5].trim()),
+                                Double.parseDouble(a[5].trim()));
+                    } catch (NumberFormatException e) {
+                        return b[5].trim().compareTo(a[5].trim());
+                    }
+                };
+
+            case 4: // Amount (Low→High) — col 5 ascending, numeric
+                return (a, b) -> {
+                    try {
+                        return Double.compare(
+                                Double.parseDouble(a[5].trim()),
+                                Double.parseDouble(b[5].trim()));
+                    } catch (NumberFormatException e) {
+                        return a[5].trim().compareTo(b[5].trim());
+                    }
+                };
+
+            case 5: // Method — col 7 ascending, case-insensitive
+                return Comparator.comparing(
+                        row -> row[7].trim().toLowerCase());
+
+            case 6: // Payment ID — col 0 ascending, case-insensitive
+                return Comparator.comparing(
+                        row -> row[0].trim().toLowerCase());
+
+            default: // index 0 "Sort by..." or unknown → no sort
+                return null;
+        }
     }
 }
