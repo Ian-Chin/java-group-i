@@ -23,7 +23,26 @@ import java.util.List;
 
 /**
  * ============================================================
- * ViewProfile.java — Customer Profile Page
+ * ViewProfile.java — Customer Profile Page (GUI only)
+ * ============================================================
+ *
+ * This class is responsible ONLY for building and displaying the
+ * profile UI. All business logic has been moved to:
+ *
+ *   CustomerProfileController.java  — Personal Information card
+ *     - getCurrentName()            : read current name from file
+ *     - getCurrentEmail()           : read current email from file
+ *     - hasNoChanges()              : detect no-op saves
+ *     - saveProfile()               : validate + persist name/email
+ *
+ *   VehicleSectionController.java   — My Vehicles card
+ *     - loadVehiclesForUser()       : read vehicles.txt for this user
+ *     - handleAdd()                 : validate + save new vehicle
+ *     - handleEdit()                : validate + update existing vehicle
+ *     - handleDelete() /
+ *       deleteVehicleDirectly()     : remove vehicle from file
+ *     - validateFields()            : shared add/edit validation
+ *
  * ============================================================
  *
  * SCROLL BAR / GHOST SPACE FIX (latest change):
@@ -53,50 +72,6 @@ import java.util.List;
  *     // NOT added to any panel here.
  *     // It only enters vehicleListPanel when + Add is clicked,
  *     // and is removed again on Cancel or successful Save.
- *
- *   WHY THIS WORKS:
- *   vehicleListPanel now only ever contains real vehicle rows.
- *   Its total height is exactly (n x 64px) + ((n-1) x 6px).
- *   When n <= 6  ->  fits in the scroll pane  ->  no scroll bar.
- *   When n >= 7  ->  overflows scroll pane   ->  scroll bar appears.
- *   This is exactly the intended behaviour.
- *
- * ============================================================
- *
- * BUTTON VERTICAL CENTERING FIX:
- *
- *   The Edit/Remove buttons (in display mode) and Save/Cancel buttons
- *   (in edit mode) inside each vehicle row were not vertically centered.
- *
- *   ROOT CAUSE:
- *   The actions panel in buildVehicleRow() used FlowLayout, which only
- *   centers content horizontally, not vertically. The button panel in
- *   buildEditCard() used GridBagConstraints but without setting fill
- *   and weighty correctly for vertical centering.
- *
- *   THE FIX:
- *   - In buildVehicleRow(): Replace FlowLayout with GridBagLayout and
- *     use GridBagConstraints with anchor = CENTER and weighty = 1.0
- *     on the outer wrapper so the buttons sit in the middle vertically.
- *
- *   - In buildEditCard(): Same approach — use GridBagConstraints with
- *     anchor = GridBagConstraints.CENTER and a fill = VERTICAL wrapper
- *     so Save/Cancel buttons are vertically centered in the edit row.
- *
- * ============================================================
- *
- * PERSONAL INFO CARD GAP FIX:
- *
- *   Reduced the vertical gap between Username, Email, and Role rows
- *   from 14px to 6px. This makes the fields sit closer together and
- *   gives the card a more compact, modern look.
- *
- *   WHAT CHANGED (4 lines only, inside buildPersonalInfoCard()):
- *     Box.createVerticalStrut(14)  ->  Box.createVerticalStrut(6)
- *     — after nameReadPanel
- *     — after nameEditPanel
- *     — after emailReadPanel
- *     — after emailEditPanel
  *
  * ============================================================
  */
@@ -249,6 +224,11 @@ public class ViewProfile extends JPanel {
 
     /**
      * Rebuilds all vehicle rows with fresh data.
+     *
+     * Called by VehicleSectionController.refreshList() (via the
+     * SectionView.rebuildList callback) after any add/edit/delete,
+     * and also called directly by loadVehicles().
+     *
      * Each String[] holds: [0] id  [1] type  [2] plate  [3] brand  [4] year  [5] colour
      */
     public void rebuildVehicleList(List<String[]> vehicles) {
@@ -259,8 +239,6 @@ public class ViewProfile extends JPanel {
                 && vehicleListPanel.isAncestorOf(vehicleAddPanel);
 
         // If the form is open, detach it cleanly before clearing all rows.
-        // We strip it (and its preceding gap strut) so removeAll() has a
-        // clean slate, then re-attach it at the end if it was open.
         if (addFormWasOpen) {
             int count = vehicleListPanel.getComponentCount();
             if (count > 0) {
@@ -312,13 +290,21 @@ public class ViewProfile extends JPanel {
 
 
     // =========================================================
-    // PRIVATE — load vehicles directly from VehicleService
+    // PRIVATE — load vehicles via VehicleSectionController
     // =========================================================
 
+    /**
+     * Loads vehicles for the currently logged-in user.
+     *
+     * CHANGED: was calling vehicleService.getVehiclesByUserId() directly.
+     * Now delegates to vehicleController.loadVehiclesForUser() so that
+     * the data-reading logic lives in VehicleSectionController.java.
+     */
     private void loadVehicles() {
         User user = app.getLoggedInUserObj();
         if (user == null || vehicleListPanel == null) return;
-        List<String[]> list = vehicleService.getVehiclesByUserId(user.getUserId());
+        // Data read is delegated to VehicleSectionController
+        List<String[]> list = vehicleController.loadVehiclesForUser(user.getUserId());
         rebuildVehicleList(list);
     }
 
@@ -346,12 +332,6 @@ public class ViewProfile extends JPanel {
     private JPanel buildBannerSection() {
         JPanel hero = new JPanel(null);
         hero.setOpaque(false);
-        // Hero height increased from 200 -> 240px.
-        // This is the total height of the banner section including the
-        // part of the profile picture that hangs below the banner image.
-        // Making it taller pushes the Personal Info and My Vehicles cards
-        // further down the page.
-        // Hero height reduced from 240 -> 215px (banner is shorter).
         hero.setPreferredSize(new Dimension(0, 215));
         hero.setMaximumSize(new Dimension(Integer.MAX_VALUE, 215));
 
@@ -427,10 +407,7 @@ public class ViewProfile extends JPanel {
 
         hero.addComponentListener(new java.awt.event.ComponentAdapter() {
             @Override public void componentResized(java.awt.event.ComponentEvent e) {
-                // Banner height reduced from 200 -> 175px.
                 profileBanner.setBounds(0, 0, hero.getWidth(), 175);
-                // Profile pic moved up slightly from y=115 -> y=105 to stay
-                // naturally half-overlapping the shorter banner bottom edge.
                 profilePicLabel.setBounds(30, 105, 110, 110);
             }
         });
@@ -502,9 +479,23 @@ public class ViewProfile extends JPanel {
 
 
     // =========================================================
-    // PERSONAL INFORMATION CARD
+    // PERSONAL INFORMATION CARD  (GUI only)
     // =========================================================
 
+    /**
+     * Builds the Personal Information card.
+     *
+     * All data reads use profileController.getCurrentName() /
+     * getCurrentEmail() (CustomerProfileController.java).
+     *
+     * Button actions delegate to:
+     *   enterEditMode()      — UI toggle (this file)
+     *   exitEditMode()       — UI toggle (this file)
+     *   saveProfileChanges() — UI wrapper that calls
+     *                          profileController.hasNoChanges() +
+     *                          profileController.saveProfile()
+     *                          (CustomerProfileController.java)
+     */
     private JPanel buildPersonalInfoCard() {
         JPanel card = makeCard();
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
@@ -547,11 +538,14 @@ public class ViewProfile extends JPanel {
         card.add(makeDivider());
         card.add(Box.createVerticalStrut(18));
 
-        // ── Pull current user data ─────────────────────────────────────
+        // ── Pull current user data via profileController ───────────────
+        // Data is read from CustomerProfileController, not directly from
+        // the User object or AccountService.
+        String name  = profileController.getCurrentName();
+        String email = profileController.getCurrentEmail();
+
         User   user  = app.getLoggedInUserObj();
-        String name  = (user != null && user.getName()  != null) ? user.getName()  : "";
-        String email = (user != null && user.getEmail() != null) ? user.getEmail() : "";
-        String role  = (user != null && user.getRole()  != null) ? user.getRole()  : "";
+        String role  = (user != null && user.getRole() != null) ? user.getRole() : "";
         if (!role.isEmpty())
             role = Character.toUpperCase(role.charAt(0)) + role.substring(1).toLowerCase();
 
@@ -559,12 +553,7 @@ public class ViewProfile extends JPanel {
         nameReadPanel    = makeReadRow("Username", name);
         displayNameLabel = getValueLabel(nameReadPanel);
         card.add(nameReadPanel);
-
-        // GAP: 6px below the Username read row.
-        // Box.createVerticalStrut(n) inserts exactly n pixels of blank
-        // vertical space between two components in a BoxLayout panel.
-        // We use 6 here (down from 14) to keep the fields closer together.
-        card.add(Box.createVerticalStrut(10));  // gap below Username read row
+        card.add(Box.createVerticalStrut(10));
 
         // ── Username edit row (shown only when user clicks Edit) ───────
         nameEditPanel = new JPanel(new BorderLayout(10, 0));
@@ -580,20 +569,15 @@ public class ViewProfile extends JPanel {
 
         nameEditPanel.add(nameFieldLabel, BorderLayout.WEST);
         nameEditPanel.add(editNameField,  BorderLayout.CENTER);
-        nameEditPanel.setVisible(false);  // hidden until Edit is clicked
+        nameEditPanel.setVisible(false);
         card.add(nameEditPanel);
-
-        // GAP: 6px below the Username edit row.
-        // Same reason as above — keeps spacing tight and consistent.
-        card.add(Box.createVerticalStrut(10));  // gap below Username edit row
+        card.add(Box.createVerticalStrut(10));
 
         // ── Email read row (shown in normal view) ──────────────────────
         emailReadPanel    = makeReadRow("Email", email);
         displayEmailLabel = getValueLabel(emailReadPanel);
         card.add(emailReadPanel);
-
-        // GAP: 6px below the Email read row.
-        card.add(Box.createVerticalStrut(10));  // gap below Email read row
+        card.add(Box.createVerticalStrut(10));
 
         // ── Email edit row (shown only when user clicks Edit) ──────────
         emailEditPanel = new JPanel(new BorderLayout(10, 0));
@@ -609,11 +593,9 @@ public class ViewProfile extends JPanel {
 
         emailEditPanel.add(emailFieldLabel, BorderLayout.WEST);
         emailEditPanel.add(editEmailField,  BorderLayout.CENTER);
-        emailEditPanel.setVisible(false);  // hidden until Edit is clicked
+        emailEditPanel.setVisible(false);
         card.add(emailEditPanel);
-
-        // GAP: 6px below the Email edit row.
-        card.add(Box.createVerticalStrut(10));  // gap below Email edit row
+        card.add(Box.createVerticalStrut(10));
 
         // ── Role read row (read-only, no edit version) ─────────────────
         JPanel roleRow = makeReadRow("Role", role);
@@ -638,6 +620,13 @@ public class ViewProfile extends JPanel {
         return card;
     }
 
+    /**
+     * Switches the Personal Information card to edit mode (UI only).
+     *
+     * Pre-populates the edit fields by calling:
+     *   profileController.getCurrentName()   (CustomerProfileController)
+     *   profileController.getCurrentEmail()  (CustomerProfileController)
+     */
     private void enterEditMode() {
         editNameField.setText(profileController.getCurrentName());
         editEmailField.setText(profileController.getCurrentEmail());
@@ -647,6 +636,13 @@ public class ViewProfile extends JPanel {
         editNameField.requestFocusInWindow();
     }
 
+    /**
+     * Switches the Personal Information card back to read mode (UI only).
+     *
+     * Restores the edit fields to the current values by calling:
+     *   profileController.getCurrentName()   (CustomerProfileController)
+     *   profileController.getCurrentEmail()  (CustomerProfileController)
+     */
     private void exitEditMode() {
         if (editNameField  != null) editNameField.setText(profileController.getCurrentName());
         if (editEmailField != null) editEmailField.setText(profileController.getCurrentEmail());
@@ -659,15 +655,28 @@ public class ViewProfile extends JPanel {
         if (btnCancel != null) btnCancel.setVisible(false);
     }
 
+    /**
+     * Save button handler for the Personal Information card (UI wrapper).
+     *
+     * Delegates all validation and persistence to:
+     *   profileController.hasNoChanges()  (CustomerProfileController)
+     *   profileController.saveProfile()   (CustomerProfileController)
+     *
+     * Only handles the resulting dialogs and UI state here.
+     */
     private void saveProfileChanges() {
         String newName  = editNameField.getText().trim();
         String newEmail = editEmailField.getText().trim();
+
+        // Delegate change-detection to CustomerProfileController
         if (profileController.hasNoChanges(newName, newEmail)) {
             JOptionPane.showMessageDialog(app, "No changes were made.", "No Changes",
                     JOptionPane.INFORMATION_MESSAGE);
             exitEditMode();
             return;
         }
+
+        // Delegate validation + persistence to CustomerProfileController
         try {
             if (profileController.saveProfile(newName, newEmail)) {
                 exitEditMode();
@@ -686,9 +695,20 @@ public class ViewProfile extends JPanel {
 
 
     // =========================================================
-    // MY VEHICLES CARD
+    // MY VEHICLES CARD  (GUI only)
     // =========================================================
 
+    /**
+     * Builds the My Vehicles card.
+     *
+     * Data loading uses vehicleController.loadVehiclesForUser()
+     * (VehicleSectionController.java).
+     *
+     * Add / Edit / Delete button actions delegate to:
+     *   vehicleController.handleAdd()              (VehicleSectionController)
+     *   vehicleController.handleEdit()             (VehicleSectionController)
+     *   vehicleController.deleteVehicleDirectly()  (VehicleSectionController)
+     */
     private JPanel buildVehicleCard() {
         vehicleCard = makeCard();
         vehicleCard.setLayout(new BoxLayout(vehicleCard, BoxLayout.Y_AXIS));
@@ -745,7 +765,6 @@ public class ViewProfile extends JPanel {
         vehicleCard.add(vehicleScrollPane);
 
         // vehicleAddPanel is NOT added here — only built and stored.
-        // The + Add button listener adds it to vehicleListPanel on demand.
         vehicleAddPanel = buildAddForm();
 
         // ── Wire up the + Add button ───────────────────────────────
@@ -790,23 +809,12 @@ public class ViewProfile extends JPanel {
     // SCROLL HELPERS
     // =========================================================
 
-    /**
-     * Scrolls vehicleScrollPane all the way to the bottom.
-     * Must be called via SwingUtilities.invokeLater() so the layout
-     * pass from revalidate() finishes before we move the scroll bar.
-     */
     private void scrollVehicleListToBottom() {
         if (vehicleScrollPane == null) return;
         JScrollBar verticalBar = vehicleScrollPane.getVerticalScrollBar();
-        // Integer.MAX_VALUE is a safe "go to end" shortcut —
-        // Swing clamps it to the real maximum automatically.
         verticalBar.setValue(Integer.MAX_VALUE);
     }
 
-    /**
-     * Scrolls vehicleScrollPane back to the very top.
-     * Must be called via SwingUtilities.invokeLater() for the same reason.
-     */
     private void scrollVehicleListToTop() {
         if (vehicleScrollPane == null) return;
         JScrollBar verticalBar = vehicleScrollPane.getVerticalScrollBar();
@@ -815,12 +823,15 @@ public class ViewProfile extends JPanel {
 
 
     // =========================================================
-    // ADD VEHICLE FORM
+    // ADD VEHICLE FORM  (GUI only)
     // =========================================================
 
     /**
      * Builds the inline add-vehicle form.
-     * Only inserted into vehicleListPanel when the user clicks + Add.
+     *
+     * The Save button delegates to vehicleController.handleAdd()
+     * (VehicleSectionController.java) for validation + persistence.
+     * This method only handles UI layout and field wiring.
      */
     private JPanel buildAddForm() {
         JPanel form = new JPanel(new BorderLayout(6, 0));
@@ -869,6 +880,7 @@ public class ViewProfile extends JPanel {
         btns.add(btnPair, makeCenterConstraints());
         form.add(btns, BorderLayout.EAST);
 
+        // ── Cancel: close form (UI only) ─────────────────────────
         cancelBtn.addActionListener(e -> {
             if (vehicleListPanel != null && vehicleListPanel.isAncestorOf(vehicleAddPanel)) {
                 vehicleListPanel.remove(vehicleAddPanel);
@@ -887,10 +899,17 @@ public class ViewProfile extends JPanel {
             if (vehicleCard  != null) { vehicleCard.revalidate(); vehicleCard.repaint(); }
         });
 
+        // ── Save: collect fields, delegate to VehicleSectionController ─
+        //
+        // CHANGED: was calling vehicleService.addVehicle() directly here.
+        // Now calls vehicleController.handleAdd() so that all validation
+        // and persistence lives in VehicleSectionController.java.
         Runnable doSave = () -> {
             String   type = (String) addTypeCombo.getSelectedItem();
             String[] data = { type, plateF.getText().trim(), brandF.getText().trim(),
                               yearF.getText().trim(), colourF.getText().trim() };
+
+            // Delegate to VehicleSectionController.handleAdd()
             boolean ok = vehicleController.handleAdd(data);
             if (ok) {
                 if (vehicleListPanel != null && vehicleListPanel.isAncestorOf(vehicleAddPanel)) {
@@ -914,30 +933,13 @@ public class ViewProfile extends JPanel {
         saveBtn.addActionListener(e -> doSave.run());
 
         // ── Add form: text field Enter key — progressive focus ─────
-        //
-        // FIX: Previously ALL text fields called doSave.run() on Enter,
-        // meaning pressing Enter on an empty plate field immediately tried
-        // to save and showed "Car Plate cannot be empty."
-        //
-        // New behaviour:
-        //   plateF  empty  -> stay on plate (user must fill it in first)
-        //   plateF  filled -> move focus to Brand / Model
-        //   brandF  empty  -> stay on brand
-        //   brandF  filled -> move focus to Year
-        //   yearF   empty  -> stay on year
-        //   yearF   filled -> move focus to Colour
-        //   colourF empty  -> stay on colour
-        //   colourF filled -> attempt save
-        //
-        // This gives a natural keyboard-driven workflow:
-        //   Type → Enter → Plate → Enter → Brand → Enter → Year → Enter → Colour → Enter → Save
         plateF.addKeyListener(new KeyAdapter() {
             @Override public void keyPressed(KeyEvent e) {
                 if (e.getKeyCode() == KeyEvent.VK_ENTER) {
                     if (plateF.getText().trim().isEmpty()) {
-                        plateF.requestFocusInWindow(); // stay here — must fill plate
+                        plateF.requestFocusInWindow();
                     } else {
-                        brandF.requestFocusInWindow(); // move to Brand / Model
+                        brandF.requestFocusInWindow();
                     }
                 }
             }
@@ -946,9 +948,9 @@ public class ViewProfile extends JPanel {
             @Override public void keyPressed(KeyEvent e) {
                 if (e.getKeyCode() == KeyEvent.VK_ENTER) {
                     if (brandF.getText().trim().isEmpty()) {
-                        brandF.requestFocusInWindow(); // stay — must fill brand
+                        brandF.requestFocusInWindow();
                     } else {
-                        yearF.requestFocusInWindow();  // move to Year
+                        yearF.requestFocusInWindow();
                     }
                 }
             }
@@ -957,9 +959,9 @@ public class ViewProfile extends JPanel {
             @Override public void keyPressed(KeyEvent e) {
                 if (e.getKeyCode() == KeyEvent.VK_ENTER) {
                     if (yearF.getText().trim().isEmpty()) {
-                        yearF.requestFocusInWindow();   // stay — must fill year
+                        yearF.requestFocusInWindow();
                     } else {
-                        colourF.requestFocusInWindow(); // move to Colour
+                        colourF.requestFocusInWindow();
                     }
                 }
             }
@@ -968,26 +970,15 @@ public class ViewProfile extends JPanel {
             @Override public void keyPressed(KeyEvent e) {
                 if (e.getKeyCode() == KeyEvent.VK_ENTER) {
                     if (colourF.getText().trim().isEmpty()) {
-                        colourF.requestFocusInWindow(); // stay — must fill colour
+                        colourF.requestFocusInWindow();
                     } else {
-                        doSave.run(); // all fields filled — attempt save
+                        doSave.run();
                     }
                 }
             }
         });
 
-        // ── Combo Enter behaviour for the ADD form ─────────────────
-        //
-        // FIX: Previously pressing Enter on the Type combo immediately
-        // called doSave.run(), which failed with "Please fill in all fields"
-        // because the plate/brand/year/colour text boxes were still empty.
-        //
-        // The correct behaviour: pressing Enter on the Type combo should
-        // move focus to the Car Plate field so the user can type the plate
-        // number next — just like pressing Tab does.
-        //
-        // When the dropdown IS open, Enter selects the item and closes it;
-        // we leave that default behaviour alone (comboOpen guards it).
+        // ── Combo Enter: move to Plate field ──────────────────────
         boolean[] comboOpen = {false};
         addTypeCombo.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
             @Override public void popupMenuWillBecomeVisible  (javax.swing.event.PopupMenuEvent e) { comboOpen[0] = true;  }
@@ -997,7 +988,6 @@ public class ViewProfile extends JPanel {
         addTypeCombo.addKeyListener(new KeyAdapter() {
             @Override public void keyPressed(KeyEvent e) {
                 if (e.getKeyCode() == KeyEvent.VK_ENTER && !comboOpen[0]) {
-                    // Move focus to Car Plate — don't try to save yet.
                     plateF.requestFocusInWindow();
                 }
             }
@@ -1008,9 +998,18 @@ public class ViewProfile extends JPanel {
 
 
     // =========================================================
-    // VEHICLE ROW
+    // VEHICLE ROW  (GUI only)
     // =========================================================
 
+    /**
+     * Builds a single vehicle row (display + edit card) for the list.
+     *
+     * Edit Save button delegates to vehicleController.handleEdit()
+     * (VehicleSectionController.java).
+     *
+     * Remove button delegates to vehicleController.deleteVehicleDirectly()
+     * (VehicleSectionController.java).
+     */
     private JPanel buildVehicleRow(String vehicleType, String plate,
                                    String brand, String year, String colour) {
 
@@ -1019,7 +1018,6 @@ public class ViewProfile extends JPanel {
         display.setOpaque(false);
         display.setBorder(new EmptyBorder(10, 12, 10, 12));
 
-        // Vehicle icon (car or motorcycle emoji)
         String iconText = "Motor".equalsIgnoreCase(vehicleType) ? ICON_MOTOR : ICON_CAR;
         JLabel iconLbl  = new JLabel(iconText, SwingConstants.CENTER);
         iconLbl.setFont(new Font("SansSerif", Font.PLAIN, 30));
@@ -1028,7 +1026,6 @@ public class ViewProfile extends JPanel {
         iconLbl.setMaximumSize  (new Dimension(ICON_SIZE, ICON_SIZE));
         display.add(iconLbl, BorderLayout.WEST);
 
-        // Vehicle info text (brand name + details)
         JPanel info = new JPanel();
         info.setLayout(new BoxLayout(info, BoxLayout.Y_AXIS));
         info.setOpaque(false);
@@ -1052,8 +1049,6 @@ public class ViewProfile extends JPanel {
         display.add(info, BorderLayout.CENTER);
 
         // ── Edit & Remove buttons — vertically centered ────────────
-        // GridBagLayout with weighty=1.0 and anchor=CENTER ensures the
-        // button pair sits exactly in the middle of the 64px row height.
         JPanel actions = makeCenteredButtonPanel();
 
         JButton editBtn   = makeFilledButton("Edit",   BLUE, Color.WHITE);
@@ -1072,9 +1067,6 @@ public class ViewProfile extends JPanel {
         // ── Edit card (shown when user clicks "Edit") ─────────────
         JPanel editCard = buildEditCard(vehicleType, plate, brand, year, colour);
 
-        // CardLayout flips between display and edit cleanly.
-        // All three size methods are locked to ROW_H for the same reason
-        // as the wrapper below — prevents BoxLayout from stretching the row.
         CardLayout switcher    = new CardLayout();
         JPanel     switchPanel = new JPanel(switcher);
         switchPanel.setOpaque(false);
@@ -1085,16 +1077,6 @@ public class ViewProfile extends JPanel {
         switchPanel.add(editCard, "edit");
         switcher.show(switchPanel, "display");
 
-        // Outer wrapper with border — this goes into vehicleListPanel.
-        //
-        // WHY all three size methods (min, preferred, max)?
-        // BoxLayout respects all three when deciding how tall to make a
-        // component. Setting only setMaximumSize() is not enough — if the
-        // preferred size is taller (e.g. because revalidate() re-measures
-        // after the Add form is appended), BoxLayout will still stretch the
-        // row up to its preferred height. Locking all three to the same
-        // ROW_H value makes the height completely rigid: no matter what
-        // happens to the rest of the list, each vehicle row stays 64px tall.
         JPanel wrapper = new JPanel(new BorderLayout());
         wrapper.setOpaque(false);
         wrapper.setBorder(BorderFactory.createLineBorder(CARD_BORDER, 1));
@@ -1104,7 +1086,7 @@ public class ViewProfile extends JPanel {
         wrapper.setAlignmentX(Component.LEFT_ALIGNMENT);
         wrapper.add(switchPanel, BorderLayout.CENTER);
 
-        // Retrieve sub-components stored inside editCard via client properties
+        // Retrieve sub-components from editCard via client properties
         JComboBox<String> eType   = (JComboBox<String>) editCard.getClientProperty("typeCombo");
         JTextField        ePlate  = (JTextField)        editCard.getClientProperty("plate");
         JTextField        eBrand  = (JTextField)        editCard.getClientProperty("brand");
@@ -1120,28 +1102,27 @@ public class ViewProfile extends JPanel {
             if (eBrand  != null) eBrand.setText(brand);
             if (eYear   != null) eYear.setText(year);
             if (eColour != null) eColour.setText(colour);
-            // Sizes stay locked at ROW_H — do NOT mutate them here.
-            // Changing setMaximumSize triggers a revalidate that causes
-            // all other vehicle rows to briefly repaint at wrong heights.
             switcher.show(switchPanel, "edit");
             if (ePlate != null) ePlate.requestFocusInWindow();
         });
 
-        // ── Cancel button: go back to display card ─────────────────
+        // ── Cancel button: go back to display card (UI only) ───────
         if (eCancel != null) {
-            eCancel.addActionListener(e -> {
-                // Sizes stay locked — just flip the card, no size mutation needed.
-                switcher.show(switchPanel, "display");
-            });
+            eCancel.addActionListener(e -> switcher.show(switchPanel, "display"));
         }
 
-        // ── Save logic: validate and persist changes ───────────────
+        // ── Save: collect fields, delegate to VehicleSectionController ─
+        //
+        // CHANGED: was calling vehicleService.updateVehicle() directly here.
+        // Now calls vehicleController.handleEdit() so that all validation
+        // and persistence live in VehicleSectionController.java.
         Runnable doSave = () -> {
             String nt = (eType   != null) ? (String) eType.getSelectedItem() : vehicleType;
             String np = (ePlate  != null) ? ePlate.getText().trim()  : plate;
             String nb = (eBrand  != null) ? eBrand.getText().trim()  : brand;
             String ny = (eYear   != null) ? eYear.getText().trim()   : year;
             String nc = (eColour != null) ? eColour.getText().trim() : colour;
+
             if (nt.equals(vehicleType) && np.equals(plate) && nb.equals(brand)
                     && ny.equals(year) && nc.equals(colour)) {
                 JOptionPane.showMessageDialog(app, "No changes were made.", "No Changes",
@@ -1149,9 +1130,10 @@ public class ViewProfile extends JPanel {
                 if (eCancel != null) eCancel.doClick();
                 return;
             }
+
+            // Delegate to VehicleSectionController.handleEdit()
             boolean ok = vehicleController.handleEdit(plate, new String[]{nt, np, nb, ny, nc});
             if (ok) {
-                // Sizes stay locked — just flip back to display card.
                 switcher.show(switchPanel, "display");
                 loadVehicles();
                 JOptionPane.showMessageDialog(app, "Vehicle updated successfully.", "Success",
@@ -1161,18 +1143,6 @@ public class ViewProfile extends JPanel {
         if (eSave != null) eSave.addActionListener(e -> doSave.run());
 
         // ── Edit row: Type combo Enter key ─────────────────────────
-        //
-        // FIX: The type combo in the EDIT row had no key listener at all.
-        // Without this, pressing Enter after changing Car -> Motor (or vice
-        // versa) did nothing, leaving the user confused.
-        //
-        // When the combo dropdown is closed and user presses Enter, we
-        // treat it the same as clicking Save — the type change IS a real
-        // change and must not be blocked by a "no changes" false-positive.
-        //
-        // The "no changes" check in doSave already handles this correctly:
-        //   nt.equals(vehicleType) is false when type changed, so it won't
-        //   show the "no changes" dialog — it goes straight to handleEdit.
         if (eType != null) {
             boolean[] editComboOpen = {false};
             eType.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
@@ -1183,8 +1153,6 @@ public class ViewProfile extends JPanel {
             eType.addKeyListener(new KeyAdapter() {
                 @Override public void keyPressed(KeyEvent e) {
                     if (e.getKeyCode() == KeyEvent.VK_ENTER && !editComboOpen[0]) {
-                        // Attempt save — doSave checks if anything actually
-                        // changed, so a type-only change is saved correctly.
                         doSave.run();
                     }
                 }
@@ -1192,15 +1160,11 @@ public class ViewProfile extends JPanel {
         }
 
         // ── Edit row: text field Enter key ─────────────────────────
-        //
-        // Plate field: if still empty, move focus to it instead of saving.
-        // All other fields: press Enter to save directly.
         if (ePlate != null) {
             ePlate.addKeyListener(new KeyAdapter() {
                 @Override public void keyPressed(KeyEvent e) {
                     if (e.getKeyCode() == KeyEvent.VK_ENTER) {
                         if (ePlate.getText().trim().isEmpty()) {
-                            // Plate is empty — keep focus here so user fills it in
                             ePlate.requestFocusInWindow();
                         } else {
                             doSave.run();
@@ -1218,15 +1182,21 @@ public class ViewProfile extends JPanel {
         if (eYear   != null) eYear.addKeyListener(enterSave);
         if (eColour != null) eColour.addKeyListener(enterSave);
 
-        // ── Remove button: confirm then delete ────────────────────
+        // ── Remove button: confirm then delegate to VehicleSectionController ─
+        //
+        // CHANGED: was calling vehicleService.deleteVehicle() directly here.
+        // Now calls vehicleController.deleteVehicleDirectly() so that the
+        // deletion logic lives in VehicleSectionController.java.
         removeBtn.addActionListener(e -> {
             int ch = JOptionPane.showConfirmDialog(app,
                     "Remove " + brand + " (" + plate + ")?",
                     "Confirm Remove", JOptionPane.YES_NO_OPTION,
                     JOptionPane.QUESTION_MESSAGE);
             if (ch == JOptionPane.YES_OPTION) {
-                User    u   = app.getLoggedInUserObj();
-                boolean del = (u != null) && vehicleService.deleteVehicle(u.getUserId(), plate);
+                User u = app.getLoggedInUserObj();
+                // Delegate to VehicleSectionController.deleteVehicleDirectly()
+                boolean del = (u != null)
+                        && vehicleController.deleteVehicleDirectly(u.getUserId(), plate);
                 if (del) loadVehicles();
                 else JOptionPane.showMessageDialog(app,
                         "Failed to remove vehicle. Please try again.",
@@ -1245,11 +1215,8 @@ public class ViewProfile extends JPanel {
                                  String brand, String year, String colour) {
         JPanel card = new JPanel(new BorderLayout(6, 0));
         card.setOpaque(false);
-        // 4px top/bottom padding (was 6) so the edit form fits neatly
-        // inside ROW_H=64px without needing to expand the row height.
         card.setBorder(new EmptyBorder(4, 10, 4, 10));
 
-        // ── Input fields ──────────────────────────────────────────
         JPanel fieldRow = new JPanel(new GridBagLayout());
         fieldRow.setOpaque(false);
         GridBagConstraints g = new GridBagConstraints();
@@ -1274,7 +1241,6 @@ public class ViewProfile extends JPanel {
         g.gridx = 4; g.weightx = 0;   g.ipadx = 34; fieldRow.add(labelWrap("Colour", colourF),   g);
         card.add(fieldRow, BorderLayout.CENTER);
 
-        // ── Save & Cancel buttons — vertically centered ────────────
         JPanel btns = makeCenteredButtonPanel();
 
         JButton saveBtn   = makeFilledButton("Save",   GREEN,    Color.WHITE);
@@ -1306,38 +1272,20 @@ public class ViewProfile extends JPanel {
     // CENTERING HELPERS
     // =========================================================
 
-    /**
-     * Creates a transparent panel with GridBagLayout.
-     *
-     * We use GridBagLayout because it is the only standard Swing layout
-     * that can both STRETCH a cell to fill all available height AND
-     * CENTER the content inside that cell at the same time.
-     *
-     * This panel wraps button pairs so they appear vertically centered
-     * inside a fixed-height vehicle row (64px or 68px).
-     */
     private JPanel makeCenteredButtonPanel() {
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setOpaque(false);
         return panel;
     }
 
-    /**
-     * Returns GridBagConstraints configured for vertical centering:
-     *
-     *   weighty = 1.0  ->  the cell fills ALL available vertical space
-     *   anchor  = CENTER -> the component sits in the MIDDLE of that space
-     *   fill    = NONE  ->  the component keeps its own preferred size
-     *   weightx = 1.0  ->  the cell also fills horizontal space (hugs EAST edge)
-     */
     private GridBagConstraints makeCenterConstraints() {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridx   = 0;
         gbc.gridy   = 0;
-        gbc.weightx = 1.0;  // fill width
-        gbc.weighty = 1.0;  // fill height — this is what enables vertical centering
-        gbc.fill    = GridBagConstraints.NONE;   // don't stretch the button itself
-        gbc.anchor  = GridBagConstraints.CENTER; // center it in the cell
+        gbc.weightx = 1.0;
+        gbc.weighty = 1.0;
+        gbc.fill    = GridBagConstraints.NONE;
+        gbc.anchor  = GridBagConstraints.CENTER;
         return gbc;
     }
 
@@ -1403,7 +1351,6 @@ public class ViewProfile extends JPanel {
     // UI HELPER METHODS
     // =========================================================
 
-    /** Creates a white rounded-corner card panel with a subtle border. */
     private JPanel makeCard() {
         JPanel card = new JPanel() {
             @Override protected void paintComponent(Graphics g) {
@@ -1421,7 +1368,6 @@ public class ViewProfile extends JPanel {
         return card;
     }
 
-    /** Creates a thin horizontal divider line. */
     private JSeparator makeDivider() {
         JSeparator sep = new JSeparator();
         sep.setForeground(CARD_BORDER);
@@ -1429,10 +1375,6 @@ public class ViewProfile extends JPanel {
         return sep;
     }
 
-    /**
-     * Creates a read-only label+value row.
-     * Layout: [label (grey, fixed width)] [value (dark)]
-     */
     private JPanel makeReadRow(String label, String value) {
         JPanel row = new JPanel(new BorderLayout(10, 0));
         row.setOpaque(false);
@@ -1449,16 +1391,11 @@ public class ViewProfile extends JPanel {
         return row;
     }
 
-    /**
-     * Retrieves the value JLabel from a read row panel.
-     * The value label is always in the BorderLayout.CENTER slot.
-     */
     private JLabel getValueLabel(JPanel readRow) {
         return (JLabel) ((BorderLayout) readRow.getLayout())
                 .getLayoutComponent(BorderLayout.CENTER);
     }
 
-    /** Creates a bold grey label used above edit fields. */
     private JLabel makeFieldLabel(String text) {
         JLabel lbl = new JLabel(text);
         lbl.setFont(new Font("SansSerif", Font.BOLD, 13));
@@ -1467,7 +1404,6 @@ public class ViewProfile extends JPanel {
         return lbl;
     }
 
-    /** Applies a blue-bordered style to a profile text field. */
     private void styleField(JTextField f) {
         f.setFont(new Font("SansSerif", Font.PLAIN, 13));
         f.setBorder(BorderFactory.createCompoundBorder(
@@ -1475,7 +1411,6 @@ public class ViewProfile extends JPanel {
                 new EmptyBorder(2, 6, 2, 6)));
     }
 
-    /** Creates a compact text field used inside vehicle rows. */
     private JTextField makeSmallField(String value) {
         JTextField f = new JTextField(value);
         f.setFont(new Font("SansSerif", Font.PLAIN, 12));
@@ -1485,10 +1420,6 @@ public class ViewProfile extends JPanel {
         return f;
     }
 
-    /**
-     * Wraps a text field with a small label above it.
-     * Used inside vehicle add/edit forms.
-     */
     private JPanel labelWrap(String label, JTextField field) {
         JPanel p = new JPanel(new BorderLayout(0, 1));
         p.setOpaque(false);
@@ -1500,10 +1431,6 @@ public class ViewProfile extends JPanel {
         return p;
     }
 
-    /**
-     * Wraps a combo box with a small label above it.
-     * Used inside vehicle add/edit forms.
-     */
     private JPanel labelWrap(String label, JComboBox<String> combo) {
         JPanel p = new JPanel(new BorderLayout(0, 1));
         p.setOpaque(false);
@@ -1515,15 +1442,6 @@ public class ViewProfile extends JPanel {
         return p;
     }
 
-    /**
-     * Creates a filled, rounded button with hover darkening.
-     *
-     * HOW THE CUSTOM PAINT WORKS:
-     * - setContentAreaFilled(false) tells Swing NOT to draw the default
-     *   grey button background — we draw our own rounded rectangle instead.
-     * - On mouseEntered we set hov=true and repaint, which uses bg.darker()
-     *   to give visual feedback that the button is being hovered.
-     */
     private JButton makeFilledButton(String text, Color bg, Color fg) {
         JButton btn = new JButton(text) {
             private boolean hov = false;
@@ -1552,7 +1470,6 @@ public class ViewProfile extends JPanel {
         return btn;
     }
 
-    /** Creates a centred grey placeholder label (e.g. "No vehicles yet"). */
     private JLabel makeEmptyLabel(String msg) {
         JLabel lbl = new JLabel(msg);
         lbl.setFont(new Font("SansSerif", Font.PLAIN, 13));
@@ -1562,10 +1479,6 @@ public class ViewProfile extends JPanel {
         return lbl;
     }
 
-    /**
-     * Recursively clears all JTextField components inside a container.
-     * Used to reset the add/edit form fields after Save or Cancel.
-     */
     private void clearFields(Container c) {
         for (Component comp : c.getComponents()) {
             if (comp instanceof JTextField) ((JTextField) comp).setText("");
@@ -1584,49 +1497,37 @@ public class ViewProfile extends JPanel {
      * 1. Always stretch width to fill the viewport — no horizontal scroll bar.
      * 2. Only show a vertical scroll bar when content height truly exceeds
      *    the viewport height (i.e. more than MAX_VISIBLE rows).
-     *
-     * WITHOUT this class, JScrollPane would show a horizontal scroll bar
-     * when the panel is slightly narrower than the viewport, and the
-     * vertical scroll behaviour would be inconsistent.
      */
     private static class ScrollableVehiclePanel extends JPanel
             implements javax.swing.Scrollable {
 
         @Override
         public Dimension getPreferredScrollableViewportSize() {
-            // Tell the scroll pane our preferred size is our actual preferred size.
             return getPreferredSize();
         }
 
         @Override
         public int getScrollableUnitIncrement(
                 java.awt.Rectangle visibleRect, int orientation, int direction) {
-            // How many pixels to scroll per arrow-key click or scroll-arrow click.
-            return ROW_H; // one full vehicle row
+            return ROW_H;
         }
 
         @Override
         public int getScrollableBlockIncrement(
                 java.awt.Rectangle visibleRect, int orientation, int direction) {
-            // How many pixels to scroll per Page Up / Page Down.
-            return ROW_H * 3; // three vehicle rows at a time
+            return ROW_H * 3;
         }
 
         @Override
         public boolean getScrollableTracksViewportWidth() {
-            // true = always stretch to fill the full viewport width.
-            // This prevents a horizontal scroll bar from appearing.
             return true;
         }
 
         @Override
         public boolean getScrollableTracksViewportHeight() {
-            // false = do NOT force the panel to fill the viewport height.
-            // This allows the vertical scroll bar to appear when needed.
             return false;
         }
 
-        // Each vehicle row is 64px tall — used for unit/block scroll increments.
         private static final int ROW_H = 64;
     }
 }

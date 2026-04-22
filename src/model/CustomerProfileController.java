@@ -1,7 +1,59 @@
 package model;
 
-public class CustomerProfileController extends ProfileController {
+/**
+ * ============================================================
+ * CustomerProfileController.java — Personal Information Logic
+ * ============================================================
+ *
+ * Handles ALL business logic for the Personal Information card
+ * in ViewProfile.java. ViewProfile.java only calls these methods
+ * and handles the resulting UI changes.
+ *
+ * Methods moved FROM ViewProfile.java:
+ *   - getCurrentName()       : returns the logged-in user's current name
+ *   - getCurrentEmail()      : returns the logged-in user's current email
+ *   - hasNoChanges()         : checks whether name/email actually changed
+ *   - saveProfile()          : validates and persists name + email changes
+ *
+ * Validation rules (moved from inline ViewProfile logic):
+ *   - Name  : cannot be blank
+ *   - Email : cannot be blank, must contain '@', must not already exist
+ *             for a DIFFERENT account
+ *
+ * Called by ViewProfile.java:
+ *   enterEditMode()      -> getCurrentName() / getCurrentEmail()
+ *   exitEditMode()       -> getCurrentName() / getCurrentEmail()
+ *   saveProfileChanges() -> hasNoChanges() / saveProfile()
+ *
+ * Called by CustomerDashboard.java (constructor):
+ *   new CustomerProfileController(accountService, appFrameAccessor)
+ * ============================================================
+ */
+public class CustomerProfileController {
 
+    // =========================================================
+    // AppFrameAccessor INTERFACE
+    // =========================================================
+
+    /**
+     * Provides CustomerProfileController with access to the
+     * AppFrame state it needs (logged-in user object and name)
+     * without creating a hard dependency on AppFrame itself.
+     *
+     * Implemented as an anonymous class in CustomerDashboard's
+     * constructor, delegating to app.getLoggedInUserObj() etc.
+     *
+     * Used by CustomerDashboard:
+     *   profileController = new CustomerProfileController(
+     *       app.getAccountService(),
+     *       new CustomerProfileController.AppFrameAccessor() {
+     *           public User   getLoggedInUserObj()       { return app.getLoggedInUserObj(); }
+     *           public String getLoggedInUser()          { return app.getLoggedInUser(); }
+     *           public void   setLoggedInUser(String n)  { app.setLoggedInUser(n); }
+     *           public void   setLoggedInUserObj(User u) { app.setLoggedInUserObj(u); }
+     *       }
+     *   );
+     */
     public interface AppFrameAccessor {
         User   getLoggedInUserObj();
         String getLoggedInUser();
@@ -9,37 +61,118 @@ public class CustomerProfileController extends ProfileController {
         void   setLoggedInUserObj(User user);
     }
 
-    private final AppFrameAccessor appAccessor;
+    // =========================================================
+    // FIELDS
+    // =========================================================
 
+    private final AccountService   accountService;
+    private final AppFrameAccessor accessor;       // access to AppFrame state
+
+    // =========================================================
+    // CONSTRUCTOR
+    // =========================================================
+
+    /**
+     * @param accountService  reads/writes accounts.txt
+     * @param accessor        provides access to AppFrame logged-in user state
+     */
     public CustomerProfileController(AccountService accountService,
-                                     AppFrameAccessor appAccessor) {
-        super(accountService);
-        this.appAccessor = appAccessor;
+                                     AppFrameAccessor accessor) {
+        this.accountService = accountService;
+        this.accessor       = accessor;
     }
 
-    @Override
-    public User getCurrentUser() {
-        return appAccessor.getLoggedInUserObj();
+    // =========================================================
+    // READ HELPERS — used by enterEditMode() and exitEditMode()
+    // =========================================================
+
+    /**
+     * Returns the current display name for the logged-in user.
+     * Used to pre-populate the edit field when entering edit mode,
+     * and to restore it when cancelling.
+     *
+     * @return name string, or empty string if no user is logged in
+     */
+    public String getCurrentName() {
+        User user = accessor.getLoggedInUserObj();
+        return (user != null && user.getName() != null) ? user.getName() : "";
     }
 
-    @Override
+    /**
+     * Returns the current email address for the logged-in user.
+     * Used to pre-populate the edit field when entering edit mode,
+     * and to restore it when cancelling.
+     *
+     * @return email string, or empty string if no user is logged in
+     */
+    public String getCurrentEmail() {
+        User user = accessor.getLoggedInUserObj();
+        return (user != null && user.getEmail() != null) ? user.getEmail() : "";
+    }
+
+    // =========================================================
+    // CHANGE DETECTION — used before trying to save
+    // =========================================================
+
+    /**
+     * Returns true if the submitted name and email are identical
+     * to the currently stored values (i.e. the user changed nothing).
+     *
+     * ViewProfile calls this inside saveProfileChanges() to show
+     * the "No changes were made." dialog and skip the file write.
+     *
+     * @param newName   trimmed text from the name edit field
+     * @param newEmail  trimmed text from the email edit field
+     * @return true if nothing changed, false if at least one field differs
+     */
+    public boolean hasNoChanges(String newName, String newEmail) {
+        return getCurrentName().equals(newName) && getCurrentEmail().equals(newEmail);
+    }
+
+    // =========================================================
+    // SAVE — validates and persists the profile changes
+    // =========================================================
+
+    /**
+     * Validates the new name and email, then persists them via
+     * AccountService if they pass. Updates the AppFrame's logged-in
+     * user reference on success via the AppFrameAccessor.
+     *
+     * Validation rules:
+     *   1. Name  — must not be blank
+     *   2. Email — must not be blank
+     *   3. Email — must contain the '@' character
+     *   4. Email — must not already belong to a DIFFERENT account
+     *              (case-insensitive check via accountService.emailExists())
+     *
+     * @param newName   trimmed text from the name edit field
+     * @param newEmail  trimmed text from the email edit field
+     * @return true if saved successfully, false on persistence failure
+     * @throws IllegalArgumentException if any validation rule is violated
+     *         (the message is shown directly to the user in a dialog)
+     */
     public boolean saveProfile(String newName, String newEmail) {
-        newName  = newName.trim();
-        newEmail = newEmail.trim();
+        // ── Validation ──────────────────────────────────────────────
+        if (newName.isEmpty())
+            throw new IllegalArgumentException("Name cannot be empty.");
+        if (newEmail.isEmpty())
+            throw new IllegalArgumentException("Email cannot be empty.");
+        if (!newEmail.contains("@"))
+            throw new IllegalArgumentException("Please enter a valid email address.");
 
-        String validationError = validate(newName, newEmail);
-        if (validationError != null) {
-            throw new IllegalArgumentException(validationError);
-        }
+        // Only check email uniqueness when the email actually changed
+        boolean emailChanged = !newEmail.equalsIgnoreCase(getCurrentEmail());
+        if (emailChanged && accountService.emailExists(newEmail))
+            throw new IllegalArgumentException(
+                    "This email is already in use by another account.");
 
-        User currentUser = getCurrentUser();
+        // ── Persist ─────────────────────────────────────────────────
+        User currentUser = accessor.getLoggedInUserObj();
         if (currentUser == null) return false;
 
-        String originalEmail = currentUser.getEmail();
-
-        // IMPORTANT: keep the same userId when building the updated User object
-        User updatedUser = new User(
-                currentUser.getUserId(),   // keep original userId e.g. "C3"
+        // Build an updated User object preserving all other fields
+        User updated = new User(
+                currentUser.getUserId(),
                 newName,
                 newEmail,
                 currentUser.getPassword(),
@@ -47,100 +180,15 @@ public class CustomerProfileController extends ProfileController {
                 currentUser.getProfilePicture()
         );
 
-        boolean saveSuccessful = accountService.updateUser(originalEmail, updatedUser);
-
-        if (saveSuccessful) {
-            appAccessor.setLoggedInUser(newName);
-            appAccessor.setLoggedInUserObj(updatedUser);
-
-            // If the email changed, rename the image files
-            // NOTE: image files are now named by userId (e.g. C3.jpg), NOT email,
-            // so we do NOT need to rename them when email changes anymore.
-            // The renameImageFile calls are removed on purpose.
+        String originalEmail = getCurrentEmail();
+        boolean saved = accountService.updateUser(originalEmail, updated);
+        if (saved) {
+            // Keep AppFrame's logged-in user references in sync so that
+            // getCurrentName() / getCurrentEmail() return fresh values,
+            // and the header name label updates immediately.
+            accessor.setLoggedInUserObj(updated);
+            accessor.setLoggedInUser(newName);
         }
-
-        return saveSuccessful;
-    }
-
-    @Override
-    public boolean deleteAccount() {
-        User currentUser = getCurrentUser();
-        if (currentUser == null) return false;
-
-        String filePath = "src" + java.io.File.separator
-                + "TxtFile" + java.io.File.separator + "accounts.txt";
-        java.io.File accountsFile = new java.io.File(filePath);
-
-        if (!accountsFile.exists()) return false;
-
-        java.util.List<String> linesToKeep = new java.util.ArrayList<>();
-        boolean accountWasFound = false;
-
-        try (java.io.BufferedReader reader = new java.io.BufferedReader(
-                new java.io.FileReader(accountsFile))) {
-            String line;
-
-            while ((line = reader.readLine()) != null) {
-                // Keep comment lines (lines starting with #)
-                if (line.trim().startsWith("#")) {
-                    linesToKeep.add(line);
-                    continue;
-                }
-
-                if (line.isBlank()) continue;
-
-                // NEW format: userID, name, email, password, role, profilePic
-                // So email is now at index 2 (not index 1)
-                String[] columns = line.split(",", 6);
-
-                boolean isThisAccount = columns.length >= 3
-                        && columns[2].trim().equalsIgnoreCase(currentUser.getEmail());
-
-                if (isThisAccount) {
-                    accountWasFound = true;
-                    // Do NOT add this line — this is how we "delete" the account
-                } else {
-                    linesToKeep.add(line); // keep all other accounts
-                }
-            }
-        } catch (java.io.IOException e) {
-            e.printStackTrace();
-            return false;
-        }
-
-        if (!accountWasFound) return false;
-
-        try (java.io.BufferedWriter writer = new java.io.BufferedWriter(
-                new java.io.FileWriter(accountsFile, false))) {
-            for (String lineToWrite : linesToKeep) {
-                writer.write(lineToWrite);
-                writer.newLine();
-            }
-        } catch (java.io.IOException e) {
-            e.printStackTrace();
-            return false;
-        }
-
-        appAccessor.setLoggedInUser("");
-        appAccessor.setLoggedInUserObj(null);
-
-        return true;
-    }
-
-    public String getCurrentName() {
-        User user = getCurrentUser();
-        return user != null ? user.getName() : "";
-    }
-
-    public String getCurrentEmail() {
-        User user = getCurrentUser();
-        return user != null ? user.getEmail() : "";
-    }
-
-    public String getCurrentRole() {
-        User user = getCurrentUser();
-        if (user == null) return "";
-        String role = user.getRole();
-        return role.substring(0, 1).toUpperCase() + role.substring(1);
+        return saved;
     }
 }

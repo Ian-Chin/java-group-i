@@ -3,7 +3,15 @@ package model;
 import java.util.List;
 
 /**
- * VehicleSectionController — handles all logic for the My Vehicle section.
+ * ============================================================
+ * VehicleSectionController.java — My Vehicles Business Logic
+ * ============================================================
+ *
+ * Handles ALL business logic for the My Vehicles card in
+ * ViewProfile.java and the Customer Dashboard.
+ *
+ * ViewProfile.java only calls these methods and handles the
+ * resulting UI changes.
  *
  * Vehicle array from VehicleService has 6 elements:
  *   [0] vehicleID   [1] vehicleType  [2] plate
@@ -12,18 +20,35 @@ import java.util.List;
  * handleAdd / handleEdit fields array has 5 elements:
  *   [0] vehicleType  [1] plate  [2] brand  [3] year  [4] colour
  *
- * refreshList() passes ALL vehicles to the dashboard — no limit here.
- * CustomerDashboard.rebuildVehicleList() shows only the first 2 on screen
- * and adds a "View All" button when there are more than 2.
+ * Methods moved FROM ViewProfile.java (inline logic):
+ *   - loadVehiclesForUser()  : reads vehicles.txt for the logged-in user
+ *   - handleAdd()            : validates + saves a new vehicle
+ *   - handleEdit()           : validates + updates an existing vehicle
+ *   - handleDelete()         : deletes a vehicle after confirmation
+ *   - validateFields()       : shared validation for add and edit
  *
- * NEW METHODS added (moved from CustomerDashboard):
- *   getAllVehiclesForUser() — returns every vehicle for the logged-in user
- *   getVehicleLabel()      — returns "Car · LIN110" style label for a vehicleId
+ * Methods that were already here (unchanged):
+ *   - refreshList()              : tells the UI to rebuild the list
+ *   - getAllVehiclesForUser()     : returns every vehicle for a userId
+ *   - getVehicleLabel()          : "Car · LIN110" style label
+ *
+ * refreshList() passes ALL vehicles to the view — no limit here.
+ * CustomerDashboard.rebuildVehicleList() shows only the first 2 on
+ * screen and adds a "View All" button when there are more than 2.
+ * ============================================================
  */
 public class VehicleSectionController implements SectionController {
 
+    // =========================================================
+    // FIELDS
+    // =========================================================
+
     private final VehicleService vehicleService;
     private final SectionView    view;
+
+    // =========================================================
+    // SectionView INTERFACE
+    // =========================================================
 
     public interface SectionView {
         User            getLoggedInUser();
@@ -32,19 +57,56 @@ public class VehicleSectionController implements SectionController {
         java.awt.Window getWindow();
     }
 
+    // =========================================================
+    // CONSTRUCTOR
+    // =========================================================
+
     public VehicleSectionController(VehicleService vehicleService, SectionView view) {
         this.vehicleService = vehicleService;
         this.view           = view;
     }
 
-    // ═══════════════════════════════════════════════════════════════
+    // =========================================================
+    // LOAD — reads vehicles.txt and returns rows for the user
+    // =========================================================
+
+    /**
+     * Reads ALL vehicles from vehicles.txt for the currently
+     * logged-in user and returns them as a list of String arrays.
+     *
+     * MOVED FROM: ViewProfile.loadVehicles() (was an inline call
+     * directly to vehicleService inside ViewProfile)
+     *
+     * Each String[] has 6 elements:
+     *   [0] vehicleID  [1] vehicleType  [2] plate
+     *   [3] brand      [4] year         [5] colour
+     *
+     * Returns an empty list when no user is logged in or when the
+     * user has no registered vehicles.
+     *
+     * Called by ViewProfile.java:
+     *   - after the page builds (SwingUtilities.invokeLater)
+     *   - after a successful Add, Edit, or Delete
+     *   - inside refreshUser() to keep the list in sync
+     *
+     * @param userId  the logged-in user's ID (e.g. "C3")
+     * @return list of vehicle rows; never null
+     */
+    public List<String[]> loadVehiclesForUser(String userId) {
+        if (userId == null || userId.isEmpty()) {
+            return new java.util.ArrayList<>();
+        }
+        return vehicleService.getVehiclesByUserId(userId);
+    }
+
+    // =========================================================
     // REFRESH — reads vehicles.txt and tells the UI to update
-    // ═══════════════════════════════════════════════════════════════
+    // =========================================================
 
     /**
      * Reads ALL vehicles from vehicles.txt and passes the full list
-     * to the dashboard for display. The dashboard decides how many
-     * to show (top 2) and whether to add a "View All" button.
+     * to the view for display. The view decides how many to show
+     * (top 2 on the dashboard) and whether to add a "View All" button.
      */
     @Override
     public void refreshList() {
@@ -57,12 +119,12 @@ public class VehicleSectionController implements SectionController {
         view.rebuildList(vehicleService.getVehiclesByUserId(user.getUserId()));
     }
 
-    // ═══════════════════════════════════════════════════════════════
+    // =========================================================
     // GET ALL VEHICLES — used by the "View All" dialog
-    // ═══════════════════════════════════════════════════════════════
+    // =========================================================
 
     /**
-     * Returns ALL vehicles for the currently logged-in user.
+     * Returns ALL vehicles for the given userId.
      * Used by CustomerDashboard to populate the "All My Vehicles" dialog.
      *
      * Each String[] has 6 elements:
@@ -75,9 +137,9 @@ public class VehicleSectionController implements SectionController {
         return vehicleService.getVehiclesByUserId(userId);
     }
 
-    // ═══════════════════════════════════════════════════════════════
+    // =========================================================
     // VEHICLE LABEL — converts vehicleId to a display string
-    // ═══════════════════════════════════════════════════════════════
+    // =========================================================
 
     /**
      * Looks up a vehicle by its ID and returns a short display label.
@@ -91,24 +153,43 @@ public class VehicleSectionController implements SectionController {
         return vehicleService.getVehiclePlate(vehicleId);
     }
 
-    // ═══════════════════════════════════════════════════════════════
+    // =========================================================
     // ADD — validates and saves a new vehicle
-    // ═══════════════════════════════════════════════════════════════
+    // =========================================================
 
     /**
-     * Validates and adds a new vehicle.
-     * fields[0]=type  fields[1]=plate  fields[2]=brand  fields[3]=year  fields[4]=colour
+     * Validates and adds a new vehicle for the logged-in user.
+     *
+     * BUSINESS LOGIC MOVED FROM: ViewProfile.buildAddForm() —
+     * the doSave Runnable that was wired to the Save button
+     * inside buildAddForm() has been extracted here so that
+     * ViewProfile only handles UI (showing/hiding the form,
+     * scrolling, clearing fields).
+     *
+     * fields layout:
+     *   [0] vehicleType   e.g. "Car" or "Motor"
+     *   [1] plate         e.g. "WXY1234"
+     *   [2] brand         e.g. "Toyota Vios"
+     *   [3] year          e.g. "2022"
+     *   [4] colour        e.g. "White"
+     *
+     * @param fields  5-element String array from the add form
+     * @return true if the vehicle was saved successfully
      */
     @Override
     public boolean handleAdd(String[] fields) {
+        // ── Validate all five fields ─────────────────────────────
         String error = validateFields(fields);
         if (error != null) {
             view.showMessage(error, "Validation Error", javax.swing.JOptionPane.WARNING_MESSAGE);
             return false;
         }
+
+        // ── Get logged-in user ───────────────────────────────────
         User user = view.getLoggedInUser();
         if (user == null) return false;
 
+        // ── Persist to vehicles.txt via VehicleService ───────────
         boolean saved = vehicleService.addVehicle(
                 user.getUserId(),
                 fields[0], // vehicleType
@@ -117,50 +198,87 @@ public class VehicleSectionController implements SectionController {
                 fields[3], // year
                 fields[4]  // colour
         );
-        if (saved) refreshList();
-        else view.showMessage("Failed to add vehicle.", "Error", javax.swing.JOptionPane.ERROR_MESSAGE);
+
+        if (saved) {
+            // refreshList() tells the view to reload and rebuild the vehicle rows
+            refreshList();
+        } else {
+            view.showMessage("Failed to add vehicle.", "Error",
+                    javax.swing.JOptionPane.ERROR_MESSAGE);
+        }
         return saved;
     }
 
-    // ═══════════════════════════════════════════════════════════════
+    // =========================================================
     // EDIT — validates and updates an existing vehicle
-    // ═══════════════════════════════════════════════════════════════
+    // =========================================================
 
     /**
      * Validates and updates an existing vehicle.
-     * id = old plate number (identifies which record to update).
-     * fields layout is the same as handleAdd.
+     *
+     * BUSINESS LOGIC MOVED FROM: ViewProfile.buildVehicleRow() —
+     * the doSave Runnable that was wired to the Save button in
+     * each vehicle row's edit card has been extracted here.
+     * ViewProfile only handles flipping the CardLayout card back
+     * to "display" and reloading the list.
+     *
+     * @param id      old plate number — identifies which record to update
+     * @param fields  5-element String array with the new values
+     *                (same layout as handleAdd)
+     * @return true if the vehicle was updated successfully
      */
     @Override
     public boolean handleEdit(String id, String[] fields) {
+        // ── Validate all five fields ─────────────────────────────
         String error = validateFields(fields);
         if (error != null) {
             view.showMessage(error, "Validation Error", javax.swing.JOptionPane.WARNING_MESSAGE);
             return false;
         }
+
+        // ── Get logged-in user ───────────────────────────────────
         User user = view.getLoggedInUser();
         if (user == null) return false;
 
+        // ── Persist update to vehicles.txt via VehicleService ────
         boolean updated = vehicleService.updateVehicle(
                 user.getUserId(),
-                id,        // old plate
+                id,        // old plate number
                 fields[0], // new vehicleType
                 fields[1], // new plate
                 fields[2], // new brand
                 fields[3], // new year
                 fields[4]  // new colour
         );
-        if (updated) refreshList();
-        else view.showMessage("Failed to update vehicle.", "Error", javax.swing.JOptionPane.ERROR_MESSAGE);
+
+        if (updated) {
+            // refreshList() tells the view to reload and rebuild
+            refreshList();
+        } else {
+            view.showMessage("Failed to update vehicle.", "Error",
+                    javax.swing.JOptionPane.ERROR_MESSAGE);
+        }
         return updated;
     }
 
-    // ═══════════════════════════════════════════════════════════════
+    // =========================================================
     // DELETE — confirms then removes a vehicle
-    // ═══════════════════════════════════════════════════════════════
+    // =========================================================
 
     /**
-     * Confirms then deletes the vehicle with the given plate number.
+     * Shows a confirmation dialog, then deletes the vehicle with
+     * the given plate number from vehicles.txt.
+     *
+     * BUSINESS LOGIC MOVED FROM: ViewProfile.buildVehicleRow() —
+     * the removeBtn ActionListener that called JOptionPane +
+     * vehicleService.deleteVehicle() directly inside ViewProfile
+     * has been extracted here.
+     *
+     * ViewProfile still wires the Remove button listener but calls
+     * this method instead of performing deletion itself.
+     *
+     * @param id  the plate number of the vehicle to delete
+     *            (used as the unique identifier in vehicles.txt)
      */
     @Override
     public void handleDelete(String id) {
@@ -182,9 +300,28 @@ public class VehicleSectionController implements SectionController {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════
+    /**
+     * Deletes a vehicle directly (no confirmation dialog).
+     *
+     * MOVED FROM: ViewProfile.buildVehicleRow() — the removeBtn
+     * listener that called vehicleService.deleteVehicle() with
+     * userId + plate directly.
+     *
+     * This overload is used by ViewProfile where the confirmation
+     * dialog is shown inline (JOptionPane.showConfirmDialog) in
+     * the button listener before calling this method.
+     *
+     * @param userId  the logged-in user's ID
+     * @param plate   the plate number of the vehicle to delete
+     * @return true if deleted successfully
+     */
+    public boolean deleteVehicleDirectly(String userId, String plate) {
+        return vehicleService.deleteVehicle(userId, plate);
+    }
+
+    // =========================================================
     // VALIDATE — checks all 5 vehicle fields
-    // ═══════════════════════════════════════════════════════════════
+    // =========================================================
 
     /**
      * Validates all 5 vehicle fields.
@@ -196,6 +333,11 @@ public class VehicleSectionController implements SectionController {
      *   brand       — letters, numbers and spaces only
      *   year        — exactly 4 digits
      *   colour      — letters and spaces only
+     *
+     * Called by both handleAdd() and handleEdit() before persisting.
+     *
+     * @param fields  5-element array: [type, plate, brand, year, colour]
+     * @return error message string, or null if all fields are valid
      */
     @Override
     public String validateFields(String[] fields) {
