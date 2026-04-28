@@ -30,6 +30,11 @@ import java.util.Set;
  *  - getNextAppointmentDate(): formats the next upcoming appointment date for display
  *  - getDaysUntilLabel()     : returns "Today", "Tomorrow", or "In N days" label
  *
+ * PRICING (calculateAmount):
+ *  - Normal Service = RM 50.00  flat rate (regardless of duration)
+ *  - Major Service  = RM 200.00 flat rate (regardless of duration)
+ *  Duration is informational only and does NOT affect the price.
+ *
  * Methods in other files:
  *  - getVehicleLabel()      → VehicleService   (vehicle data lookup)
  *  - buildVehicleSubtitle() → VehicleService   (reads vehicle type data)
@@ -146,30 +151,36 @@ public class AppointmentSectionController {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // AMOUNT CALCULATION
+    // AMOUNT CALCULATION  ← FIXED
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Calculates the payment amount for a given service type and duration.
+     * Returns the flat-rate payment amount for a given service type.
      *
-     * Pricing rules:
-     *   Major Service  = RM 350.00 per hour
-     *   Normal Service = RM 150.00 per hour
+     * Pricing rules (FLAT RATE — duration does NOT affect the price):
+     *   Normal Service = RM  50.00
+     *   Major Service  = RM 200.00
+     *
+     * Examples:
+     *   Normal Service, 1 hour  →  RM  50.00
+     *   Major Service,  3 hours →  RM 200.00   (NOT RM 600 or RM 1050)
+     *
+     * The durationStr parameter is accepted for API compatibility but
+     * is intentionally ignored — it has no effect on the price.
      *
      * NOTE: This lives here (not PaymentService) because the pricing rule
-     * depends on the service type and duration stored in appointments.txt.
+     * depends on the service type stored in appointments.txt.
      *
      * @param serviceType  e.g. "Major Service" or "Normal Service"
-     * @param durationStr  duration as a string, e.g. "3"
-     * @return total amount as a formatted string e.g. "1050.00"
+     * @param durationStr  duration string from appointments.txt — ignored
+     * @return flat price as a formatted string e.g. "50.00" or "200.00"
      */
     public String calculateAmount(String serviceType, String durationStr) {
-        double pricePerHour = serviceType.equalsIgnoreCase("Major Service") ? 350.00 : 150.00;
-        int hours = 1;
-        try {
-            hours = Integer.parseInt(durationStr.trim());
-        } catch (NumberFormatException ignored) {}
-        return String.format("%.2f", pricePerHour * hours);
+        // Flat rate — duration is informational only, it does NOT multiply the price.
+        // Normal Service = RM 50.00   regardless of hours
+        // Major Service  = RM 200.00  regardless of hours
+        double price = serviceType.equalsIgnoreCase("Major Service") ? 200.00 : 50.00;
+        return String.format("%.2f", price);
     }
 
     /**
