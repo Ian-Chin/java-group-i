@@ -389,6 +389,34 @@ public class AppointmentService {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // update() — replaces editable fields of an existing appointment
+    // (status and vehicleId are preserved)
+    // ─────────────────────────────────────────────────────────────
+    public boolean update(String id, String customerId, String technicianId,
+                          String serviceType, String dateTime, int durationHours) {
+        List<Appointment> all = getAll();
+        boolean found = false;
+        for (int i = 0; i < all.size(); i++) {
+            Appointment a = all.get(i);
+            if (a.getId().equalsIgnoreCase(id)) {
+                Appointment replacement = new Appointment(
+                        a.getId(),
+                        customerId,
+                        a.getVehicleId(),
+                        technicianId,
+                        serviceType,
+                        a.getStatus(),
+                        dateTime,
+                        durationHours);
+                all.set(i, replacement);
+                found = true;
+                break;
+            }
+        }
+        return found && saveAll(all);
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // updateStatus() — used by Technician Dashboard
     // ─────────────────────────────────────────────────────────────
     public boolean updateStatus(String id, String newStatus) {

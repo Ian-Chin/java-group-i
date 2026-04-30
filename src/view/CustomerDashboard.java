@@ -4,7 +4,6 @@ import model.AppointmentSectionController;
 import model.AppointmentService;
 import model.BackgroundImageStorage;
 import model.CustomerProfileController;
-import model.NotificationService;
 import model.PaymentService;
 import model.ProfilePicStorage;
 import model.ServiceHistoryService;
@@ -92,7 +91,6 @@ public class CustomerDashboard extends JPanel {
     private final VehicleService               vehicleService        = new VehicleService();
     private final ProfilePicStorage            profilePicStorage     = new ProfilePicStorage();
     private final BackgroundImageStorage       backgroundStorage     = new BackgroundImageStorage();
-    private final NotificationService          notificationService   = new NotificationService();
     private final AppointmentService           appointmentService    = new AppointmentService();
     private final PaymentService               paymentService        = new PaymentService();
     private final ServiceHistoryService        serviceHistoryService = new ServiceHistoryService();
@@ -1113,17 +1111,6 @@ public class CustomerDashboard extends JPanel {
         JPanel profileArea = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 12));
         profileArea.setBackground(UIConstants.BG_HEADER);
 
-        JLabel bellLabel = new JLabel("\uD83D\uDD14");
-        bellLabel.setFont(new Font("SansSerif", Font.PLAIN, 20));
-        bellLabel.setPreferredSize(new Dimension(38, 38));
-        bellLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        bellLabel.setVerticalAlignment(SwingConstants.CENTER);
-        bellLabel.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        bellLabel.setToolTipText("Notifications");
-        bellLabel.addMouseListener(new MouseAdapter() {
-            @Override public void mouseClicked(MouseEvent e) { showNotifications(bellLabel); }
-        });
-
         avatarLabel = new JLabel() {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -1219,38 +1206,8 @@ public class CustomerDashboard extends JPanel {
             }
         });
 
-        profileArea.add(bellLabel);
         profileArea.add(profileButton);
         return profileArea;
-    }
-
-    private void showNotifications(JLabel anchor) {
-        JPopupMenu popup = new JPopupMenu();
-        popup.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(220, 220, 225), 1),
-                new EmptyBorder(8, 0, 8, 0)));
-        popup.setBackground(Color.WHITE);
-
-        JLabel title = new JLabel("  Notifications");
-        title.setFont(UIConstants.FONT_BODY_BOLD);
-        title.setForeground(UIConstants.TEXT_PRIMARY);
-        title.setBorder(new EmptyBorder(4, 12, 8, 12));
-        popup.add(title);
-        popup.addSeparator();
-
-        User user = app.getLoggedInUserObj();
-        java.util.List<String> notifs = notificationService.getNotifications(
-                user != null ? user.getRole() : "customer");
-        for (String n : notifs) {
-            JMenuItem item = new JMenuItem(n);
-            item.setFont(UIConstants.FONT_SMALL);
-            item.setForeground(UIConstants.TEXT_DARK);
-            item.setBackground(Color.WHITE);
-            item.setBorder(new EmptyBorder(8, 16, 8, 20));
-            item.setEnabled(false);
-            popup.add(item);
-        }
-        popup.show(anchor, -popup.getPreferredSize().width + anchor.getWidth(), anchor.getHeight());
     }
 
     // ═══════════════════════════════════════════════════════════════

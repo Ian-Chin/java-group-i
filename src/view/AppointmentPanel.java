@@ -10,6 +10,7 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableColumnModel;
+import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -325,6 +326,16 @@ public class AppointmentPanel extends JPanel {
         table = new JTable(tableModel);
         styleTable(table);
 
+        TableRowSorter<DefaultTableModel> sorter = new TableRowSorter<>(tableModel);
+        sorter.setSortable(7, false);
+        sorter.setComparator(0, (java.util.Comparator<String>) (a, b) -> {
+            int na = extractIdNumber(a);
+            int nb = extractIdNumber(b);
+            if (na != nb) return Integer.compare(na, nb);
+            return a.compareTo(b);
+        });
+        table.setRowSorter(sorter);
+
         TableColumnModel cm = table.getColumnModel();
         cm.getColumn(0).setPreferredWidth(50);
         cm.getColumn(0).setMaxWidth(60);
@@ -341,10 +352,17 @@ public class AppointmentPanel extends JPanel {
 
         table.addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) {
-                int col = table.columnAtPoint(e.getPoint());
-                int row = table.rowAtPoint(e.getPoint());
-                if (row >= 0 && col == 7) {
-                    String id = (String) tableModel.getValueAt(row, 0);
+                int viewCol = table.columnAtPoint(e.getPoint());
+                int viewRow = table.rowAtPoint(e.getPoint());
+                if (viewRow < 0 || viewCol != 7) return;
+                int row = table.convertRowIndexToModel(viewRow);
+                String id = (String) tableModel.getValueAt(row, 0);
+
+                Rectangle cellRect = table.getCellRect(viewRow, viewCol, false);
+                boolean isEdit = e.getX() < cellRect.x + cellRect.width / 2;
+                if (isEdit) {
+                    handleEdit(id);
+                } else {
                     int confirm = JOptionPane.showConfirmDialog(AppointmentPanel.this,
                             "Delete appointment " + id + "?", "Confirm", JOptionPane.YES_NO_OPTION);
                     if (confirm == JOptionPane.YES_OPTION) {
@@ -467,29 +485,29 @@ public class AppointmentPanel extends JPanel {
             }
         });
 
-        // Delete column
+        // Action column — edit + delete icons only
         t.getColumnModel().getColumn(7).setCellRenderer(new DefaultTableCellRenderer() {
             @Override public Component getTableCellRendererComponent(JTable tbl, Object val,
                     boolean sel, boolean foc, int row, int col) {
-                JPanel cell = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 10));
+                JPanel cell = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 10));
                 cell.setOpaque(true);
                 cell.setBackground(sel ? tbl.getSelectionBackground() : Color.WHITE);
-                JLabel del = new JLabel("\u2715 Delete") {
-                    @Override protected void paintComponent(Graphics g) {
-                        Graphics2D g2 = (Graphics2D) g.create();
-                        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                        g2.setColor(new Color(255, 235, 235));
-                        g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
-                        g2.dispose();
-                        super.paintComponent(g);
-                    }
-                };
-                del.setFont(new Font("SansSerif", Font.BOLD, 11));
+
+                JLabel edit = new JLabel("\u270E", SwingConstants.CENTER);
+                edit.setFont(new Font("SansSerif", Font.PLAIN, 16));
+                edit.setForeground(new Color(70, 110, 200));
+                edit.setPreferredSize(new Dimension(24, 24));
+                edit.setCursor(new Cursor(Cursor.HAND_CURSOR));
+                edit.setToolTipText("Edit");
+
+                JLabel del = new JLabel("\u2715", SwingConstants.CENTER);
+                del.setFont(new Font("SansSerif", Font.BOLD, 14));
                 del.setForeground(UIConstants.TEXT_DANGER);
-                del.setHorizontalAlignment(SwingConstants.CENTER);
-                del.setPreferredSize(new Dimension(62, 28));
-                del.setOpaque(false);
+                del.setPreferredSize(new Dimension(24, 24));
                 del.setCursor(new Cursor(Cursor.HAND_CURSOR));
+                del.setToolTipText("Delete");
+
+                cell.add(edit);
                 cell.add(del);
                 return cell;
             }
@@ -585,6 +603,106 @@ public class AppointmentPanel extends JPanel {
 
     // ─── Create handler ──────────────────────────────────────────
 
+    private static int extractIdNumber(String id) {
+        if (id == null) return Integer.MAX_VALUE;
+        StringBuilder digits = new StringBuilder();
+        for (int i = 0; i < id.length(); i++) {
+            if (Character.isDigit(id.charAt(i))) digits.append(id.charAt(i));
+        }
+        if (digits.length() == 0) return Integer.MAX_VALUE;
+        try { return Integer.parseInt(digits.toString()); }
+        catch (NumberFormatException e) { return Integer.MAX_VALUE; }
+    }
+
+    private void handleEdit(String id) {
+        Appointment target = null;
+        for (Appointment a : appointmentService.getAll()) {
+            if (a.getId().equals(id)) { target = a; break; }
+        }
+        if (target == null) { error("Appointment not found."); return; }
+
+        // Customer combo prefilled to the appointment's current customer
+        JComboBox<String> custBox = new JComboBox<>();
+        List<User> customers = accountService.getUsersByRole("customer");
+        String custSelected = null;
+        for (User u : customers) {
+            String entry = u.getName() + " (" + u.getEmail() + ")";
+            custBox.addItem(entry);
+            if (u.getEmail().equalsIgnoreCase(target.getCustomerEmail())) custSelected = entry;
+        }
+        if (custSelected != null) custBox.setSelectedItem(custSelected);
+
+        // Technician combo prefilled
+        JComboBox<String> techBox = new JComboBox<>();
+        List<User> techs = accountService.getUsersByRole("technician");
+        String techSelected = null;
+        for (User u : techs) {
+            String entry = u.getName() + " (" + u.getEmail() + ")";
+            techBox.addItem(entry);
+            if (u.getEmail().equalsIgnoreCase(target.getTechnicianEmail())) techSelected = entry;
+        }
+        if (techSelected != null) techBox.setSelectedItem(techSelected);
+
+        // Service type
+        JComboBox<String> serviceBox = new JComboBox<>(
+                new String[]{"Normal Service", "Major Service"});
+        serviceBox.setSelectedItem(target.getServiceType());
+
+        // Date & Time — split the stored "yyyy-MM-dd HH:mm" string
+        String currentDate = target.getDateTime();
+        String currentTime = "08:00";
+        int spaceIdx = target.getDateTime().indexOf(' ');
+        if (spaceIdx > 0) {
+            currentDate = target.getDateTime().substring(0, spaceIdx);
+            currentTime = target.getDateTime().substring(spaceIdx + 1);
+        }
+        LocalDate parsedDate;
+        try { parsedDate = LocalDate.parse(currentDate); }
+        catch (Exception ex) { parsedDate = LocalDate.now(); }
+        final LocalDate[] dateHolder = { parsedDate };
+        JButton dateBtn = new JButton(dateHolder[0].toString());
+        dateBtn.setHorizontalAlignment(SwingConstants.LEFT);
+        dateBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        dateBtn.addActionListener(e -> showCalendarPopup(dateBtn, dateHolder,
+                picked -> dateBtn.setText(picked.toString())));
+
+        JComboBox<String> timeBox = new JComboBox<>();
+        for (int h = 8; h <= 17; h++) timeBox.addItem(LocalTime.of(h, 0).toString());
+        timeBox.setSelectedItem(currentTime);
+
+        // Duration
+        JComboBox<Integer> durationBox = new JComboBox<>(new Integer[]{1, 2, 3, 4});
+        durationBox.setSelectedItem(target.getDurationHours());
+
+        JPanel form = new JPanel(new GridLayout(0, 2, 8, 8));
+        form.add(new JLabel("Customer:"));     form.add(custBox);
+        form.add(new JLabel("Technician:"));   form.add(techBox);
+        form.add(new JLabel("Service:"));      form.add(serviceBox);
+        form.add(new JLabel("Date:"));         form.add(dateBtn);
+        form.add(new JLabel("Time:"));         form.add(timeBox);
+        form.add(new JLabel("Duration (hrs):")); form.add(durationBox);
+
+        int result = JOptionPane.showConfirmDialog(this, form,
+                "Edit Appointment " + id, JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE);
+        if (result != JOptionPane.OK_OPTION) return;
+
+        if (custBox.getSelectedItem() == null || techBox.getSelectedItem() == null) {
+            error("Customer and technician are required."); return;
+        }
+        String custEmail = extractEmail(custBox.getSelectedItem().toString());
+        String techEmail = extractEmail(techBox.getSelectedItem().toString());
+        String serviceType = (String) serviceBox.getSelectedItem();
+        String dateTime = dateHolder[0].toString() + " " + timeBox.getSelectedItem();
+        int duration = (Integer) durationBox.getSelectedItem();
+
+        if (appointmentService.update(id, custEmail, techEmail, serviceType, dateTime, duration)) {
+            refreshTable();
+        } else {
+            error("Failed to update appointment.");
+        }
+    }
+
     private void handleCreate() {
         if (customerCombo.getItemCount() == 0 || customerCombo.getSelectedItem().toString().startsWith("--")) {
             error("Please select a customer."); return;
@@ -652,6 +770,15 @@ public class AppointmentPanel extends JPanel {
     }
 
     private void showCalendarPopup() {
+        LocalDate[] holder = { selectedDate };
+        showCalendarPopup(datePickerBtn, holder, picked -> {
+            selectedDate = picked;
+            datePickerBtn.setText(picked.toString());
+        });
+    }
+
+    private void showCalendarPopup(JButton anchorBtn, LocalDate[] selectedHolder,
+                                   java.util.function.Consumer<LocalDate> onPick) {
         JPopupMenu popup = new JPopupMenu();
         popup.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1),
@@ -662,7 +789,7 @@ public class AppointmentPanel extends JPanel {
         calPanel.setBackground(Color.WHITE);
         calPanel.setPreferredSize(new Dimension(280, 260));
 
-        final YearMonth[] currentMonth = { YearMonth.from(selectedDate) };
+        final YearMonth[] currentMonth = { YearMonth.from(selectedHolder[0]) };
 
         // Nav row
         JPanel navRow = new JPanel(new BorderLayout());
@@ -713,7 +840,7 @@ public class AppointmentPanel extends JPanel {
             for (int d = 1; d <= daysInMonth; d++) {
                 LocalDate date = currentMonth[0].atDay(d);
                 boolean isToday = date.equals(today);
-                boolean isSel = date.equals(selectedDate);
+                boolean isSel = date.equals(selectedHolder[0]);
                 boolean isPast = date.isBefore(today);
                 final LocalDate clickDate = date;
 
@@ -740,8 +867,8 @@ public class AppointmentPanel extends JPanel {
                     cell.setCursor(new Cursor(Cursor.HAND_CURSOR));
                     cell.addMouseListener(new MouseAdapter() {
                         @Override public void mouseClicked(MouseEvent e) {
-                            selectedDate = clickDate;
-                            datePickerBtn.setText(selectedDate.toString());
+                            selectedHolder[0] = clickDate;
+                            onPick.accept(clickDate);
                             popup.setVisible(false);
                         }
                     });
@@ -757,7 +884,7 @@ public class AppointmentPanel extends JPanel {
         refresh[0].run();
 
         popup.add(calPanel);
-        popup.show(datePickerBtn, 0, datePickerBtn.getHeight());
+        popup.show(anchorBtn, 0, anchorBtn.getHeight());
     }
 
     private JButton miniNavBtn(String text) {
