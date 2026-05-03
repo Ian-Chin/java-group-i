@@ -39,6 +39,13 @@ import java.util.List;
  *   The CORRECT approach is to listen to mouseMoved events on the
  *   JTable itself and call table.setCursor() when the pointer is
  *   over column 4. See buildPendingDataCard() for the implementation.
+ *
+ * Star-rating labels shown in the popup (formal wording):
+ *   ★★★★★  Excellent    — Exceeds all expectations
+ *   ★★★★☆  Good         — Satisfactory overall
+ *   ★★★☆☆  Average      — Met basic expectations
+ *   ★★☆☆☆  Poor         — Below expectations
+ *   ★☆☆☆☆  Unsatisfactory — Did not meet expectations
  */
 public class MyFeedbackPage extends JPanel {
 
@@ -50,6 +57,16 @@ public class MyFeedbackPage extends JPanel {
     private static final Color COLOR_MUTED  = new Color(110, 118, 140);
     private static final Color BLUE_ACCENT  = new Color(80, 110, 230);
     private static final Color YELLOW_STAR  = new Color(255, 193, 7);
+
+    // ── Star label descriptions — shown beside the rating text in the popup ──
+    // Index 0 = 1 star, index 4 = 5 stars
+    private static final String[] STAR_LABELS = {
+        "Unsatisfactory — Did not meet expectations",   // 1 star
+        "Poor — Below expectations",                    // 2 stars
+        "Average — Met basic expectations",             // 3 stars
+        "Good — Satisfactory overall",                  // 4 stars
+        "Excellent — Exceeds all expectations"          // 5 stars
+    };
 
     // ── Service ───────────────────────────────────────────────────
     // All file I/O, searching, sorting, filtering, and row-building
@@ -247,7 +264,7 @@ public class MyFeedbackPage extends JPanel {
         }
 
         searchField.setFont(new Font("SansSerif", Font.PLAIN, 13));
-        searchField.setPreferredSize(new Dimension(200, 32));
+        searchField.setPreferredSize(new Dimension(310, 32));
         searchField.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(COLOR_BORDER, 1),
                 new EmptyBorder(4, 10, 4, 10)));
@@ -281,7 +298,7 @@ public class MyFeedbackPage extends JPanel {
         });
 
         sortCombo.setFont(new Font("SansSerif", Font.PLAIN, 13));
-        sortCombo.setPreferredSize(new Dimension(180, 32));
+        sortCombo.setPreferredSize(new Dimension(310, 32));
         sortCombo.setBackground(COLOR_CARD);
         sortCombo.setCursor(new Cursor(Cursor.HAND_CURSOR));
         sortCombo.addActionListener(e -> onChanged.run());
@@ -500,6 +517,8 @@ public class MyFeedbackPage extends JPanel {
 
     // ─────────────────────────────────────────────────────────────
     // buildHistoryDataCard() — search bar + feedback history table
+    //
+    // Filter options now include all five condition levels.
     // ─────────────────────────────────────────────────────────────
     private JPanel buildHistoryDataCard() {
         JPanel card = makeRoundedCard();
@@ -514,6 +533,10 @@ public class MyFeedbackPage extends JPanel {
             "Filter: Excellent Only",
             "Filter: Good Only",
             "Filter: Average Only",
+            "Filter: Poor Only",
+            "Filter: Unsatisfactory Only",
+            "Sort by Rating (Excellent → Unsatisfactory)",
+            "Sort by Rating (Unsatisfactory → Excellent)",
             "Sort by Technician (A-Z)"
         };
         card.add(
@@ -557,6 +580,12 @@ public class MyFeedbackPage extends JPanel {
         }
 
         // Condition column (5) — coloured badge
+        // Five levels aligned with convertStarsToCondition():
+        //   Excellent      → green
+        //   Good           → blue
+        //   Average        → amber / orange
+        //   Poor           → orange-red
+        //   Unsatisfactory → red
         historyTable.getColumnModel().getColumn(5).setCellRenderer(
             (t, value, isSelected, hasFocus, row, col) -> {
                 String condition = value != null ? value.toString() : "";
@@ -578,6 +607,14 @@ public class MyFeedbackPage extends JPanel {
                     case "average":
                         badge.setBackground(new Color(255, 243, 220));
                         badge.setForeground(new Color(180, 110, 20));
+                        break;
+                    case "poor":
+                        badge.setBackground(new Color(255, 230, 215));
+                        badge.setForeground(new Color(200, 70, 20));
+                        break;
+                    case "unsatisfactory":
+                        badge.setBackground(new Color(255, 218, 218));
+                        badge.setForeground(new Color(180, 30, 30));
                         break;
                     default:
                         badge.setBackground(new Color(235, 236, 240));
@@ -633,7 +670,7 @@ public class MyFeedbackPage extends JPanel {
         colModel.getColumn(2).setPreferredWidth(90);
         colModel.getColumn(3).setPreferredWidth(90);
         colModel.getColumn(4).setPreferredWidth(110);
-        colModel.getColumn(5).setPreferredWidth(90);
+        colModel.getColumn(5).setPreferredWidth(130); // wide enough for "Unsatisfactory"
         colModel.getColumn(6).setPreferredWidth(270);
         colModel.getColumn(7).setPreferredWidth(100);
         historyTable.getTableHeader().setReorderingAllowed(false);
@@ -698,7 +735,7 @@ public class MyFeedbackPage extends JPanel {
         JDialog dialog = new JDialog(
                 (Frame) SwingUtilities.getWindowAncestor(this),
                 "Submit Feedback", true);
-        dialog.setSize(600, 500);
+        dialog.setSize(720, 520);
         dialog.setResizable(false);
         dialog.setLocationRelativeTo(this);
         dialog.setLayout(new BorderLayout());
@@ -724,22 +761,35 @@ public class MyFeedbackPage extends JPanel {
         form.add(Box.createVerticalStrut(14));
 
         // Star rating question
-        JLabel ratingQuestion = new JLabel("How would you rate this service?");
+        JLabel ratingQuestion = new JLabel("Service Rating");
         ratingQuestion.setFont(new Font("SansSerif", Font.BOLD, 14));
         ratingQuestion.setForeground(COLOR_TEXT);
         ratingQuestion.setAlignmentX(Component.LEFT_ALIGNMENT);
         form.add(ratingQuestion);
+        form.add(Box.createVerticalStrut(2));
+
+        // Instruction line beneath the heading
+        JLabel ratingInstruction = new JLabel(
+                "Select a star rating that best reflects your experience.");
+        ratingInstruction.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        ratingInstruction.setForeground(COLOR_MUTED);
+        ratingInstruction.setAlignmentX(Component.LEFT_ALIGNMENT);
+        form.add(ratingInstruction);
         form.add(Box.createVerticalStrut(8));
 
-        // Star rating row
+        // Star rating row + formal label
         int[] selectedRating = { 0 };
+
         JPanel starsRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
         starsRow.setOpaque(false);
         starsRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        starsRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
 
         JLabel[] starLabels = new JLabel[5];
-        JLabel ratingText = new JLabel("");
-        ratingText.setFont(new Font("SansSerif", Font.PLAIN, 13));
+
+        // Formal rating label shown beside the stars
+        JLabel ratingText = new JLabel("No rating selected");
+        ratingText.setFont(new Font("SansSerif", Font.ITALIC, 13));
         ratingText.setForeground(COLOR_MUTED);
 
         for (int i = 0; i < 5; i++) {
@@ -754,31 +804,46 @@ public class MyFeedbackPage extends JPanel {
                 @Override
                 public void mouseEntered(MouseEvent e) {
                     updateStarDisplay(starLabels, starIndex, selectedRating[0]);
+                    // Show preview label on hover
+                    ratingText.setText(STAR_LABELS[starIndex - 1]);
+                    ratingText.setForeground(COLOR_TEXT);
                 }
                 @Override
                 public void mouseExited(MouseEvent e) {
                     updateStarDisplay(starLabels, selectedRating[0], selectedRating[0]);
+                    // Restore the confirmed label (or placeholder) after hover
+                    if (selectedRating[0] == 0) {
+                        ratingText.setText("No rating selected");
+                        ratingText.setForeground(COLOR_MUTED);
+                    } else {
+                        ratingText.setText(STAR_LABELS[selectedRating[0] - 1]);
+                        ratingText.setForeground(COLOR_TEXT);
+                    }
                 }
                 @Override
                 public void mouseClicked(MouseEvent e) {
                     selectedRating[0] = starIndex;
                     updateStarDisplay(starLabels, starIndex, starIndex);
-                    ratingText.setText(starIndex + " out of 5");
+                    ratingText.setText(STAR_LABELS[starIndex - 1]);
+                    ratingText.setForeground(COLOR_TEXT);
                 }
             });
 
             starsRow.add(star);
         }
-        starsRow.add(Box.createHorizontalStrut(8));
+        starsRow.add(Box.createHorizontalStrut(10));
+        // Fixed preferred width large enough for the longest label
+        // "Unsatisfactory — Did not meet expectations" so it is never clipped
+        ratingText.setPreferredSize(new Dimension(340, 22));
         starsRow.add(ratingText);
         form.add(starsRow);
-        form.add(Box.createVerticalStrut(6));
+        form.add(Box.createVerticalStrut(14));
 
         // Feedback text area label
         JPanel feedbackLabelRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         feedbackLabelRow.setOpaque(false);
         feedbackLabelRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel feedbackLabel = new JLabel("Your feedback");
+        JLabel feedbackLabel = new JLabel("Additional Comments");
         feedbackLabel.setFont(new Font("SansSerif", Font.BOLD, 14));
         feedbackLabel.setForeground(COLOR_TEXT);
         JLabel optionalLabel = new JLabel(" (optional)");
@@ -790,7 +855,7 @@ public class MyFeedbackPage extends JPanel {
         form.add(Box.createVerticalStrut(4));
 
         // Feedback text area
-        final String PLACEHOLDER = "Share your experience about this service...";
+        final String PLACEHOLDER = "Please describe your experience in detail...";
         JTextArea feedbackArea = new JTextArea(8, 10);
         feedbackArea.setFont(new Font("SansSerif", Font.PLAIN, 13));
         feedbackArea.setLineWrap(true);
@@ -917,7 +982,7 @@ public class MyFeedbackPage extends JPanel {
         btnRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
 
         JButton cancelBtn = makeDialogButton("Cancel",          COLOR_CARD,  COLOR_TEXT,  COLOR_BORDER);
-        JButton submitBtn = makeDialogButton("Submit feedback", BLUE_ACCENT, Color.WHITE, BLUE_ACCENT);
+        JButton submitBtn = makeDialogButton("Submit Feedback", BLUE_ACCENT, Color.WHITE, BLUE_ACCENT);
 
         cancelBtn.addActionListener(e -> dialog.dispose());
 
@@ -952,7 +1017,7 @@ public class MyFeedbackPage extends JPanel {
                     appt.vehicleId,
                     appt.technicianId,
                     condition,
-                    text.isEmpty() ? "No feedback provided." : text,
+                    text.isEmpty() ? "No comments provided." : text,
                     today
             );
 
@@ -960,13 +1025,13 @@ public class MyFeedbackPage extends JPanel {
                 dialog.dispose();
                 JOptionPane.showMessageDialog(
                         SwingUtilities.getWindowAncestor(MyFeedbackPage.this),
-                        "Your feedback has been submitted successfully!",
+                        "Your feedback has been submitted successfully. Thank you.",
                         "Feedback Submitted", JOptionPane.INFORMATION_MESSAGE);
                 refresh(); // move the row from Pending → History
             } else {
                 JOptionPane.showMessageDialog(dialog,
-                        "Failed to save feedback. Please try again.",
-                        "Error", JOptionPane.ERROR_MESSAGE);
+                        "An error occurred while saving your feedback. Please try again.",
+                        "Submission Error", JOptionPane.ERROR_MESSAGE);
             }
         });
 

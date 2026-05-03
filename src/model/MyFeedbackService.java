@@ -24,12 +24,19 @@ import java.util.stream.Collectors;
  *   [2] appointmentID
  *   [3] vehicleID
  *   [4] technicianID
- *   [5] condition        e.g. "Good", "Excellent", "Average"
+ *   [5] condition        e.g. "Excellent", "Good", "Average", "Poor", "Unsatisfactory"
  *   [6] feedbackText     e.g. "Full service completed - engine oil changed..."
  *   [7] date             e.g. "2026-03-05"
  *
  * Example line:
  *   FB1,C1,AP1,V1,T1,Good,Full service completed - engine oil changed.,2026-03-05
+ *
+ * Star-to-condition mapping:
+ *   5 stars → "Excellent"
+ *   4 stars → "Good"
+ *   3 stars → "Average"
+ *   2 stars → "Poor"
+ *   1 star  → "Unsatisfactory"
  *
  * appointments.txt format (8 columns):
  *   [0] appointmentID  [1] customerID  [2] vehicleID  [3] technicianID
@@ -65,7 +72,7 @@ public class MyFeedbackService {
         public String carPlate;         // e.g. "WXY1234" — looked up from vehicles.txt
         public String technicianId;     // e.g. "T1"
         public String technicianName;   // e.g. "Mike Tan" — looked up from accounts.txt
-        public String condition;        // e.g. "Good"
+        public String condition;        // e.g. "Excellent", "Good", "Average", "Poor", "Unsatisfactory"
         public String feedbackText;     // e.g. "Full service completed..."
         public String date;             // e.g. "2026-03-05"
     }
@@ -154,7 +161,7 @@ public class MyFeedbackService {
     //   appointmentId — e.g. "AP1"
     //   vehicleId     — e.g. "V1"
     //   technicianId  — e.g. "T1"
-    //   condition     — e.g. "Good", "Excellent", "Average"
+    //   condition     — e.g. "Excellent", "Good", "Average", "Poor", "Unsatisfactory"
     //   feedbackText  — the customer's written feedback
     //   date          — e.g. "2026-03-05"
     // ─────────────────────────────────────────────────────────────
@@ -368,6 +375,13 @@ public class MyFeedbackService {
     //
     // Called by MyFeedbackPage.applyHistorySearchAndSort().
     //
+    // Condition labels (aligned with convertStarsToCondition()):
+    //   "Excellent"      — 5 stars
+    //   "Good"           — 4 stars
+    //   "Average"        — 3 stars
+    //   "Poor"           — 2 stars
+    //   "Unsatisfactory" — 1 star
+    //
     // Parameters:
     //   source     — the full currentHistory list held by the page
     //   query      — lower-cased search text; empty string = no filter
@@ -416,6 +430,25 @@ public class MyFeedbackService {
                             .filter(fb -> fb.condition.equalsIgnoreCase("Average"))
                             .collect(Collectors.toList());
                     break;
+                case "Filter: Poor Only":
+                    filtered = filtered.stream()
+                            .filter(fb -> fb.condition.equalsIgnoreCase("Poor"))
+                            .collect(Collectors.toList());
+                    break;
+                case "Filter: Unsatisfactory Only":
+                    filtered = filtered.stream()
+                            .filter(fb -> fb.condition.equalsIgnoreCase("Unsatisfactory"))
+                            .collect(Collectors.toList());
+                    break;
+                case "Sort by Rating (Excellent → Unsatisfactory)":
+                    // Excellent(5) first, descending to Unsatisfactory(1)
+                    filtered.sort(Comparator.comparingInt(
+                            (MyFeedback fb) -> conditionRank(fb.condition)).reversed());
+                    break;
+                case "Sort by Rating (Unsatisfactory → Excellent)":
+                    // Unsatisfactory(1) first, ascending to Excellent(5)
+                    filtered.sort(Comparator.comparingInt(fb -> conditionRank(fb.condition)));
+                    break;
                 case "Sort by Technician (A-Z)":
                     filtered.sort(Comparator.comparing(
                             fb -> fb.technicianName.toLowerCase()));
@@ -431,19 +464,25 @@ public class MyFeedbackService {
     // convertStarsToCondition()
     //
     // Converts a 1-5 star integer rating chosen by the customer in
-    // the feedback popup into a human-readable condition label that
-    // is stored in feedback.txt.
+    // the feedback popup into a formal condition label stored in
+    // feedback.txt.
     //
-    //   5 stars  → "Excellent"
-    //   3-4 stars → "Good"
-    //   1-2 stars → "Average"
+    //   5 stars → "Excellent"
+    //   4 stars → "Good"
+    //   3 stars → "Average"
+    //   2 stars → "Poor"
+    //   1 star  → "Unsatisfactory"
     //
     // Called by MyFeedbackPage when the Submit button is pressed.
     // ─────────────────────────────────────────────────────────────
     public String convertStarsToCondition(int stars) {
-        if      (stars == 5) return "Excellent";
-        else if (stars >= 3) return "Good";
-        else                 return "Average";
+        switch (stars) {
+            case 5:  return "Excellent";
+            case 4:  return "Good";
+            case 3:  return "Average";
+            case 2:  return "Poor";
+            default: return "Unsatisfactory"; // 1 star or unexpected value
+        }
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -511,6 +550,30 @@ public class MyFeedbackService {
     // ═════════════════════════════════════════════════════════════
     // PRIVATE HELPERS
     // ═════════════════════════════════════════════════════════════
+
+    // ─────────────────────────────────────────────────────────────
+    // conditionRank()
+    //
+    // Maps a condition label to a numeric rank for sorting purposes.
+    //   Excellent      → 5  (best)
+    //   Good           → 4
+    //   Average        → 3
+    //   Poor           → 2
+    //   Unsatisfactory → 1  (worst)
+    //
+    // Used internally by filterAndSortHistory().
+    // ─────────────────────────────────────────────────────────────
+    private int conditionRank(String condition) {
+        if (condition == null) return 0;
+        switch (condition.trim().toLowerCase()) {
+            case "excellent":      return 5;
+            case "good":           return 4;
+            case "average":        return 3;
+            case "poor":           return 2;
+            case "unsatisfactory": return 1;
+            default:               return 0;
+        }
+    }
 
     // ─────────────────────────────────────────────────────────────
     // parseDuration()
