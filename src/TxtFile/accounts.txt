@@ -12,3 +12,4 @@ C4,Didi,didi@gmail.com,didi0000,customer,0
 C5,Amy Chen,amy@gmail.com,Cust1234,customer,6
 C6,Ryan Ng,ryan@gmail.com,Cust1234,customer,3
 C7,Kayden,kayden@gmail.com,kay12345,customer,0
+C8,Bobo,b@apu.asc.com,admin1234,technician,0
