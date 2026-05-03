@@ -23,32 +23,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * CustomerDashboard — the main GUI panel for the Customer role.
- *
- * This class is responsible ONLY for building and displaying the UI.
- * All business logic (data loading, calculations) has been moved to the
- * appropriate controller/service class:
- *
- *   APPOINTMENT logic  → AppointmentSectionController
- *     countThisMonth()         → appointmentController.countThisMonth()
- *     buildMonthlyCounts()     → appointmentController.buildMonthlyCounts()
- *     buildServiceBreakdown()  → appointmentController.buildServiceBreakdown()
- *     getNextAppointmentDate() → appointmentController.getNextAppointmentDate()
- *     getDaysUntilLabel()      → appointmentController.getDaysUntilLabel()
- *
- *   PAYMENT logic      → PaymentService
- *     calcPendingAmount()  → paymentService.calcPendingAmount()
- *     calcTotalSpent()     → paymentService.calcTotalSpent()
- *
- *   VEHICLE logic      → VehicleService
- *     getVehicleLabel()      → vehicleService.getVehicleLabel()
- *     buildVehicleSubtitle() → vehicleService.buildVehicleSubtitle()
- *
- *   SERVICE HISTORY logic → ServiceHistoryService
- *     findServiceHistoryId() → serviceHistoryService.findServiceHistoryId()
- *                              (called internally by PaymentService.savePayment())
- */
 public class CustomerDashboard extends JPanel {
 
     // ── Reference to the main application window ──────────────────
