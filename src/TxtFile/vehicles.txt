@@ -6,7 +6,8 @@ V5,C3,Car,FF6666,Toyota Supra,2020,Red
 V6,C3,Car,LV66,Lambo,2020,White
 V7,C3,Motor,AJH1312,Yamaha Y15ZR,2013,Blue
 V8,C3,Motor,ALP1000,Yamaha R25,2023,Red
-V9,C4,Car,DIDI01,Perodua Myvi,2020,White
-V10,C5,Car,AMY88,Honda Civic,2022,Grey
-V11,C6,Car,RYAN77,Proton X50,2023,Black
-V12,C7,Motor,WWW100,Yamaha MT-15,2026,Blue
+V9,C3,Motor,ABC1234,Honda CBR,2023,Black
+V10,C4,Car,DIDI01,Perodua Myvi,2020,White
+V11,C5,Car,AMY88,Honda Civic,2022,Grey
+V12,C6,Car,RYAN77,Proton X50,2023,Black
+V13,C7,Motor,WWW100,Yamaha MT-15,2026,Blue

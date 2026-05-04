@@ -563,8 +563,9 @@ public class CustomerDashboard extends JPanel {
 
         if (unpaid.size() > 2) {
             JButton viewAll = createTextLinkButton("View all");
+            // ── FIX: pass null as parentDialog — this IS the top-level card button ──
             viewAll.addActionListener(e ->
-                    showViewAllDialog("All Pending Payments", unpaid, true));
+                    showViewAllPendingDialog("All Pending Payments"));
             titleRow.add(viewAll, BorderLayout.EAST);
         }
         card.add(titleRow);
@@ -683,6 +684,11 @@ public class CustomerDashboard extends JPanel {
 
     // ─────────────────────────────────────────────────────────────
     // buildPaymentRow() — pure UI row for one pending payment
+    //
+    // parentDialog: when non-null, this row lives inside the "All
+    // Pending Payments" dialog.  After a successful payment the
+    // dialog's list panel is refreshed in-place so the paid item
+    // disappears immediately without closing and reopening the dialog.
     // ─────────────────────────────────────────────────────────────
     private JPanel buildPaymentRow(String[] row, JDialog parentDialog) {
         String apptId      = row[0];
@@ -934,20 +940,36 @@ public class CustomerDashboard extends JPanel {
         confirmBtn.setFocusPainted(false);
         confirmBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         confirmBtn.setPreferredSize(new Dimension(460, 42));
+
         confirmBtn.addActionListener(e -> {
             String  method = (String) methodCombo.getSelectedItem();
             // ── Save payment → appointmentController (which delegates to paymentService) ──
             boolean saved  = appointmentController.savePayment(apptId, vehicleId, fas, method);
             if (saved) {
+                // 1. Close the invoice dialog first
                 dialog.dispose();
+
+                // 2. Show the success confirmation
                 JOptionPane.showMessageDialog(this,
                         "Payment of RM " + fas + " via " + method + " recorded successfully.",
                         "Payment Successful", JOptionPane.INFORMATION_MESSAGE);
-                refreshUser();
+
+                // 3. If "All Pending Payments" dialog is open, refresh its list in-place.
+                //    If no items remain, close the dialog instead.
                 if (parentDialog != null && parentDialog.isVisible()) {
                     List<String[]> remaining = appointmentController.getUnpaidAppointments();
-                    if (remaining.size() <= 2) parentDialog.dispose();
+                    if (remaining.isEmpty()) {
+                        // Nothing left to show — close the dialog entirely
+                        parentDialog.dispose();
+                    } else {
+                        // Refresh the scrollable list inside the dialog
+                        refreshPendingPaymentsDialogContent(parentDialog, remaining);
+                    }
                 }
+
+                // 4. Rebuild the whole dashboard so stat cards + bottom row are up to date
+                refreshUser();
+
             } else {
                 JOptionPane.showMessageDialog(this,
                         "Failed to save payment. Please try again.",
@@ -977,6 +999,69 @@ public class CustomerDashboard extends JPanel {
         scroll.getVerticalScrollBar().setUnitIncrement(12);
         dialog.add(scroll, BorderLayout.CENTER);
         dialog.setVisible(true);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // refreshPendingPaymentsDialogContent()
+    //
+    // Called after a successful payment while "All Pending Payments"
+    // dialog is still open.  Replaces the scroll-pane content with a
+    // freshly built list that contains only the still-unpaid rows,
+    // so the just-paid item disappears without closing the dialog.
+    //
+    // How it works:
+    //   1. We stored a name-tag ("listScrollPane") on the dialog's
+    //      content pane when we built it in showViewAllPendingDialog().
+    //   2. Here we find that scroll-pane by tag, rebuild the inner
+    //      list panel from the fresh `remaining` data, swap the
+    //      viewport content, and revalidate/repaint.
+    //
+    // @param parentDialog  the "All Pending Payments" JDialog
+    // @param remaining     up-to-date list of still-unpaid appointments
+    // ═══════════════════════════════════════════════════════════════
+    private void refreshPendingPaymentsDialogContent(JDialog parentDialog,
+                                                      List<String[]> remaining) {
+        // Walk the dialog's content pane to find the tagged scroll-pane
+        Container contentPane = parentDialog.getContentPane();
+        JScrollPane scrollPane = findNamedScrollPane(contentPane, "listScrollPane");
+
+        if (scrollPane == null) return; // safety — should never happen
+
+        // Rebuild the list panel with the fresh (smaller) data set
+        JPanel listPanel = new JPanel();
+        listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
+        listPanel.setBackground(Color.WHITE);
+        listPanel.setBorder(new EmptyBorder(4, 16, 16, 16));
+
+        for (int i = 0; i < remaining.size(); i++) {
+            // Pass parentDialog so each new Pay button can still refresh
+            listPanel.add(buildPaymentRow(remaining.get(i), parentDialog));
+            if (i < remaining.size() - 1) listPanel.add(Box.createVerticalStrut(6));
+        }
+
+        // Swap the viewport content and force a repaint
+        scrollPane.setViewportView(listPanel);
+        scrollPane.revalidate();
+        scrollPane.repaint();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // findNamedScrollPane() — recursive helper that walks the
+    // component tree looking for a JScrollPane whose name property
+    // equals the given tag.  Returns null if not found.
+    // ─────────────────────────────────────────────────────────────
+    private JScrollPane findNamedScrollPane(Container container, String name) {
+        for (Component comp : container.getComponents()) {
+            if (comp instanceof JScrollPane
+                    && name.equals(((JScrollPane) comp).getName())) {
+                return (JScrollPane) comp;
+            }
+            if (comp instanceof Container) {
+                JScrollPane found = findNamedScrollPane((Container) comp, name);
+                if (found != null) return found;
+            }
+        }
+        return null;
     }
 
     private JPanel makePaddedSeparator(int hInset) {
@@ -1009,7 +1094,97 @@ public class CustomerDashboard extends JPanel {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // VIEW ALL DIALOG — shared by Upcoming and Pending Payments
+    // showViewAllPendingDialog()
+    //
+    // NEW dedicated "All Pending Payments" dialog.
+    // Replaces the old generic showViewAllDialog() call for pending
+    // payments so we can:
+    //   • Tag the inner JScrollPane with the name "listScrollPane"
+    //   • Pass this dialog reference into every buildPaymentRow() call
+    //     so that after each Pay action the list refreshes in-place
+    //
+    // The dialog stays open while payments are being made one by one.
+    // Once the last payment is confirmed the dialog closes itself
+    // (handled in the confirmBtn action listener in
+    // showPaymentInvoiceDialog()).
+    // ═══════════════════════════════════════════════════════════════
+    private void showViewAllPendingDialog(String dialogTitle) {
+        JDialog dialog = new JDialog(
+                (Frame) SwingUtilities.getWindowAncestor(this), dialogTitle, true);
+        dialog.setSize(560, 480);
+        dialog.setLocationRelativeTo(this);
+        dialog.setLayout(new BorderLayout());
+        dialog.setResizable(false);
+
+        // ── Header ────────────────────────────────────────────────
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(Color.WHITE);
+        header.setBorder(new EmptyBorder(16, 22, 12, 22));
+        JLabel tl = new JLabel(dialogTitle);
+        tl.setFont(new Font("SansSerif", Font.BOLD, 15));
+        tl.setForeground(UIConstants.TEXT_PRIMARY);
+        header.add(tl, BorderLayout.WEST);
+        dialog.add(header, BorderLayout.NORTH);
+
+        // ── Scrollable list (tagged so refreshPendingPaymentsDialogContent can find it) ──
+        JScrollPane scrollPane = buildPendingListScrollPane(
+                appointmentController.getUnpaidAppointments(), dialog);
+        scrollPane.setName("listScrollPane"); // ← tag used by refresh method
+        dialog.add(scrollPane, BorderLayout.CENTER);
+
+        // ── Footer ────────────────────────────────────────────────
+        JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 16, 10));
+        footer.setBackground(Color.WHITE);
+        footer.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UIConstants.BORDER_DEFAULT));
+        JButton closeBtn = createActionButton("Close", new Color(108, 117, 125), Color.WHITE);
+        closeBtn.setPreferredSize(new Dimension(78, 32));
+        closeBtn.addActionListener(e -> dialog.dispose());
+        footer.add(closeBtn);
+        dialog.add(footer, BorderLayout.SOUTH);
+
+        dialog.setVisible(true);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // buildPendingListScrollPane()
+    //
+    // Builds (or rebuilds) the scrollable JPanel that contains one
+    // buildPaymentRow() per unpaid appointment, wrapped in a
+    // JScrollPane.  Extracted into its own method so both the initial
+    // dialog build and the in-place refresh share the same logic.
+    //
+    // @param unpaidRows  the current list of unpaid appointments
+    // @param dialog      the parent dialog (passed into each row's Pay button)
+    // @return a configured JScrollPane ready to be placed in the dialog
+    // ─────────────────────────────────────────────────────────────
+    private JScrollPane buildPendingListScrollPane(List<String[]> unpaidRows,
+                                                    JDialog dialog) {
+        JPanel listPanel = new JPanel();
+        listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
+        listPanel.setBackground(Color.WHITE);
+        listPanel.setBorder(new EmptyBorder(4, 16, 16, 16));
+
+        if (unpaidRows.isEmpty()) {
+            listPanel.add(makeEmptyLabel("No pending payments."));
+        } else {
+            for (int i = 0; i < unpaidRows.size(); i++) {
+                listPanel.add(buildPaymentRow(unpaidRows.get(i), dialog));
+                if (i < unpaidRows.size() - 1) listPanel.add(Box.createVerticalStrut(6));
+            }
+        }
+
+        JScrollPane sp = new JScrollPane(listPanel);
+        sp.setBorder(null);
+        sp.getViewport().setBackground(Color.WHITE);
+        sp.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        sp.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        sp.getVerticalScrollBar().setUnitIncrement(16);
+        return sp;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // VIEW ALL DIALOG — used only for Upcoming Appointments now
+    // (Pending Payments has its own showViewAllPendingDialog above)
     // ═══════════════════════════════════════════════════════════════
     private void showViewAllDialog(String dialogTitle,
                                    List<String[]> allRows,
