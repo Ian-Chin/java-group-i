@@ -14,7 +14,7 @@ import java.awt.event.MouseEvent;
 import java.awt.geom.Ellipse2D;
 import java.awt.image.BufferedImage;
  
-
+ 
 public class TechnicianDashboard extends JPanel {
  
    
@@ -33,9 +33,6 @@ public class TechnicianDashboard extends JPanel {
     private JTextField profileNameField;
     private JTextField profileEmailField;
     private JLabel     profileRoleLabel;
-    private JLabel     profileAvatarDisplay;
-    private JPanel     avatarSelectionPanel;
-    private int        selectedAvatarIndex = 0;
  
     // ── Profile picture / banner ───────────────────────────────
     private BufferedImage profileImage = null;
@@ -53,15 +50,6 @@ public class TechnicianDashboard extends JPanel {
     // ── Brand / avatar constants ───────────────────────────────
     private static final Color BRAND_BLUE  = new Color(80, 110, 230);
     private static final Color BANNER_BLUE = new Color(100, 130, 240);
-    private static final Color[] AVATAR_COLORS = {
-            new Color(80, 110, 230), new Color(230, 80, 80),  new Color(80, 190, 110),
-            new Color(230, 160, 40), new Color(160, 80, 230), new Color(40, 180, 200),
-            new Color(230, 80, 160), new Color(100, 100, 120),
-    };
-    private static final String[] AVATAR_ICONS = {
-            "\u263A", "\u2605", "\u2665", "\u2666",
-            "\u263C", "\u2708", "\u266B", "\u2618"
-    };
  
     // ── Sidebar nav ────────────────────────────────────────────
     private static final String[] NAV_ITEMS = {
@@ -71,7 +59,7 @@ public class TechnicianDashboard extends JPanel {
             "\u2302", "\u2637", "\u2605"
     };
  
-
+ 
  
     private JMenuItem menuItem(String text) {
         JMenuItem item = new JMenuItem(text);
@@ -121,25 +109,6 @@ public class TechnicianDashboard extends JPanel {
         btn.repaint();
     }
  
- 
-    private void updateAvatarSelection() {
-        if (profileAvatarDisplay != null) {
-            profileAvatarDisplay.setText(AVATAR_ICONS[selectedAvatarIndex]);
-            profileAvatarDisplay.repaint();
-        }
-        if (avatarSelectionPanel != null) {
-            Component[] avatars = avatarSelectionPanel.getComponents();
-            for (int i = 0; i < avatars.length; i++) {
-                if (avatars[i] instanceof JLabel) {
-                    ((JLabel) avatars[i]).setBorder(i == selectedAvatarIndex
-                            ? BorderFactory.createLineBorder(UIConstants.PRIMARY, 3)
-                            : BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1));
-                }
-            }
-        }
-        if (avatarLabel != null) avatarLabel.repaint();
-    }
- 
     private void refreshProfileFields() {
         User user = app.getLoggedInUserObj();
         if (user == null) return;
@@ -149,12 +118,10 @@ public class TechnicianDashboard extends JPanel {
             String r = user.getRole();
             profileRoleLabel.setText(r.substring(0, 1).toUpperCase() + r.substring(1));
         }
-        selectedAvatarIndex = user.getProfilePicture();
         profileImage = profilePicStorage.loadImage(user.getEmail());
         bannerImage  = backgroundStorage.loadImage(user.getEmail());
         if (profileBanner   != null) profileBanner.repaint();
         if (profilePicLabel != null) profilePicLabel.repaint();
-        updateAvatarSelection();
     }
  
     private void handleProfileSave() {
@@ -162,12 +129,20 @@ public class TechnicianDashboard extends JPanel {
         if (user == null) return;
         String newName  = UIFactory.getFieldValue(profileNameField,  "Enter your name");
         String newEmail = UIFactory.getFieldValue(profileEmailField, "Enter your email");
-        if (newName.isEmpty() || newEmail.isEmpty()) { JOptionPane.showMessageDialog(app, "Name and email cannot be empty.", "Error", JOptionPane.ERROR_MESSAGE); return; }
-        if (!newName.matches("[a-zA-Z ]{2,50}")) { JOptionPane.showMessageDialog(app, "Name must be 2-50 letters only.", "Error", JOptionPane.ERROR_MESSAGE); return; }
-        if (!newEmail.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) { JOptionPane.showMessageDialog(app, "Please enter a valid email.", "Error", JOptionPane.ERROR_MESSAGE); return; }
+        if (newName.isEmpty() || newEmail.isEmpty()) {
+            JOptionPane.showMessageDialog(app, "Name and email cannot be empty.", "Error", JOptionPane.ERROR_MESSAGE); return;
+        }
+        if (!newName.matches("[a-zA-Z ]{2,50}")) {
+            JOptionPane.showMessageDialog(app, "Name must be 2-50 characters (letters only).", "Error", JOptionPane.ERROR_MESSAGE); return;
+        }
+        if (!newEmail.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
+            JOptionPane.showMessageDialog(app, "Please enter a valid email address.", "Error", JOptionPane.ERROR_MESSAGE); return;
+        }
         AccountService svc = app.getAccountService();
-        if (!newEmail.equalsIgnoreCase(user.getEmail()) && svc.emailExists(newEmail)) { JOptionPane.showMessageDialog(app, "Email already exists.", "Error", JOptionPane.ERROR_MESSAGE); return; }
-        User updated = new User(user.getUserId(), newName, newEmail, user.getPassword(), user.getRole(), selectedAvatarIndex);
+        if (!newEmail.equalsIgnoreCase(user.getEmail()) && svc.emailExists(newEmail)) {
+            JOptionPane.showMessageDialog(app, "An account with this email already exists.", "Error", JOptionPane.ERROR_MESSAGE); return;
+        }
+        User updated = new User(user.getUserId(), newName, newEmail, user.getPassword(), user.getRole(), 0);
         if (svc.updateUser(user.getEmail(), updated)) {
             app.setLoggedInUser(newName);
             app.setLoggedInUserObj(updated);
@@ -186,10 +161,14 @@ public class TechnicianDashboard extends JPanel {
         fd.setVisible(true);
         if (fd.getFile() == null) return;
         try {
-            BufferedImage img = ImageIO.read(new java.io.File(fd.getDirectory(), fd.getFile()));
-            if (img == null) { JOptionPane.showMessageDialog(app, "Could not read image.", "Error", JOptionPane.ERROR_MESSAGE); return; }
-            if (!profilePicStorage.saveImage(user.getEmail(), img)) { JOptionPane.showMessageDialog(app, "Failed to save picture.", "Error", JOptionPane.ERROR_MESSAGE); return; }
-            profileImage = img;
+            BufferedImage image = ImageIO.read(new java.io.File(fd.getDirectory(), fd.getFile()));
+            if (image == null) {
+                JOptionPane.showMessageDialog(app, "Could not read the selected image.", "Error", JOptionPane.ERROR_MESSAGE); return;
+            }
+            if (!profilePicStorage.saveImage(user.getEmail(), image)) {
+                JOptionPane.showMessageDialog(app, "Failed to save profile picture.", "Error", JOptionPane.ERROR_MESSAGE); return;
+            }
+            profileImage = image;
             if (profilePicLabel != null) profilePicLabel.repaint();
             if (avatarLabel     != null) avatarLabel.repaint();
         } catch (java.io.IOException ex) { ex.printStackTrace(); }
@@ -203,15 +182,18 @@ public class TechnicianDashboard extends JPanel {
         fd.setVisible(true);
         if (fd.getFile() == null) return;
         try {
-            BufferedImage img = ImageIO.read(new java.io.File(fd.getDirectory(), fd.getFile()));
-            if (img == null) { JOptionPane.showMessageDialog(app, "Could not read image.", "Error", JOptionPane.ERROR_MESSAGE); return; }
-            if (!backgroundStorage.saveImage(user.getEmail(), img)) { JOptionPane.showMessageDialog(app, "Failed to save background.", "Error", JOptionPane.ERROR_MESSAGE); return; }
-            bannerImage = img;
+            BufferedImage image = ImageIO.read(new java.io.File(fd.getDirectory(), fd.getFile()));
+            if (image == null) {
+                JOptionPane.showMessageDialog(app, "Could not read the selected image.", "Error", JOptionPane.ERROR_MESSAGE); return;
+            }
+            if (!backgroundStorage.saveImage(user.getEmail(), image)) {
+                JOptionPane.showMessageDialog(app, "Failed to save background image.", "Error", JOptionPane.ERROR_MESSAGE); return;
+            }
+            bannerImage = image;
             if (profileBanner != null) profileBanner.repaint();
         } catch (java.io.IOException ex) { ex.printStackTrace(); }
     }
  
-  
     private void drawCameraIcon(Graphics2D g2, int cx, int cy, int size, Color color) {
         g2.setColor(color);
         g2.setStroke(new BasicStroke(size / 10f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
@@ -238,6 +220,7 @@ public class TechnicianDashboard extends JPanel {
         hero.setOpaque(false);
         hero.setPreferredSize(new Dimension(0, 200));
         hero.setMaximumSize(new Dimension(Integer.MAX_VALUE, 200));
+ 
         boolean[] bannerHovered = {false};
         boolean[] avatarHovered = {false};
  
@@ -246,13 +229,31 @@ public class TechnicianDashboard extends JPanel {
                 super.paintComponent(g);
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                if (bannerImage != null) { g2.drawImage(bannerImage, 0, 0, getWidth(), getHeight(), null); }
-                else { GradientPaint gp = new GradientPaint(0, 0, BANNER_BLUE, getWidth(), getHeight(), new Color(60, 90, 210)); g2.setPaint(gp); g2.fillRect(0, 0, getWidth(), getHeight()); }
-                if (bannerHovered[0]) { g2.setColor(new Color(0, 0, 0, 110)); g2.fillRect(0, 0, getWidth(), getHeight()); int cx = getWidth() / 2, cy = getHeight() / 2 - 10; drawCameraIcon(g2, cx, cy, 28, Color.WHITE); g2.setColor(Color.WHITE); g2.setFont(new Font("SansSerif", Font.BOLD, 13)); FontMetrics fm = g2.getFontMetrics(); String msg = "Click to change"; g2.drawString(msg, cx - fm.stringWidth(msg) / 2, cy + 44); }
+                if (bannerImage != null) {
+                    g2.drawImage(bannerImage, 0, 0, getWidth(), getHeight(), null);
+                } else {
+                    GradientPaint gradient = new GradientPaint(
+                            0, 0, BANNER_BLUE, getWidth(), getHeight(), new Color(60, 90, 210));
+                    g2.setPaint(gradient);
+                    g2.fillRect(0, 0, getWidth(), getHeight());
+                }
+                if (bannerHovered[0]) {
+                    g2.setColor(new Color(0, 0, 0, 110));
+                    g2.fillRect(0, 0, getWidth(), getHeight());
+                    int cx = getWidth() / 2, cy = getHeight() / 2 - 10;
+                    drawCameraIcon(g2, cx, cy, 28, Color.WHITE);
+                    g2.setColor(Color.WHITE);
+                    g2.setFont(new Font("SansSerif", Font.BOLD, 13));
+                    FontMetrics fm = g2.getFontMetrics();
+                    String msg = "Click to change";
+                    g2.drawString(msg, cx - fm.stringWidth(msg) / 2, cy + 44);
+                }
                 g2.dispose();
             }
         };
-        profileBanner.setOpaque(false); profileBanner.setLayout(null); profileBanner.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        profileBanner.setOpaque(false);
+        profileBanner.setLayout(null);
+        profileBanner.setCursor(new Cursor(Cursor.HAND_CURSOR));
         profileBanner.addMouseListener(new MouseAdapter() {
             @Override public void mouseEntered(MouseEvent e) { bannerHovered[0] = true;  profileBanner.repaint(); }
             @Override public void mouseExited (MouseEvent e) { bannerHovered[0] = false; profileBanner.repaint(); }
@@ -264,25 +265,53 @@ public class TechnicianDashboard extends JPanel {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 int size = Math.min(getWidth(), getHeight());
-                if (profileImage != null) { int iw = profileImage.getWidth(), ih = profileImage.getHeight(); int crop = Math.min(iw, ih); int cx = (iw - crop) / 2, cy = (ih - crop) / 2; g2.setClip(new Ellipse2D.Float(0, 0, size, size)); g2.drawImage(profileImage, 0, 0, size, size, cx, cy, cx + crop, cy + crop, null); g2.setClip(null); }
-                else { drawDefaultAvatar(g2, size); }
-                if (avatarHovered[0]) { g2.setClip(new Ellipse2D.Float(0, 0, size, size)); g2.setColor(new Color(0, 0, 0, 110)); g2.fillOval(0, 0, size, size); g2.setClip(null); drawCameraIcon(g2, size / 2, size / 2, 20, Color.WHITE); }
-                g2.setColor(Color.WHITE); g2.setStroke(new BasicStroke(4)); g2.drawOval(2, 2, size - 4, size - 4);
+                if (profileImage != null) {
+                    int imgW  = profileImage.getWidth();
+                    int imgH  = profileImage.getHeight();
+                    int crop  = Math.min(imgW, imgH);
+                    int cropX = (imgW - crop) / 2;
+                    int cropY = (imgH - crop) / 2;
+                    g2.setClip(new Ellipse2D.Float(0, 0, size, size));
+                    g2.drawImage(profileImage, 0, 0, size, size,
+                            cropX, cropY, cropX + crop, cropY + crop, null);
+                    g2.setClip(null);
+                } else {
+                    drawDefaultAvatar(g2, size);
+                }
+                if (avatarHovered[0]) {
+                    g2.setClip(new Ellipse2D.Float(0, 0, size, size));
+                    g2.setColor(new Color(0, 0, 0, 110));
+                    g2.fillOval(0, 0, size, size);
+                    g2.setClip(null);
+                    drawCameraIcon(g2, size / 2, size / 2, 20, Color.WHITE);
+                }
+                g2.setColor(Color.WHITE);
+                g2.setStroke(new BasicStroke(4));
+                g2.drawOval(2, 2, size - 4, size - 4);
                 g2.dispose();
             }
         };
-        profilePicLabel.setPreferredSize(new Dimension(110, 110)); profilePicLabel.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        profilePicLabel.setPreferredSize(new Dimension(110, 110));
+        profilePicLabel.setCursor(new Cursor(Cursor.HAND_CURSOR));
         profilePicLabel.addMouseListener(new MouseAdapter() {
             @Override public void mouseEntered(MouseEvent e) { avatarHovered[0] = true;  profilePicLabel.repaint(); }
             @Override public void mouseExited (MouseEvent e) { avatarHovered[0] = false; profilePicLabel.repaint(); }
             @Override public void mouseClicked(MouseEvent e) { chooseProfileImage(); }
         });
+ 
         hero.addComponentListener(new java.awt.event.ComponentAdapter() {
-            @Override public void componentResized(java.awt.event.ComponentEvent e) { profileBanner.setBounds(0, 0, hero.getWidth(), 170); profilePicLabel.setBounds(30, 90, 110, 110); }
+            @Override public void componentResized(java.awt.event.ComponentEvent e) {
+                profileBanner.setBounds(0, 0, hero.getWidth(), 170);
+                profilePicLabel.setBounds(30, 90, 110, 110);
+            }
         });
-        profileBanner.setBounds(0, 0, 800, 170); profilePicLabel.setBounds(30, 90, 110, 110);
-        hero.add(profileBanner); hero.add(profilePicLabel);
-        hero.setComponentZOrder(profilePicLabel, 0); hero.setComponentZOrder(profileBanner, 1);
+        profileBanner.setBounds(0, 0, 800, 170);
+        profilePicLabel.setBounds(30, 90, 110, 110);
+ 
+        hero.add(profileBanner);
+        hero.add(profilePicLabel);
+        hero.setComponentZOrder(profilePicLabel, 0);
+        hero.setComponentZOrder(profileBanner,   1);
         return hero;
     }
  
@@ -304,70 +333,6 @@ public class TechnicianDashboard extends JPanel {
         card.add(topSep);
         card.add(Box.createVerticalStrut(22));
  
-        profileAvatarDisplay = new JLabel(AVATAR_ICONS[0]) {
-            @Override protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(AVATAR_COLORS[selectedAvatarIndex]);
-                g2.fillOval(0, 0, 60, 60);
-                g2.dispose();
-                super.paintComponent(g);
-            }
-        };
-        profileAvatarDisplay.setFont(new Font("SansSerif", Font.PLAIN, 28));
-        profileAvatarDisplay.setForeground(Color.WHITE);
-        profileAvatarDisplay.setHorizontalAlignment(SwingConstants.CENTER);
-        profileAvatarDisplay.setVerticalAlignment(SwingConstants.CENTER);
-        profileAvatarDisplay.setPreferredSize(new Dimension(60, 60));
-        profileAvatarDisplay.setMaximumSize(new Dimension(60, 60));
-        profileAvatarDisplay.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(profileAvatarDisplay);
-        card.add(Box.createVerticalStrut(12));
- 
-        avatarSelectionPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
-        avatarSelectionPanel.setOpaque(false);
-        avatarSelectionPanel.setMaximumSize(new Dimension(460, 60));
-        for (int i = 0; i < AVATAR_COLORS.length; i++) {
-            final int idx = i;
-            JLabel av = new JLabel(AVATAR_ICONS[i]) {
-                @Override protected void paintComponent(Graphics g) {
-                    Graphics2D g2 = (Graphics2D) g.create();
-                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    g2.setColor(AVATAR_COLORS[idx]);
-                    g2.fillOval(2, 2, 42, 42);
-                    g2.dispose();
-                    super.paintComponent(g);
-                }
-            };
-            av.setFont(new Font("SansSerif", Font.PLAIN, 20));
-            av.setForeground(Color.WHITE);
-            av.setHorizontalAlignment(SwingConstants.CENTER);
-            av.setVerticalAlignment(SwingConstants.CENTER);
-            av.setPreferredSize(new Dimension(46, 46));
-            av.setCursor(new Cursor(Cursor.HAND_CURSOR));
-            av.setBorder(BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1));
-            av.addMouseListener(new MouseAdapter() {
-                @Override public void mouseClicked(MouseEvent e) { selectedAvatarIndex = idx; updateAvatarSelection(); }
-            });
-            avatarSelectionPanel.add(av);
-        }
-        card.add(avatarSelectionPanel);
-        card.add(Box.createVerticalStrut(6));
- 
-        JLabel avatarNote = new JLabel("This icon appears in the header when no photo is set.");
-        avatarNote.setFont(UIConstants.FONT_SMALL);
-        avatarNote.setForeground(UIConstants.TEXT_MUTED);
-        avatarNote.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(avatarNote);
-        card.add(Box.createVerticalStrut(24));
- 
-        JSeparator midSep = new JSeparator();
-        midSep.setForeground(UIConstants.BORDER_DEFAULT);
-        midSep.setMaximumSize(new Dimension(380, 1));
-        midSep.setAlignmentX(Component.CENTER_ALIGNMENT);
-        card.add(midSep);
-        card.add(Box.createVerticalStrut(22));
- 
         card.add(UIFactory.createFieldLabel("Name")); card.add(Box.createVerticalStrut(6));
         profileNameField = UIFactory.createTextField("Enter your name"); card.add(profileNameField);
         card.add(Box.createVerticalStrut(16));
@@ -377,7 +342,7 @@ public class TechnicianDashboard extends JPanel {
         card.add(Box.createVerticalStrut(16));
  
         card.add(UIFactory.createFieldLabel("Role")); card.add(Box.createVerticalStrut(6));
-        profileRoleLabel = new JLabel("Technician");
+        profileRoleLabel = new JLabel("\u2014");
         profileRoleLabel.setFont(UIConstants.FONT_BODY);
         profileRoleLabel.setForeground(UIConstants.TEXT_SECONDARY);
         profileRoleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
@@ -389,6 +354,7 @@ public class TechnicianDashboard extends JPanel {
         JButton saveBtn = UIFactory.createPrimaryButton("Save Changes");
         saveBtn.addActionListener(e -> handleProfileSave());
         card.add(saveBtn);
+ 
         return card;
     }
  
@@ -421,13 +387,25 @@ public class TechnicianDashboard extends JPanel {
     private JPanel buildProfileArea() {
         JPanel profileArea = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 12));
         profileArea.setBackground(UIConstants.BG_HEADER);
-
-        avatarLabel = new JLabel(AVATAR_ICONS[selectedAvatarIndex]) {
+ 
+        avatarLabel = new JLabel() {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                if (profileImage != null) { int iw = profileImage.getWidth(), ih = profileImage.getHeight(); int crop = Math.min(iw, ih); int cx = (iw - crop) / 2, cy = (ih - crop) / 2; g2.setClip(new Ellipse2D.Float(0, 0, 38, 38)); g2.drawImage(profileImage, 0, 0, 38, 38, cx, cy, cx + crop, cy + crop, null); g2.setClip(null); }
-                else { g2.setColor(AVATAR_COLORS[selectedAvatarIndex]); g2.fillOval(0, 0, 38, 38); g2.dispose(); super.paintComponent(g); return; }
+                if (profileImage != null) {
+                    int iw = profileImage.getWidth(), ih = profileImage.getHeight();
+                    int crop = Math.min(iw, ih);
+                    int cx = (iw - crop) / 2, cy = (ih - crop) / 2;
+                    g2.setClip(new Ellipse2D.Float(0, 0, 38, 38));
+                    g2.drawImage(profileImage, 0, 0, 38, 38, cx, cy, cx + crop, cy + crop, null);
+                    g2.setClip(null);
+                } else {
+                    g2.setColor(BRAND_BLUE);
+                    g2.fillOval(0, 0, 38, 38);
+                    g2.dispose();
+                    super.paintComponent(g);
+                    return;
+                }
                 g2.dispose();
             }
         };
@@ -457,8 +435,8 @@ public class TechnicianDashboard extends JPanel {
  
         JMenuItem viewProfile = menuItem("View Profile");
         viewProfile.addActionListener(e -> {
-            activeNav = "Profile";
-            headerTitle.setText("Profile");
+            activeNav = "";
+            headerTitle.setText("My Profile");
             contentLayout.show(contentPanel, "Profile");
             refreshProfileFields();
         });
@@ -477,7 +455,7 @@ public class TechnicianDashboard extends JPanel {
         profileArea.add(profileBtn);
         return profileArea;
     }
-
+ 
     private JPanel buildHeader() {
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(UIConstants.BG_HEADER);
@@ -588,7 +566,6 @@ public class TechnicianDashboard extends JPanel {
  
         User user = app.getLoggedInUserObj();
         if (user != null) {
-            selectedAvatarIndex = user.getProfilePicture();
             profileImage = profilePicStorage.loadImage(user.getEmail());
             bannerImage  = backgroundStorage.loadImage(user.getEmail());
             if (profileBanner   != null) profileBanner.repaint();
