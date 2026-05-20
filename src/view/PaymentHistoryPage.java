@@ -14,32 +14,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-/**
- * PaymentHistoryPage
- *
- * GUI-only panel that displays the current customer's payment history.
- * All data loading and business logic is delegated to PaymentService.
- *
- * CHANGE FROM PREVIOUS VERSION:
- *   - Removed the CardLayout / empty-state panel entirely.
- *   - The page now ALWAYS shows the full layout:
- *       three stat cards (showing "0" / "RM 0.00" / "—" when no data)
- *       + the payments table (showing no rows when there is no data).
- *   - This matches the Dashboard behaviour where 0 values are
- *     displayed instead of a special "no data" card.
- *
- * REFACTOR: Data/logic methods moved to PaymentService:
- *   - readPaymentsFromFile()   → PaymentService.readPaymentsFromFile()
- *   - getPaymentsForCustomer() → PaymentService.getPaymentsForCustomer()
- *   - calcTotalPaidAmount()    → PaymentService.calcTotalPaidAmount()
- *   - countPaidRows()          → PaymentService.countPaidRows()
- *   - countPendingRows()       → PaymentService.countPendingRows()
- *   - getPreferredMethod()     → PaymentService.getPreferredMethod()
- *
- * REFACTOR: Search/sort/filter logic moved to PaymentService:
- *   - applyFilter() keyword matching → PaymentService.filterByKeyword()
- *   - applySort()   comparator logic → PaymentService.getSortComparator()
- */
 public class PaymentHistoryPage extends JPanel {
 
     // ── Data-layer services ───────────────────────────────────────
@@ -122,7 +96,6 @@ public class PaymentHistoryPage extends JPanel {
 
     // ─────────────────────────────────────────────────────────────
     // buildDataPanel() — stat cards on top + table below
-    // Always visible, whether or not there is data.
     // ─────────────────────────────────────────────────────────────
     private JPanel buildDataPanel() {
         JPanel panel = new JPanel(new BorderLayout());
@@ -138,9 +111,6 @@ public class PaymentHistoryPage extends JPanel {
 
     // ─────────────────────────────────────────────────────────────
     // buildStatsRow() — three summary stat cards side by side
-    //
-    // Labels are stored in instance fields so refresh() can
-    // update them later with real data.
     // ─────────────────────────────────────────────────────────────
     private JPanel buildStatsRow() {
         JPanel row = new JPanel(new GridLayout(1, 3, 14, 0));
@@ -445,9 +415,6 @@ public class PaymentHistoryPage extends JPanel {
 
     // ─────────────────────────────────────────────────────────────
     // applyFilter() — delegates keyword matching to PaymentService.
-    //
-    // The RowFilter is still set here (Swing concern) but the
-    // per-row match logic lives in PaymentService.matchesKeyword().
     // ─────────────────────────────────────────────────────────────
     private void applyFilter() {
         if (rowSorter == null || searchField == null) return;
@@ -483,11 +450,6 @@ public class PaymentHistoryPage extends JPanel {
 
     // ─────────────────────────────────────────────────────────────
     // applySort() — delegates comparator construction to PaymentService.
-    //
-    // PaymentService.getSortComparator() maps the dropdown index to a
-    // Comparator<String[]>. This method wraps it in a Swing SortKey so
-    // the TableRowSorter can apply it; all ordering logic lives in the
-    // service.
     // ─────────────────────────────────────────────────────────────
     private void applySort() {
         if (rowSorter == null || sortCombo == null) return;
@@ -504,10 +466,6 @@ public class PaymentHistoryPage extends JPanel {
         }
 
         // Determine which column index the service is sorting on so we can
-        // register the comparator with the TableRowSorter for that column.
-        // Column mapping mirrors getSortComparator()'s switch:
-        //   1,2 → col 6 (Date)   3,4 → col 5 (Amount)
-        //   5   → col 7 (Method) 6   → col 0 (Payment ID)
         int sortCol;
         SortOrder sortOrder;
         switch (selectedIndex) {
@@ -539,10 +497,6 @@ public class PaymentHistoryPage extends JPanel {
 
     // ═══════════════════════════════════════════════════════════════
     // refresh()
-    //
-    // Loads payment records for the logged-in customer via PaymentService.
-    // If there are no records the stat cards show zero values and
-    // the table is empty — no special empty-state panel is shown.
     // ═══════════════════════════════════════════════════════════════
     public void refresh() {
         model.User loggedInUser = getLoggedInUser();
@@ -593,7 +547,6 @@ public class PaymentHistoryPage extends JPanel {
 
     // ─────────────────────────────────────────────────────────────
     // updateStatsCards() — fills stat card labels with real data.
-    // Stat calculations are delegated to PaymentService.
     // ─────────────────────────────────────────────────────────────
     private void updateStatsCards(List<String[]> rows) {
         // Card 1: total paid — via PaymentService
@@ -651,8 +604,7 @@ public class PaymentHistoryPage extends JPanel {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Vehicle helpers — resolve vehicleId to type and plate label
-    // via VehicleService
+    // Vehicle helpers — resolve vehicleId to type and plate label via VehicleService
     // ─────────────────────────────────────────────────────────────
     private String resolveVehicleType(String vehicleId) {
         String label = vehicleService.getVehiclePlate(vehicleId);

@@ -421,7 +421,6 @@ public class CustomerDashboardController {
 
     // ═══════════════════════════════════════════════════════════════════════
     //  (E) VEHICLE FIELD VALIDATION — shared by Add and Edit
-    //  All 5 fields must pass before any write to disk happens.
     // ═══════════════════════════════════════════════════════════════════════
 
     public String validateVehicleFields(String vehicleType, String plate,

@@ -8,20 +8,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-/**
- * AppointmentService reads/writes appointment data from appointments.txt.
- *
- * File format — each line has 8 values:
- *   AppointmentID, CustomerID, VehicleID, TechnicianID,
- *   ServiceType, Status, DateTime, Duration(Hours)
- *
- * Example:
- *   AP4,C3,V4,T3,Major Service,Completed,2026-03-26 13:00,3
- *
- * CHANGE: Removed autoCompleteExpiredAppointments().
- *         getPendingAppointments() now simply hides past appointments
- *         by checking the end time — it never changes the file.
- */
 public class AppointmentService {
 
     private static final String FILE_PATH = "src" + File.separator
@@ -71,7 +57,7 @@ public class AppointmentService {
         public String getTechnicianEmail() { return technicianId; }
     }
 
-    // ── Read all appointments from the file ───────────────────────
+    // ── Read all appointments from the appointments.txt ───────────────────────
     public List<Appointment> getAll() {
         List<Appointment> list = new ArrayList<>();
         File file = new File(FILE_PATH);
@@ -165,19 +151,6 @@ public class AppointmentService {
     // ═══════════════════════════════════════════════════════════════
     // deletePendingByVehicleId()
     // ═══════════════════════════════════════════════════════════════
-    /**
-     * When a vehicle is deleted, this method removes ALL appointments
-     * for that vehicle whose status is "Pending" or "In Progress".
-     *
-     * WHY only "Pending" / "In Progress"?
-     *   - These mean the service has NOT happened yet.
-     *     There is nothing to pay, so deleting these is safe.
-     *   - "Completed" means the service already happened and the customer
-     *     owes payment. These must stay so they appear in Pending Payment.
-     *
-     * @param vehicleId  the ID of the vehicle being deleted, e.g. "V4"
-     * @return true if the file was rewritten successfully
-     */
     public boolean deletePendingByVehicleId(String vehicleId) {
         File file = new File(FILE_PATH);
         if (!file.exists()) return false;
@@ -257,23 +230,6 @@ public class AppointmentService {
     // ═══════════════════════════════════════════════════════════════
     // getPendingAppointments — for the Upcoming Appointments card
     // ═══════════════════════════════════════════════════════════════
-    /**
-     * Returns upcoming appointments for a customer.
-     *
-     * HOW IT WORKS (beginner-friendly explanation):
-     *   1. Read every appointment from the file.
-     *   2. Skip any appointment that does not belong to this customer.
-     *   3. Skip any appointment that is not "Pending" or "In Progress".
-     *   4. Calculate when the appointment ends (start time + duration hours).
-     *   5. If the end time has already passed → hide it (do NOT change the file).
-     *   6. If the end time is still in the future → show it.
-     *
-     * The file is NEVER modified here. We only decide what to display.
-     *
-     * Returned array has 7 elements:
-     *   [0] appointmentID  [1] vehicleID  [2] technicianID
-     *   [3] serviceType    [4] status     [5] dateTime     [6] duration
-     */
     public List<String[]> getPendingAppointments(String userId) {
         List<String[]> result = new ArrayList<>();
 
@@ -325,13 +281,6 @@ public class AppointmentService {
     // ═══════════════════════════════════════════════════════════════
     // getUnpaidAppointments — for the Pending Payment card
     // ═══════════════════════════════════════════════════════════════
-    /**
-     * Returns completed but unpaid appointments for a customer.
-     *
-     * Returned array has 7 elements:
-     *   [0] appointmentID  [1] vehicleID  [2] technicianID
-     *   [3] serviceType    [4] status     [5] dateTime     [6] duration
-     */
     public List<String[]> getUnpaidAppointments(String userId, Set<String> paidIds) {
         List<String[]> result = new ArrayList<>();
 
@@ -351,18 +300,6 @@ public class AppointmentService {
     // ═══════════════════════════════════════════════════════════════
     // getAllAppointmentsForUser — for dashboard chart totals
     // ═══════════════════════════════════════════════════════════════
-    /**
-     * Returns every appointment belonging to the given customer,
-     * regardless of status. Used for total count, total spent,
-     * and average-per-visit calculations in the dashboard charts.
-     *
-     * Returned array has 7 elements:
-     *   [0] appointmentID  [1] vehicleID  [2] technicianID
-     *   [3] serviceType    [4] status     [5] dateTime     [6] duration
-     *
-     * @param userId  the customer's user ID e.g. "C3"
-     * @return list of all appointment rows for that customer
-     */
     public List<String[]> getAllAppointmentsForUser(String userId) {
         List<String[]> result = new ArrayList<>();
         for (Appointment a : getAll()) {

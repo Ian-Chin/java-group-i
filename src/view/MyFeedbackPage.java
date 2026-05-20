@@ -14,39 +14,6 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * MyFeedbackPage
- *
- * Pure GUI class — all data loading, searching, sorting, filtering,
- * and table-row building are delegated to MyFeedbackService.
- *
- * What this file is responsible for:
- *   - Building and laying out every Swing component
- *   - Responding to user interactions (button clicks, key presses)
- *   - Calling MyFeedbackService methods to obtain the data it needs
- *   - Rendering the feedback popup dialog
- *
- * What this file does NOT do (see MyFeedbackService for these):
- *   - Read or write any .txt files
- *   - Search / filter / sort data lists
- *   - Convert star ratings to condition labels
- *   - Build table row arrays from model objects
- *
- * HOW THE "FEEDBACK" BUTTON HOVER CURSOR WORKS:
- *   A JTable cell renderer is NOT a real on-screen component.
- *   Swing only uses it to paint pixels — it is never added to the
- *   window, so setting a cursor on it has no effect.
- *   The CORRECT approach is to listen to mouseMoved events on the
- *   JTable itself and call table.setCursor() when the pointer is
- *   over column 4. See buildPendingDataCard() for the implementation.
- *
- * Star-rating labels shown in the popup (formal wording):
- *   ★★★★★  Excellent    — Exceeds all expectations
- *   ★★★★☆  Good         — Satisfactory overall
- *   ★★★☆☆  Average      — Met basic expectations
- *   ★★☆☆☆  Poor         — Below expectations
- *   ★☆☆☆☆  Unsatisfactory — Did not meet expectations
- */
 public class MyFeedbackPage extends JPanel {
 
     // ── Colours ───────────────────────────────────────────────────
@@ -145,8 +112,6 @@ public class MyFeedbackPage extends JPanel {
 
     // ─────────────────────────────────────────────────────────────
     // refresh()
-    //
-    // Reloads all data via the service and updates both tables.
     // Delegates the actual file reading to:
     //   service.getCompletedAppointmentsWithoutFeedback()
     //   service.getFeedbackByCustomer()
@@ -1005,7 +970,6 @@ public class MyFeedbackPage extends JPanel {
             }
 
             // ── Convert star rating to condition label ─────────────
-            // Conversion logic lives in MyFeedbackService
             String condition = service.convertStarsToCondition(selectedRating[0]);
 
             String today = LocalDate.now().toString();

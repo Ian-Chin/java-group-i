@@ -6,17 +6,6 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * StaffReviewService
- *
- * Handles ALL business logic and data access for the Staff Review feature:
- *   - Reading review data from comments.txt
- *   - Looking up names from accounts.txt
- *   - Looking up vehicle info from vehicles.txt
- *   - Filtering reviews by keyword and rating band
- *   - Sorting reviews by any column
- *   - Calculating average ratings and star-level counts
- *   - Building star symbol strings (★ / ½ / ☆)
- *
  * comments.txt format — 9 fields separated by commas:
  *   [0] commentID
  *   [1] customerID
@@ -27,9 +16,6 @@ import java.util.List;
  *   [6] rating
  *   [7] feedback
  *   [8] date
- *
- * Example line:
- *   CM1,C1,AP1,V1,S1,T1,4.0,Service was thorough and staff were helpful.,2026-03-05
  */
 public class StaffReviewService {
 
@@ -67,9 +53,6 @@ public class StaffReviewService {
 
     // ─────────────────────────────────────────────────────────────
     // getReviewsByCustomer()
-    //
-    // Returns only the reviews that belong to the given customer.
-    // Used by StaffReviewPage to show only the logged-in customer's reviews.
     // ─────────────────────────────────────────────────────────────
     public List<StaffReview> getReviewsByCustomer(String customerId) {
 
@@ -133,9 +116,6 @@ public class StaffReviewService {
 
     // ─────────────────────────────────────────────────────────────
     // getAllReviews()
-    //
-    // Returns every review in comments.txt (no filtering).
-    // Useful for admin or staff pages that show all reviews.
     // ─────────────────────────────────────────────────────────────
     public List<StaffReview> getAllReviews() {
 
@@ -234,14 +214,6 @@ public class StaffReviewService {
 
     // ─────────────────────────────────────────────────────────────
     // lookUpName() — private helper
-    //
-    // Searches accounts.txt for a user ID (e.g. "S1" or "T1") and
-    // returns the name in column [1] (e.g. "Ian Chin").
-    //
-    // Returns the ID itself as a fallback if the name is not found.
-    //
-    // accounts.txt format:
-    //   [0] userID, [1] name, [2] email, [3] password, [4] role, [5] profilePic
     // ─────────────────────────────────────────────────────────────
     private String lookUpName(String userId) {
 
@@ -280,15 +252,6 @@ public class StaffReviewService {
 
     // ─────────────────────────────────────────────────────────────
     // lookUpVehicle() — private helper
-    //
-    // Searches vehicles.txt for a vehicle ID (e.g. "V1") and
-    // returns a 2-element array: [vehicleType, carPlate].
-    //
-    // Returns ["Unknown", "Unknown"] as a fallback if not found.
-    //
-    // vehicles.txt format:
-    //   [0] vehicleID, [1] userID, [2] vehicleType, [3] plate,
-    //   [4] brand, [5] year, [6] colour
     // ─────────────────────────────────────────────────────────────
     private String[] lookUpVehicle(String vehicleId) {
 
@@ -333,9 +296,6 @@ public class StaffReviewService {
 
     // ─────────────────────────────────────────────────────────────
     // calculateAverageRating()
-    //
-    // Returns the average rating across all reviews in the list.
-    // Returns 0.0 if the list is empty (avoids dividing by zero).
     // ─────────────────────────────────────────────────────────────
     public double calculateAverageRating(List<StaffReview> reviews) {
         if (reviews.isEmpty()) return 0.0;
@@ -382,9 +342,6 @@ public class StaffReviewService {
     //
     // Converts a numeric rating to a string of ★ / ½ / ☆ symbols.
     // e.g. 4.4 → "★★★★½"
-    //
-    // Moved here from StaffReviewPage so all review-related logic
-    // lives in the service layer.
     // ─────────────────────────────────────────────────────────────
     public String buildStarString(double rating) {
         StringBuilder sb = new StringBuilder();
@@ -402,9 +359,6 @@ public class StaffReviewService {
     // Returns a filtered sub-list of the given reviews based on:
     //   keyword    — case-insensitive match against all text fields
     //   ratingIndex — 0 = All, 1 = 5★, 2 = 4★, 3 = 3★, 4 = 2★, 5 = 1★
-    //
-    // Moved here from StaffReviewPage.applyFilters() so the page
-    // only needs to call one method and bind the result to the table.
     // ─────────────────────────────────────────────────────────────
     public List<StaffReview> filterReviews(List<StaffReview> reviews,
                                            String keyword,
@@ -461,9 +415,6 @@ public class StaffReviewService {
     //   4 = Vehicle Type
     //
     // Pass sortColumnIndex = -1 to skip sorting entirely.
-    //
-    // Moved here from StaffReviewPage.applySortToList() so the page
-    // only handles display and delegates all ordering logic here.
     // ─────────────────────────────────────────────────────────────
     public void sortReviews(List<StaffReview> list,
                             int sortColumnIndex,

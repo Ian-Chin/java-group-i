@@ -15,31 +15,6 @@ import java.util.Set;
  * File format — each line has 9 values:
  *   PaymentID , CustomerID , ServiceHistoryID , AppointmentID ,
  *   VehicleID , Amount , PaymentDate , Method , Status
- *
- * Example:
- *   PY1,C1,SH1,AP1,V1,120.00,2026-03-05,Cash,Paid
- *
- * METHODS MOVED FROM CustomerDashboard.java:
- *  - calcPendingAmount()  : totals RM due across all unpaid appointment rows
- *  - calcTotalSpent()     : totals RM for completed + paid appointments (for charts)
- *
- * METHODS MOVED FROM PaymentHistoryPage.java:
- *  - readPaymentsFromFile()    : reads all payment rows from payments.txt
- *  - getPaymentsForCustomer()  : filters rows by customer ID
- *  - calcTotalPaidAmount()     : sums RM for all "Paid" rows
- *  - countPaidRows()           : counts rows with status "Paid"
- *  - countPendingRows()        : counts rows with status "Pending"
- *  - getPreferredMethod()      : finds the most-used payment method
- *
- * SEARCH / SORT / FILTER HELPERS (moved from PaymentHistoryPage.java):
- *  - matchesKeyword()          : tests whether a row matches a keyword across all columns
- *  - filterByKeyword()         : returns only the rows that match a keyword
- *  - getSortComparator()       : returns the Comparator for a given sort-dropdown index
- *
- * CHANGE: findServiceHistoryId() has been removed from this class.
- *   It was a private method that read serviceHistory.txt — that file is owned
- *   by ServiceHistoryService, so the method now lives there as a public method.
- *   savePayment() now calls serviceHistoryService.findServiceHistoryId() instead.
  */
 public class PaymentService {
 
@@ -78,10 +53,6 @@ public class PaymentService {
 
     // ─────────────────────────────────────────────────────────────
     // readPaymentsFromFile() — reads all payment rows from payments.txt.
-    // Alias of getAllPayments(); kept as a named method for clarity
-    // when called from PaymentHistoryPage.
-    //
-    // MOVED FROM: PaymentHistoryPage.readPaymentsFromFile()
     // ─────────────────────────────────────────────────────────────
     public List<String[]> readPaymentsFromFile() {
         return getAllPayments();
@@ -89,9 +60,6 @@ public class PaymentService {
 
     // ─────────────────────────────────────────────────────────────
     // getPaymentsForCustomer() — filters all payment rows to only
-    // those that belong to the given customer ID.
-    //
-    // MOVED FROM: PaymentHistoryPage.refresh() (inline filter loop)
     // ─────────────────────────────────────────────────────────────
     public List<String[]> getPaymentsForCustomer(String customerId) {
         List<String[]> result = new ArrayList<>();
@@ -105,9 +73,6 @@ public class PaymentService {
 
     // ─────────────────────────────────────────────────────────────
     // calcTotalPaidAmount() — sums the RM amount for every row
-    // whose status is "Paid".
-    //
-    // MOVED FROM: PaymentHistoryPage.updateStatsCards() (inline loop)
     // ─────────────────────────────────────────────────────────────
     public double calcTotalPaidAmount(List<String[]> rows) {
         double total = 0.0;
@@ -123,8 +88,6 @@ public class PaymentService {
 
     // ─────────────────────────────────────────────────────────────
     // countPaidRows() — returns the number of rows with status "Paid".
-    //
-    // MOVED FROM: PaymentHistoryPage.updateStatsCards() (inline loop)
     // ─────────────────────────────────────────────────────────────
     public int countPaidRows(List<String[]> rows) {
         int count = 0;
@@ -136,8 +99,6 @@ public class PaymentService {
 
     // ─────────────────────────────────────────────────────────────
     // countPendingRows() — returns the number of rows with status "Pending".
-    //
-    // MOVED FROM: PaymentHistoryPage.updateStatsCards() (inline loop)
     // ─────────────────────────────────────────────────────────────
     public int countPendingRows(List<String[]> rows) {
         int count = 0;
@@ -151,8 +112,6 @@ public class PaymentService {
     // getPreferredMethod() — returns the payment method that appears
     // most frequently in the given list of rows.
     // Returns "—" if the list is empty.
-    //
-    // MOVED FROM: PaymentHistoryPage.updateStatsCards() (inline loop)
     // ─────────────────────────────────────────────────────────────
     public String getPreferredMethod(List<String[]> rows) {
         Map<String, Integer> methodCount = new HashMap<>();
@@ -302,22 +261,6 @@ public class PaymentService {
     // DASHBOARD PAYMENT STAT HELPERS
     // (moved from CustomerDashboard.java)
     // ═══════════════════════════════════════════════════════════════
-
-    /**
-     * Totals the RM amount due across all unpaid appointments.
-     * Used by the "Pending Payment" stat card (e.g. shows "RM 1,200").
-     *
-     * Called from CustomerDashboard.buildDashboardInner() via:
-     *   paymentService.calcPendingAmount(unpaid, appointmentController)
-     *
-     * Each row in unpaid has:
-     *   [3] serviceType   [6] duration
-     * The amount per row is calculated using AppointmentSectionController.calculateAmount().
-     *
-     * @param unpaid                list of unpaid appointment rows
-     * @param appointmentController used to calculate the RM amount per appointment
-     * @return total pending amount as a double
-     */
     public double calcPendingAmount(List<String[]> unpaid,
                                     AppointmentSectionController appointmentController) {
         double total = 0;
@@ -330,21 +273,6 @@ public class PaymentService {
         return total;
     }
 
-    /**
-     * Calculates the total RM spent on completed AND paid appointments.
-     * Used by the Service Activity chart stats row ("Total Spent").
-     *
-     * Called from CustomerDashboard.buildActivityChartCard() via:
-     *   paymentService.calcTotalSpent(allAppts, paidIds, appointmentController)
-     *
-     * Only appointments with status "Completed" that also appear in paidIds are counted.
-     * The amount per appointment is calculated using calculateAmount().
-     *
-     * @param allAppts              list of all appointment rows for the user
-     * @param paidIds               set of appointment IDs that have been paid
-     * @param appointmentController used to calculate the RM amount per appointment
-     * @return total amount spent as a double
-     */
     public double calcTotalSpent(List<String[]> allAppts,
                                   Set<String> paidIds,
                                   AppointmentSectionController appointmentController) {
@@ -362,19 +290,7 @@ public class PaymentService {
 
     // ═══════════════════════════════════════════════════════════════
     // SEARCH, SORT & FILTER HELPERS
-    // (moved from PaymentHistoryPage.java)
     // ═══════════════════════════════════════════════════════════════
-
-    /**
-     * matchesKeyword() — returns true if any column in the row contains
-     * the keyword (case-insensitive, regex-quoted for safety).
-     *
-     * MOVED FROM: PaymentHistoryPage.applyFilter() (inline RowFilter logic)
-     *
-     * @param row     a single payment row (9-element String array)
-     * @param keyword the search term to match; must not be null or empty
-     * @return true if any column value contains the keyword
-     */
     public boolean matchesKeyword(String[] row, String keyword) {
         String pattern = "(?i)" + java.util.regex.Pattern.quote(keyword);
         for (String cell : row) {
@@ -385,18 +301,6 @@ public class PaymentService {
         return false;
     }
 
-    /**
-     * filterByKeyword() — returns only the rows whose any column contains
-     * the keyword. Returns the original list unchanged when the keyword is
-     * null, empty, or the placeholder string "Search...".
-     *
-     * MOVED FROM: PaymentHistoryPage.applyFilter() (inline DocumentListener logic)
-     *
-     * @param rows    the full list of payment rows to search through
-     * @param keyword the search term; safe to pass directly from the search field
-     * @return a new list containing only matching rows, or the original list if
-     *         the keyword is blank / placeholder
-     */
     public List<String[]> filterByKeyword(List<String[]> rows, String keyword) {
         if (keyword == null || keyword.isBlank() || keyword.equals("Search...")) {
             return rows;
@@ -410,29 +314,7 @@ public class PaymentService {
         return filtered;
     }
 
-    /**
-     * getSortComparator() — maps the sort-dropdown selection index used in
-     * PaymentHistoryPage to a Comparator over String[] rows.
-     *
-     * Index mapping (mirrors the sortOptions array in PaymentHistoryPage):
-     *   0  "Sort by..."           → null  (no sort / natural order)
-     *   1  "Date (Newest)"        → col 6 descending
-     *   2  "Date (Oldest)"        → col 6 ascending
-     *   3  "Amount (High→Low)"    → col 5 descending (numeric)
-     *   4  "Amount (Low→High)"    → col 5 ascending  (numeric)
-     *   5  "Method"               → col 7 ascending  (alphabetic)
-     *   6  "Payment ID"           → col 0 ascending  (alphabetic)
-     *
-     * Amount comparisons use numeric ordering so that e.g. "120" < "350".
-     * All other comparisons are case-insensitive string ordering.
-     * Returns null for index 0 or any unrecognised index, which signals
-     * PaymentHistoryPage to clear the sort keys.
-     *
-     * MOVED FROM: PaymentHistoryPage.applySort() (inline switch-case logic)
-     *
-     * @param selectedIndex the selected index of the sort JComboBox
-     * @return a Comparator<String[]> for the chosen sort order, or null
-     */
+    // getSortComparator() — maps the sort-dropdown selection index used in
     public Comparator<String[]> getSortComparator(int selectedIndex) {
         switch (selectedIndex) {
             case 1: // Date (Newest) — col 6 descending

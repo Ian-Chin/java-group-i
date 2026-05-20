@@ -61,6 +61,10 @@ public class CounterStaffDashboard extends JPanel {
             "\u2302", "\u2663", "\u2637", "\u2339", "\u2696"
     };
 
+    // =========================================================
+    // CONSTRUCTOR
+    // =========================================================
+
     public CounterStaffDashboard(AppFrame app) {
         this.app = app;
         setLayout(new BorderLayout());
@@ -75,19 +79,28 @@ public class CounterStaffDashboard extends JPanel {
         contentPanel  = new JPanel(contentLayout);
         contentPanel.setBackground(UIConstants.BG_CONTENT);
 
-        contentPanel.add(buildDashboardContent(),                        "Dashboard");
+        contentPanel.add(buildDashboardContent(),                              "Dashboard");
         contentPanel.add(new CustomerManagementPanel(app.getAccountService()), "Customer Management");
-        contentPanel.add(new AppointmentPanel(app.getAccountService()), "Appointments");
-        contentPanel.add(buildCalendarContent(),                        "Calendar");
-        contentPanel.add(new PaymentCollectionPanel(app.getAccountService()), "Payment Collection");
+        contentPanel.add(new AppointmentPanel(app.getAccountService()),        "Appointments");
+        contentPanel.add(buildCalendarContent(),                               "Calendar");
+        contentPanel.add(new PaymentCollectionPanel(app.getAccountService()),  "Payment Collection");
+
         dayDetailPanel = new JPanel(new BorderLayout());
         dayDetailPanel.setBackground(UIConstants.BG_CONTENT);
         contentPanel.add(dayDetailPanel, "DayDetail");
-        contentPanel.add(buildProfileContent(),            "Profile");
+
+        contentPanel.add(buildProfileContent(), "Profile");
 
         rightSide.add(contentPanel, BorderLayout.CENTER);
         add(rightSide, BorderLayout.CENTER);
     }
+
+    // =========================================================
+    // REFRESH USER
+    // Called every time this dashboard becomes visible.
+    // Loads profile picture and banner using getUserId()
+    // so files are named S1.jpg, T3.jpg etc. — not the email.
+    // =========================================================
 
     @Override
     public void addNotify() {
@@ -103,40 +116,20 @@ public class CounterStaffDashboard extends JPanel {
 
         User user = app.getLoggedInUserObj();
         if (user != null) {
-            profileImage = profilePicStorage.loadImage(user.getEmail());
-            bannerImage  = backgroundStorage.loadImage(user.getEmail());
-            if (profileBanner  != null) profileBanner.repaint();
+            // ← FIXED: was user.getEmail(), now user.getUserId()
+            // Loads the image file named S1.jpg or T3.jpg, not ian@apu.asc.com.jpg
+            profileImage = profilePicStorage.loadImage(user.getUserId());
+            bannerImage  = backgroundStorage.loadImage(user.getUserId());
+
+            if (profileBanner   != null) profileBanner.repaint();
             if (profilePicLabel != null) profilePicLabel.repaint();
         }
         if (avatarLabel != null) avatarLabel.repaint();
     }
 
-    // ─── Placeholder page ─────────────────────────────────────────
-    private JPanel buildPlaceholder(String title) {
-        JPanel page = new JPanel(new BorderLayout());
-        page.setBackground(UIConstants.BG_CONTENT);
-        page.setBorder(new EmptyBorder(40, 40, 40, 40));
-
-        JLabel label = new JLabel(title);
-        label.setFont(UIConstants.FONT_HEADING_2);
-        label.setForeground(UIConstants.TEXT_PRIMARY);
-
-        JLabel sub = new JLabel("This section is under development.");
-        sub.setFont(UIConstants.FONT_BODY);
-        sub.setForeground(UIConstants.TEXT_MUTED);
-        sub.setBorder(new EmptyBorder(8, 0, 0, 0));
-
-        JPanel top = new JPanel();
-        top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
-        top.setBackground(UIConstants.BG_CONTENT);
-        top.add(label);
-        top.add(sub);
-
-        page.add(top, BorderLayout.NORTH);
-        return page;
-    }
-
-    // ─── Header ──────────────────────────────────────────────────
+    // =========================================================
+    // HEADER
+    // =========================================================
 
     private JPanel buildHeader() {
         JPanel header = new JPanel(new BorderLayout());
@@ -200,7 +193,9 @@ public class CounterStaffDashboard extends JPanel {
         JPanel profileBtn = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         profileBtn.setBackground(UIConstants.BG_HEADER);
         profileBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        profileBtn.add(avatarLabel); profileBtn.add(profileLabel); profileBtn.add(arrow);
+        profileBtn.add(avatarLabel);
+        profileBtn.add(profileLabel);
+        profileBtn.add(arrow);
 
         JPopupMenu menu = new JPopupMenu();
         menu.setBorder(BorderFactory.createCompoundBorder(
@@ -215,6 +210,7 @@ public class CounterStaffDashboard extends JPanel {
             contentLayout.show(contentPanel, "Profile");
             refreshProfileFields();
         });
+
         JMenuItem logout = menuItem("Logout");
         logout.setForeground(UIConstants.TEXT_DANGER);
         logout.addActionListener(e -> {
@@ -223,7 +219,8 @@ public class CounterStaffDashboard extends JPanel {
             app.showPage(PageName.ONBOARDING);
         });
 
-        menu.add(viewProfile); menu.add(logout);
+        menu.add(viewProfile);
+        menu.add(logout);
 
         profileBtn.addMouseListener(new MouseAdapter() {
             @Override public void mouseEntered(MouseEvent e) {
@@ -250,7 +247,9 @@ public class CounterStaffDashboard extends JPanel {
         return item;
     }
 
-    // ─── Sidebar ─────────────────────────────────────────────────
+    // =========================================================
+    // SIDEBAR
+    // =========================================================
 
     private JPanel buildSidebar() {
         JPanel sidebar = new JPanel();
@@ -258,7 +257,7 @@ public class CounterStaffDashboard extends JPanel {
         sidebar.setBackground(UIConstants.SIDEBAR_BG);
         sidebar.setPreferredSize(new Dimension(UIConstants.SIDEBAR_WIDTH, 0));
 
-        // Logo + brand
+        // Logo + brand name
         JPanel header = new JPanel();
         header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
         header.setBackground(UIConstants.SIDEBAR_BG);
@@ -267,7 +266,8 @@ public class CounterStaffDashboard extends JPanel {
 
         try {
             ImageIcon raw = new ImageIcon(getClass().getResource("/Image/apu-logo.png"));
-            header.add(new JLabel(new ImageIcon(raw.getImage().getScaledInstance(40, 40, Image.SCALE_SMOOTH))));
+            header.add(new JLabel(new ImageIcon(
+                    raw.getImage().getScaledInstance(40, 40, Image.SCALE_SMOOTH))));
         } catch (Exception ignored) {}
 
         JLabel brand = new JLabel("APU ASC Staff");
@@ -297,16 +297,18 @@ public class CounterStaffDashboard extends JPanel {
         for (int i = 0; i < NAV_ITEMS.length; i++) {
             final String name = NAV_ITEMS[i];
             btns[i] = navButton(NAV_ICONS[i] + "   " + name, name.equals(activeNav));
-            final int fi = i;
             btns[i].addActionListener(e -> {
                 activeNav = name;
-                for (int j = 0; j < btns.length; j++) styleNavBtn(btns[j], NAV_ITEMS[j].equals(activeNav));
+                for (int j = 0; j < btns.length; j++) {
+                    styleNavBtn(btns[j], NAV_ITEMS[j].equals(activeNav));
+                }
                 headerTitle.setText(name);
                 contentLayout.show(contentPanel, name);
             });
             sidebar.add(btns[i]);
             sidebar.add(Box.createVerticalStrut(2));
         }
+
         sidebar.add(Box.createVerticalGlue());
         return sidebar;
     }
@@ -316,11 +318,15 @@ public class CounterStaffDashboard extends JPanel {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                if (getClientProperty("active") == Boolean.TRUE)
+                if (getClientProperty("active") == Boolean.TRUE) {
                     g2.setColor(UIConstants.SIDEBAR_ACTIVE);
-                else if (getModel().isRollover())
+                } else if (getModel().isRollover()) {
                     g2.setColor(UIConstants.SIDEBAR_HOVER);
-                else { g2.dispose(); super.paintComponent(g); return; }
+                } else {
+                    g2.dispose();
+                    super.paintComponent(g);
+                    return;
+                }
                 g2.fillRoundRect(4, 0, getWidth() - 8, getHeight(), 8, 8);
                 g2.dispose();
                 super.paintComponent(g);
@@ -349,7 +355,9 @@ public class CounterStaffDashboard extends JPanel {
         btn.repaint();
     }
 
-    // ─── Dashboard content ───────────────────────────────────────
+    // =========================================================
+    // DASHBOARD CONTENT
+    // =========================================================
 
     private JPanel buildDashboardContent() {
         JPanel page = new JPanel();
@@ -382,46 +390,43 @@ public class CounterStaffDashboard extends JPanel {
 
         // Gather data
         AppointmentService apptService = new AppointmentService();
-        PaymentService payService = new PaymentService();
-        AccountService acctService = app.getAccountService();
+        PaymentService payService      = new PaymentService();
+        AccountService acctService     = app.getAccountService();
 
-        List<Appointment> allAppts = apptService.getAll();
-        List<String[]> allPayments = payService.getAllPayments();
+        List<Appointment> allAppts    = apptService.getAll();
+        List<String[]>    allPayments = payService.getAllPayments();
         String today = LocalDate.now().toString();
 
-        int totalAppts = allAppts.size();
-        int todayAppts = 0;
-        int pendingAppts = 0;
-        int completedAppts = 0;
+        int totalAppts      = allAppts.size();
+        int todayAppts      = 0;
+        int pendingAppts    = 0;
+        int completedAppts  = 0;
         int inProgressAppts = 0;
         int totalServiceHours = 0;
 
-        // Collect upcoming appointments (future date, not completed)
         List<Appointment> upcomingList = new ArrayList<>();
 
         for (Appointment a : allAppts) {
-            String dt = a.getDateTime();
+            String dt       = a.getDateTime();
             String apptDate = dt.contains(" ") ? dt.split(" ")[0] : dt;
             if (apptDate.equals(today)) todayAppts++;
             totalServiceHours += a.getDurationHours();
             switch (a.getStatus()) {
-                case "Pending":     pendingAppts++; break;
+                case "Pending":     pendingAppts++;    break;
                 case "In Progress": inProgressAppts++; break;
-                case "Completed":   completedAppts++; break;
+                case "Completed":   completedAppts++;  break;
             }
-            // Upcoming = date >= today and not completed
             if (apptDate.compareTo(today) >= 0 && !"Completed".equals(a.getStatus())) {
                 upcomingList.add(a);
             }
         }
 
-        // Sort upcoming by date
         upcomingList.sort((a1, a2) -> a1.getDateTime().compareTo(a2.getDateTime()));
 
-        int totalCustomers = acctService.getUsersByRole("customer").size();
+        int totalCustomers   = acctService.getUsersByRole("customer").size();
         int totalTechnicians = acctService.getUsersByRole("technician").size();
 
-        // ── TOP ROW: 4 small KPI cards ──────────────────────────────
+        // ── Top row: 4 KPI cards ──────────────────────────────────
         JPanel topRow = new JPanel(new GridLayout(1, 4, 16, 0));
         topRow.setOpaque(false);
         topRow.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -439,7 +444,7 @@ public class CounterStaffDashboard extends JPanel {
         page.add(topRow);
         page.add(Box.createVerticalStrut(16));
 
-        // ── MIDDLE ROW: 2 big cards ─────────────────────────────────
+        // ── Middle row: 2 big cards ───────────────────────────────
         JPanel midRow = new JPanel(new GridLayout(1, 2, 16, 0));
         midRow.setOpaque(false);
         midRow.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -451,7 +456,7 @@ public class CounterStaffDashboard extends JPanel {
         page.add(midRow);
         page.add(Box.createVerticalStrut(16));
 
-        // ── BOTTOM ROW: 2 big cards ─────────────────────────────────
+        // ── Bottom row: 2 big cards ───────────────────────────────
         JPanel bottomRow = new JPanel(new GridLayout(1, 2, 16, 0));
         bottomRow.setOpaque(false);
         bottomRow.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -466,9 +471,12 @@ public class CounterStaffDashboard extends JPanel {
         return page;
     }
 
-    // ─── KPI card (matches admin report style) ────────────────────
+    // =========================================================
+    // KPI CARD
+    // =========================================================
 
-    private JPanel buildKpiCard(String title, String value, String icon, Color accentColor, Color iconBg) {
+    private JPanel buildKpiCard(String title, String value,
+                                String icon, Color accentColor, Color iconBg) {
         JPanel card = new JPanel() {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -508,9 +516,12 @@ public class CounterStaffDashboard extends JPanel {
         return card;
     }
 
-    // ─── Upcoming Appointments card ─────────────────────────────────
+    // =========================================================
+    // UPCOMING APPOINTMENTS CARD
+    // =========================================================
 
-    private JPanel buildUpcomingAppointmentsCard(List<Appointment> upcoming, AccountService acctService) {
+    private JPanel buildUpcomingAppointmentsCard(List<Appointment> upcoming,
+                                                  AccountService acctService) {
         JPanel card = new JPanel(new BorderLayout()) {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -525,7 +536,7 @@ public class CounterStaffDashboard extends JPanel {
         card.setOpaque(false);
         card.setBorder(new EmptyBorder(20, 22, 20, 22));
 
-        // Header
+        // Header row
         JPanel header = new JPanel(new BorderLayout());
         header.setOpaque(false);
         header.setBorder(new EmptyBorder(0, 0, 12, 0));
@@ -540,6 +551,7 @@ public class CounterStaffDashboard extends JPanel {
         badge.setHorizontalAlignment(SwingConstants.CENTER);
         badge.setPreferredSize(new Dimension(28, 22));
         badge.setOpaque(false);
+
         JPanel badgeWrapper = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0)) {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -558,7 +570,7 @@ public class CounterStaffDashboard extends JPanel {
         header.add(badgeWrapper, BorderLayout.EAST);
         card.add(header, BorderLayout.NORTH);
 
-        // List of upcoming appointments
+        // List
         JPanel listPanel = new JPanel();
         listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
         listPanel.setOpaque(false);
@@ -573,16 +585,16 @@ public class CounterStaffDashboard extends JPanel {
             listPanel.add(empty);
         } else {
             for (int i = 0; i < maxShow; i++) {
-                Appointment a = upcoming.get(i);
-                String custName = resolveUserName(acctService, a.getCustomerEmail());
-                String techName = resolveUserName(acctService, a.getTechnicianEmail());
-                String dt = a.getDateTime();
-                String date = dt.contains(" ") ? dt.split(" ")[0] : dt;
-                String time = dt.contains(" ") ? dt.split(" ")[1] : "";
+                Appointment a        = upcoming.get(i);
+                String custName      = resolveUserName(acctService, a.getCustomerEmail());
+                String techName      = resolveUserName(acctService, a.getTechnicianEmail());
+                String dt            = a.getDateTime();
+                String date          = dt.contains(" ") ? dt.split(" ")[0] : dt;
+                String time          = dt.contains(" ") ? dt.split(" ")[1] : "";
 
                 Color statusColor;
                 switch (a.getStatus()) {
-                    case "In Progress": statusColor = new Color(255, 165, 0); break;
+                    case "In Progress": statusColor = new Color(255, 165, 0);   break;
                     default:            statusColor = new Color(108, 117, 125); break;
                 }
 
@@ -613,7 +625,6 @@ public class CounterStaffDashboard extends JPanel {
                 bar.setPreferredSize(new Dimension(4, 0));
                 row.add(bar, BorderLayout.WEST);
 
-                // Center info
                 JPanel info = new JPanel();
                 info.setLayout(new BoxLayout(info, BoxLayout.Y_AXIS));
                 info.setOpaque(false);
@@ -633,7 +644,6 @@ public class CounterStaffDashboard extends JPanel {
                 info.add(detailLine);
                 row.add(info, BorderLayout.CENTER);
 
-                // Right status
                 JLabel statusLbl = new JLabel(a.getStatus());
                 statusLbl.setFont(new Font("SansSerif", Font.BOLD, 10));
                 statusLbl.setForeground(statusColor);
@@ -658,9 +668,12 @@ public class CounterStaffDashboard extends JPanel {
         return card;
     }
 
-    // ─── Appointment Status Breakdown card ───────────────────────────
+    // =========================================================
+    // APPOINTMENT STATUS BREAKDOWN CARD
+    // =========================================================
 
-    private JPanel buildStatusBreakdownCard(int pending, int inProgress, int completed, int total) {
+    private JPanel buildStatusBreakdownCard(int pending, int inProgress,
+                                             int completed, int total) {
         JPanel card = new JPanel() {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -690,17 +703,18 @@ public class CounterStaffDashboard extends JPanel {
         card.add(subtitle);
         card.add(Box.createVerticalStrut(20));
 
-        card.add(buildStatusBar("Pending", pending, total, new Color(108, 117, 125), new Color(235, 235, 240)));
+        card.add(buildStatusBar("Pending",     pending,    total, new Color(108, 117, 125), new Color(235, 235, 240)));
         card.add(Box.createVerticalStrut(14));
-        card.add(buildStatusBar("In Progress", inProgress, total, new Color(255, 165, 0), new Color(255, 243, 220)));
+        card.add(buildStatusBar("In Progress", inProgress, total, new Color(255, 165, 0),   new Color(255, 243, 220)));
         card.add(Box.createVerticalStrut(14));
-        card.add(buildStatusBar("Completed", completed, total, new Color(40, 167, 69), new Color(220, 245, 225)));
+        card.add(buildStatusBar("Completed",   completed,  total, new Color(40, 167, 69),   new Color(220, 245, 225)));
 
         card.add(Box.createVerticalGlue());
         return card;
     }
 
-    private JPanel buildStatusBar(String label, int count, int total, Color barColor, Color bgColor) {
+    private JPanel buildStatusBar(String label, int count, int total,
+                                   Color barColor, Color bgColor) {
         JPanel row = new JPanel();
         row.setLayout(new BoxLayout(row, BoxLayout.Y_AXIS));
         row.setOpaque(false);
@@ -721,7 +735,7 @@ public class CounterStaffDashboard extends JPanel {
         countLabel.setFont(UIConstants.FONT_SMALL_BOLD);
         countLabel.setForeground(barColor);
 
-        labelRow.add(nameLabel, BorderLayout.WEST);
+        labelRow.add(nameLabel,  BorderLayout.WEST);
         labelRow.add(countLabel, BorderLayout.EAST);
         row.add(labelRow);
         row.add(Box.createVerticalStrut(5));
@@ -733,7 +747,7 @@ public class CounterStaffDashboard extends JPanel {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setColor(bgColor);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 6, 6);
-                int fillWidth = Math.max(0, (int) (getWidth() * fraction));
+                int fillWidth = Math.max(0, (int)(getWidth() * fraction));
                 if (fillWidth > 0) {
                     g2.setColor(barColor);
                     g2.fillRoundRect(0, 0, fillWidth, getHeight(), 6, 6);
@@ -750,9 +764,12 @@ public class CounterStaffDashboard extends JPanel {
         return row;
     }
 
-    // ─── Service Overview card (bottom left) ────────────────────────
+    // =========================================================
+    // SERVICE OVERVIEW CARD
+    // =========================================================
 
-    private JPanel buildServiceOverviewCard(int totalHours, int totalAppts, int totalCustomers, int totalTechnicians) {
+    private JPanel buildServiceOverviewCard(int totalHours, int totalAppts,
+                                             int totalCustomers, int totalTechnicians) {
         JPanel card = new JPanel() {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -782,17 +799,17 @@ public class CounterStaffDashboard extends JPanel {
         card.add(subtitle);
         card.add(Box.createVerticalStrut(20));
 
-        // 2x2 stat grid
         JPanel grid = new JPanel(new GridLayout(2, 2, 12, 12));
         grid.setOpaque(false);
         grid.setAlignmentX(Component.LEFT_ALIGNMENT);
         grid.setMaximumSize(new Dimension(Integer.MAX_VALUE, 150));
 
-        grid.add(buildStatTile("Total Hours", totalHours + "h", "\u23F1", new Color(80, 110, 230), new Color(235, 240, 255)));
-        grid.add(buildStatTile("Customers", String.valueOf(totalCustomers), "\u2663", new Color(160, 80, 230), new Color(240, 230, 255)));
-        grid.add(buildStatTile("Technicians", String.valueOf(totalTechnicians), "\u2692", new Color(40, 167, 69), new Color(220, 245, 225)));
         double avg = totalAppts > 0 ? (double) totalHours / totalAppts : 0;
-        grid.add(buildStatTile("Avg Duration", String.format("%.1fh", avg), "\u2338", new Color(255, 165, 0), new Color(255, 243, 220)));
+
+        grid.add(buildStatTile("Total Hours",  totalHours + "h",              "\u23F1", new Color(80, 110, 230), new Color(235, 240, 255)));
+        grid.add(buildStatTile("Customers",    String.valueOf(totalCustomers), "\u2663", new Color(160, 80, 230), new Color(240, 230, 255)));
+        grid.add(buildStatTile("Technicians",  String.valueOf(totalTechnicians), "\u2692", new Color(40, 167, 69),  new Color(220, 245, 225)));
+        grid.add(buildStatTile("Avg Duration", String.format("%.1fh", avg),   "\u2338", new Color(255, 165, 0),  new Color(255, 243, 220)));
 
         card.add(grid);
         card.add(Box.createVerticalGlue());
@@ -800,7 +817,8 @@ public class CounterStaffDashboard extends JPanel {
         return card;
     }
 
-    private JPanel buildStatTile(String label, String value, String icon, Color accentColor, Color bgColor) {
+    private JPanel buildStatTile(String label, String value, String icon,
+                                  Color accentColor, Color bgColor) {
         JPanel tile = new JPanel() {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -814,12 +832,12 @@ public class CounterStaffDashboard extends JPanel {
         tile.setLayout(new BoxLayout(tile, BoxLayout.Y_AXIS));
         tile.setBorder(new EmptyBorder(12, 14, 12, 14));
 
-        // Icon box
         JLabel iconLabel = new JLabel(icon) {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(new Color(accentColor.getRed(), accentColor.getGreen(), accentColor.getBlue(), 30));
+                g2.setColor(new Color(accentColor.getRed(), accentColor.getGreen(),
+                        accentColor.getBlue(), 30));
                 g2.fillRoundRect(0, 0, 28, 28, 6, 6);
                 g2.dispose();
                 super.paintComponent(g);
@@ -851,14 +869,16 @@ public class CounterStaffDashboard extends JPanel {
         return tile;
     }
 
-    // ─── Payment Summary card (bottom right) ────────────────────────
+    // =========================================================
+    // PAYMENT SUMMARY CARD
+    // =========================================================
 
     private JPanel buildPaymentSummaryCard(List<String[]> allPayments) {
-        int paidCount = 0;
-        double totalPaid = 0;
+        int    paidCount  = 0;
+        double totalPaid  = 0;
         double todayTotal = 0;
-        int todayCount = 0;
-        String today = LocalDate.now().toString();
+        int    todayCount = 0;
+        String today      = LocalDate.now().toString();
 
         for (String[] p : allPayments) {
             String status = p[8].trim();
@@ -874,13 +894,11 @@ public class CounterStaffDashboard extends JPanel {
             }
         }
 
-        // Count unpaid completed appointments (no payment record)
         AppointmentService apptSvc = new AppointmentService();
-        List<Appointment> allAppts = apptSvc.getAll();
+        List<Appointment>  allAppts = apptSvc.getAll();
         Set<String> paidApptIds = new HashSet<>();
-        for (String[] p : allPayments) {
-            paidApptIds.add(p[3].trim());
-        }
+        for (String[] p : allPayments) paidApptIds.add(p[3].trim());
+
         int unpaidCount = 0;
         for (Appointment a : allAppts) {
             if ("Completed".equals(a.getStatus()) && !paidApptIds.contains(a.getId())) {
@@ -917,7 +935,6 @@ public class CounterStaffDashboard extends JPanel {
         card.add(subtitle);
         card.add(Box.createVerticalStrut(20));
 
-        // Total collected
         JLabel totalLabel = new JLabel(String.format("RM %.2f", totalPaid));
         totalLabel.setFont(new Font("SansSerif", Font.BOLD, 28));
         totalLabel.setForeground(new Color(40, 167, 69));
@@ -925,14 +942,14 @@ public class CounterStaffDashboard extends JPanel {
         card.add(totalLabel);
         card.add(Box.createVerticalStrut(2));
 
-        JLabel totalNote = new JLabel("Total collected from " + paidCount + " payment" + (paidCount != 1 ? "s" : ""));
+        JLabel totalNote = new JLabel("Total collected from " + paidCount
+                + " payment" + (paidCount != 1 ? "s" : ""));
         totalNote.setFont(UIConstants.FONT_SMALL);
         totalNote.setForeground(UIConstants.TEXT_MUTED);
         totalNote.setAlignmentX(Component.LEFT_ALIGNMENT);
         card.add(totalNote);
         card.add(Box.createVerticalStrut(18));
 
-        // Separator
         JSeparator sep = new JSeparator();
         sep.setForeground(new Color(235, 235, 240));
         sep.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -940,7 +957,6 @@ public class CounterStaffDashboard extends JPanel {
         card.add(sep);
         card.add(Box.createVerticalStrut(14));
 
-        // Paid / Unpaid / Today row
         JPanel statsRow = new JPanel(new GridLayout(1, 3, 10, 0));
         statsRow.setOpaque(false);
         statsRow.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -960,7 +976,7 @@ public class CounterStaffDashboard extends JPanel {
         paidTile.setLayout(new BoxLayout(paidTile, BoxLayout.Y_AXIS));
         paidTile.setBorder(new EmptyBorder(10, 14, 10, 14));
 
-        JLabel paidVal = new JLabel(String.valueOf(paidCount) + " Paid");
+        JLabel paidVal = new JLabel(paidCount + " Paid");
         paidVal.setFont(new Font("SansSerif", Font.BOLD, 16));
         paidVal.setForeground(new Color(40, 167, 69));
         paidVal.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -975,7 +991,6 @@ public class CounterStaffDashboard extends JPanel {
         statsRow.add(paidTile);
 
         // Unpaid tile
-        final int unpaidFinal = unpaidCount;
         JPanel unpaidTile = new JPanel() {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -989,7 +1004,7 @@ public class CounterStaffDashboard extends JPanel {
         unpaidTile.setLayout(new BoxLayout(unpaidTile, BoxLayout.Y_AXIS));
         unpaidTile.setBorder(new EmptyBorder(10, 14, 10, 14));
 
-        JLabel unpaidVal = new JLabel(String.valueOf(unpaidCount) + " Unpaid");
+        JLabel unpaidVal = new JLabel(unpaidCount + " Unpaid");
         unpaidVal.setFont(new Font("SansSerif", Font.BOLD, 16));
         unpaidVal.setForeground(new Color(255, 165, 0));
         unpaidVal.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -1037,7 +1052,9 @@ public class CounterStaffDashboard extends JPanel {
         return card;
     }
 
-    // ─── Calendar content ─────────────────────────────────────────
+    // =========================================================
+    // CALENDAR CONTENT
+    // =========================================================
 
     private JPanel buildCalendarContent() {
         JPanel page = new JPanel(new BorderLayout(16, 0));
@@ -1045,11 +1062,11 @@ public class CounterStaffDashboard extends JPanel {
         page.setBorder(new EmptyBorder(30, 36, 30, 36));
 
         AppointmentService apptService = new AppointmentService();
-        AccountService acctService = app.getAccountService();
-        final YearMonth[] currentMonth = { YearMonth.now() };
-        final LocalDate[] selectedDate = { LocalDate.now() };
+        AccountService     acctService = app.getAccountService();
+        final YearMonth[]  currentMonth  = { YearMonth.now() };
+        final LocalDate[]  selectedDate  = { LocalDate.now() };
 
-        // ── LEFT: Calendar card (big) ────────────────────────────────
+        // ── Left: Calendar card ───────────────────────────────────
         JPanel calCard = new JPanel(new BorderLayout()) {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -1065,7 +1082,7 @@ public class CounterStaffDashboard extends JPanel {
         calCard.setOpaque(false);
         calCard.setBorder(new EmptyBorder(28, 32, 24, 32));
 
-        // Month navigation header
+        // Month navigation
         JPanel navRow = new JPanel(new BorderLayout());
         navRow.setOpaque(false);
         navRow.setBorder(new EmptyBorder(0, 0, 16, 0));
@@ -1077,9 +1094,9 @@ public class CounterStaffDashboard extends JPanel {
         JButton prevBtn = calNavBtn("<");
         JButton nextBtn = calNavBtn(">");
 
-        navRow.add(prevBtn, BorderLayout.WEST);
+        navRow.add(prevBtn,    BorderLayout.WEST);
         navRow.add(monthLabel, BorderLayout.CENTER);
-        navRow.add(nextBtn, BorderLayout.EAST);
+        navRow.add(nextBtn,    BorderLayout.EAST);
         calCard.add(navRow, BorderLayout.NORTH);
 
         // Calendar grid
@@ -1100,10 +1117,9 @@ public class CounterStaffDashboard extends JPanel {
         JPanel calGrid = new JPanel(new GridLayout(0, 7, 4, 4));
         calGrid.setOpaque(false);
         calBody.add(calGrid, BorderLayout.CENTER);
-
         calCard.add(calBody, BorderLayout.CENTER);
 
-        // ── RIGHT: Summary card ──────────────────────────────────────
+        // ── Right: Summary card ───────────────────────────────────
         JPanel summaryCard = new JPanel(new BorderLayout()) {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -1140,22 +1156,25 @@ public class CounterStaffDashboard extends JPanel {
         summaryScroll.getVerticalScrollBar().setUnitIncrement(12);
         summaryCard.add(summaryScroll, BorderLayout.CENTER);
 
-        // ── Refresh summary cards ────────────────────────────────────
+        // Refresh summary when a date is clicked
         Runnable refreshSummary = () -> {
             summaryContent.removeAll();
-            List<Appointment> all = apptService.getAll();
-            String dateStr = selectedDate[0].toString();
+            List<Appointment> all     = apptService.getAll();
+            String            dateStr = selectedDate[0].toString();
             summaryTitle.setText("Appointments for " + dateStr);
             int count = 0;
             for (Appointment a : all) {
-                String dt = a.getDateTime();
+                String dt       = a.getDateTime();
                 String apptDate = dt.contains(" ") ? dt.split(" ")[0] : dt;
                 if (!apptDate.equals(dateStr)) continue;
                 count++;
-                String time = dt.contains(" ") ? dt.split(" ")[1] : "";
+                String time     = dt.contains(" ") ? dt.split(" ")[1] : "";
                 String custName = resolveUserName(acctService, a.getCustomerEmail());
                 String techName = resolveUserName(acctService, a.getTechnicianEmail());
-                summaryContent.add(buildAppointmentCard(a.getId(), custName, techName, a.getServiceType(), time, a.getDurationHours(), a.getStatus()));
+                summaryContent.add(buildAppointmentCard(
+                        a.getId(), custName, techName,
+                        a.getServiceType(), time,
+                        a.getDurationHours(), a.getStatus()));
                 summaryContent.add(Box.createVerticalStrut(8));
             }
             if (count == 0) {
@@ -1170,33 +1189,37 @@ public class CounterStaffDashboard extends JPanel {
             summaryContent.repaint();
         };
 
-        // ── Calendar grid refresh ────────────────────────────────────
+        // Refresh the calendar grid
         Runnable[] calRefresh = new Runnable[1];
         calRefresh[0] = () -> {
-            monthLabel.setText(currentMonth[0].getMonth().getDisplayName(TextStyle.FULL, Locale.ENGLISH) + " " + currentMonth[0].getYear());
+            monthLabel.setText(currentMonth[0].getMonth()
+                    .getDisplayName(TextStyle.FULL, Locale.ENGLISH)
+                    + " " + currentMonth[0].getYear());
             calGrid.removeAll();
 
-            // Collect appointment statuses per date
+            // Map date → list of statuses for dot indicators
             Map<String, List<String>> apptsByDate = new HashMap<>();
             for (Appointment a : apptService.getAll()) {
-                String dt = a.getDateTime();
+                String dt       = a.getDateTime();
                 String apptDate = dt.contains(" ") ? dt.split(" ")[0] : dt;
                 apptsByDate.computeIfAbsent(apptDate, k -> new ArrayList<>()).add(a.getStatus());
             }
 
-            LocalDate first = currentMonth[0].atDay(1);
-            int startDow = first.getDayOfWeek().getValue() % 7;
-            int daysInMonth = currentMonth[0].lengthOfMonth();
-            LocalDate today = LocalDate.now();
+            LocalDate first      = currentMonth[0].atDay(1);
+            int       startDow   = first.getDayOfWeek().getValue() % 7;
+            int       daysInMonth = currentMonth[0].lengthOfMonth();
+            LocalDate today       = LocalDate.now();
 
+            // Empty cells before the 1st
             for (int i = 0; i < startDow; i++) calGrid.add(new JLabel(""));
 
             for (int d = 1; d <= daysInMonth; d++) {
-                LocalDate date = currentMonth[0].atDay(d);
-                List<String> statuses = apptsByDate.getOrDefault(date.toString(), Collections.emptyList());
-                boolean isToday = date.equals(today);
-                boolean isSel = date.equals(selectedDate[0]);
-                final int day = d;
+                LocalDate      date     = currentMonth[0].atDay(d);
+                List<String>   statuses = apptsByDate.getOrDefault(
+                        date.toString(), Collections.emptyList());
+                boolean        isToday  = date.equals(today);
+                boolean        isSel    = date.equals(selectedDate[0]);
+                final int      day      = d;
 
                 JPanel cell = new JPanel(new BorderLayout(0, 1)) {
                     @Override protected void paintComponent(Graphics g) {
@@ -1209,7 +1232,6 @@ public class CounterStaffDashboard extends JPanel {
                             g2.setColor(new Color(235, 240, 255));
                             g2.fillRoundRect(2, 2, getWidth() - 4, getHeight() - 4, 10, 10);
                         }
-                        // Border for all date cells
                         g2.setColor(isSel ? UIConstants.PRIMARY : new Color(220, 222, 230));
                         g2.setStroke(new BasicStroke(1f));
                         g2.drawRoundRect(2, 2, getWidth() - 5, getHeight() - 5, 10, 10);
@@ -1220,11 +1242,13 @@ public class CounterStaffDashboard extends JPanel {
                 cell.setPreferredSize(new Dimension(44, 56));
 
                 JLabel dayLabel = new JLabel(String.valueOf(d), SwingConstants.CENTER);
-                dayLabel.setFont(new Font("SansSerif", isToday || isSel ? Font.BOLD : Font.PLAIN, 14));
-                dayLabel.setForeground(isSel ? Color.WHITE : (isToday ? UIConstants.PRIMARY : UIConstants.TEXT_DARK));
+                dayLabel.setFont(new Font("SansSerif",
+                        (isToday || isSel) ? Font.BOLD : Font.PLAIN, 14));
+                dayLabel.setForeground(isSel ? Color.WHITE
+                        : (isToday ? UIConstants.PRIMARY : UIConstants.TEXT_DARK));
                 cell.add(dayLabel, BorderLayout.CENTER);
 
-                // Status-colored bars at the bottom, one per appointment
+                // Status-coloured bars at the bottom
                 if (!statuses.isEmpty()) {
                     JPanel barsPanel = new JPanel();
                     barsPanel.setLayout(new BoxLayout(barsPanel, BoxLayout.Y_AXIS));
@@ -1236,9 +1260,8 @@ public class CounterStaffDashboard extends JPanel {
                         String status = statuses.get(si);
                         Color barColor;
                         switch (status) {
-                            case "Completed":   barColor = new Color(40, 167, 69); break;
-                            case "In Progress": barColor = new Color(255, 165, 0); break;
-                            case "Pending":     barColor = new Color(108, 117, 125); break;
+                            case "Completed":   barColor = new Color(40, 167, 69);   break;
+                            case "In Progress": barColor = new Color(255, 165, 0);   break;
                             default:            barColor = new Color(108, 117, 125); break;
                         }
                         final Color fc = isSel ? new Color(255, 255, 255, 200) : barColor;
@@ -1258,7 +1281,6 @@ public class CounterStaffDashboard extends JPanel {
                         barsPanel.add(bar);
                         if (si < maxBars - 1) barsPanel.add(Box.createVerticalStrut(1));
                     }
-                    // Show "+N" if more than 3
                     if (statuses.size() > 3) {
                         JLabel more = new JLabel("+" + (statuses.size() - 3), SwingConstants.CENTER);
                         more.setFont(new Font("SansSerif", Font.BOLD, 8));
@@ -1274,10 +1296,10 @@ public class CounterStaffDashboard extends JPanel {
                     @Override public void mouseClicked(MouseEvent e) {
                         LocalDate clicked = currentMonth[0].atDay(day);
                         if (clicked.equals(selectedDate[0])) {
-                            // Second click on same date -> open Gantt chart
+                            // Second click → open Gantt chart
                             showDayDetail(selectedDate[0]);
                         } else {
-                            // First click -> just select and show summary
+                            // First click → select and show summary
                             selectedDate[0] = clicked;
                             calRefresh[0].run();
                             refreshSummary.run();
@@ -1291,24 +1313,27 @@ public class CounterStaffDashboard extends JPanel {
         };
 
         prevBtn.addActionListener(e -> { currentMonth[0] = currentMonth[0].minusMonths(1); calRefresh[0].run(); });
-        nextBtn.addActionListener(e -> { currentMonth[0] = currentMonth[0].plusMonths(1); calRefresh[0].run(); });
+        nextBtn.addActionListener(e -> { currentMonth[0] = currentMonth[0].plusMonths(1);  calRefresh[0].run(); });
 
-        // Initial render
         calRefresh[0].run();
         refreshSummary.run();
 
-        // Layout: calendar (big) on left, summaries on right
-        page.add(calCard, BorderLayout.CENTER);
+        page.add(calCard,     BorderLayout.CENTER);
         page.add(summaryCard, BorderLayout.EAST);
         return page;
     }
 
+    // =========================================================
+    // APPOINTMENT CARD (used inside Calendar summary panel)
+    // =========================================================
+
     private JPanel buildAppointmentCard(String id, String customer, String technician,
-                                         String service, String time, int hours, String status) {
+                                         String service, String time,
+                                         int hours, String status) {
         Color barColor;
         switch (status) {
-            case "Completed":   barColor = new Color(40, 167, 69); break;
-            case "In Progress": barColor = new Color(255, 165, 0); break;
+            case "Completed":   barColor = new Color(40, 167, 69);   break;
+            case "In Progress": barColor = new Color(255, 165, 0);   break;
             default:            barColor = new Color(108, 117, 125); break;
         }
 
@@ -1330,7 +1355,6 @@ public class CounterStaffDashboard extends JPanel {
         card.setMinimumSize(new Dimension(0, 72));
         card.setBorder(new EmptyBorder(8, 8, 8, 10));
 
-        // Left: color bar
         JPanel bar = new JPanel() {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -1344,7 +1368,6 @@ public class CounterStaffDashboard extends JPanel {
         bar.setPreferredSize(new Dimension(4, 0));
         card.add(bar, BorderLayout.WEST);
 
-        // Center: all details stacked vertically
         JPanel details = new JPanel();
         details.setLayout(new BoxLayout(details, BoxLayout.Y_AXIS));
         details.setOpaque(false);
@@ -1359,7 +1382,6 @@ public class CounterStaffDashboard extends JPanel {
         line2.setForeground(UIConstants.TEXT_SECONDARY);
         line2.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        // Status badge
         JLabel statusLabel = new JLabel(status) {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -1405,15 +1427,21 @@ public class CounterStaffDashboard extends JPanel {
         return btn;
     }
 
+    // =========================================================
+    // RESOLVE USER NAME HELPER
+    // =========================================================
+
     private String resolveUserName(AccountService svc, String idOrEmail) {
         for (User u : svc.getAllUsers()) {
-            if (u.getEmail().equalsIgnoreCase(idOrEmail)) return u.getName();
+            if (u.getEmail().equalsIgnoreCase(idOrEmail))   return u.getName();
             if (u.getUserId() != null && u.getUserId().equalsIgnoreCase(idOrEmail)) return u.getName();
         }
         return idOrEmail;
     }
 
-    // ─── Day Detail / Gantt chart ───────────────────────────────
+    // =========================================================
+    // DAY DETAIL / GANTT CHART
+    // =========================================================
 
     private void showDayDetail(LocalDate date) {
         dayDetailPanel.removeAll();
@@ -1429,7 +1457,7 @@ public class CounterStaffDashboard extends JPanel {
         page.setBackground(UIConstants.BG_CONTENT);
         page.setBorder(new EmptyBorder(24, 36, 24, 36));
 
-        // ── Top bar: Back button + date title + legend ──
+        // Top bar: back button + date title + legend
         JPanel topBar = new JPanel(new BorderLayout());
         topBar.setOpaque(false);
         topBar.setBorder(new EmptyBorder(0, 0, 16, 0));
@@ -1447,32 +1475,33 @@ public class CounterStaffDashboard extends JPanel {
         });
         topBar.add(backBtn, BorderLayout.WEST);
 
-        JLabel dateTitle = new JLabel(date.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.ENGLISH)
-                + ", " + date.getMonth().getDisplayName(TextStyle.FULL, Locale.ENGLISH)
-                + " " + date.getDayOfMonth() + ", " + date.getYear(), SwingConstants.CENTER);
+        JLabel dateTitle = new JLabel(
+                date.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.ENGLISH)
+                + ", "
+                + date.getMonth().getDisplayName(TextStyle.FULL, Locale.ENGLISH)
+                + " " + date.getDayOfMonth() + ", " + date.getYear(),
+                SwingConstants.CENTER);
         dateTitle.setFont(new Font("SansSerif", Font.BOLD, 18));
         dateTitle.setForeground(UIConstants.TEXT_PRIMARY);
         topBar.add(dateTitle, BorderLayout.CENTER);
 
-        // Legend
         JPanel legend = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 0));
         legend.setOpaque(false);
         legend.add(legendDot(new Color(108, 117, 125), "Pending"));
-        legend.add(legendDot(new Color(255, 165, 0), "In Progress"));
-        legend.add(legendDot(new Color(40, 167, 69), "Completed"));
+        legend.add(legendDot(new Color(255, 165, 0),   "In Progress"));
+        legend.add(legendDot(new Color(40, 167, 69),   "Completed"));
         topBar.add(legend, BorderLayout.EAST);
 
         page.add(topBar, BorderLayout.NORTH);
 
-        // ── Gather appointments for this date ──
+        // Collect appointments for this date
         AppointmentService apptService = new AppointmentService();
-        AccountService acctService = app.getAccountService();
-        List<Appointment> allAppts = apptService.getAll();
-        String dateStr = date.toString();
+        AccountService     acctService = app.getAccountService();
+        String             dateStr     = date.toString();
 
-        List<Appointment> dayAppts = allAppts.stream()
+        List<Appointment> dayAppts = apptService.getAll().stream()
                 .filter(a -> {
-                    String dt = a.getDateTime();
+                    String dt       = a.getDateTime();
                     String apptDate = dt.contains(" ") ? dt.split(" ")[0] : dt;
                     return apptDate.equals(dateStr);
                 })
@@ -1495,26 +1524,26 @@ public class CounterStaffDashboard extends JPanel {
             byTech.computeIfAbsent(techName, k -> new ArrayList<>()).add(a);
         }
 
-        // ── Gantt chart panel (stretches to fill width, no left labels) ──
-        int startHour = 7;
-        int endHour = 20;
-        int totalHours = endHour - startHour;
-        int leftPad = 16;
-        int rowHeight = 100;
+        // Gantt chart constants
+        int startHour    = 7;
+        int endHour      = 20;
+        int totalHours   = endHour - startHour;
+        int leftPad      = 16;
+        int rowHeight    = 100;
         int headerHeight = 32;
 
         JPanel ganttChart = new JPanel() {
             @Override protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
                 Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,      RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
-                int panelW = getWidth();
+                int panelW    = getWidth();
                 int chartAreaW = panelW - leftPad * 2;
                 int hourWidth = Math.max(50, chartAreaW / totalHours);
 
-                // Background
+                // Background card
                 g2.setColor(Color.WHITE);
                 g2.fillRoundRect(0, 0, panelW, getHeight(), 16, 16);
                 g2.setColor(UIConstants.BORDER_DEFAULT);
@@ -1522,35 +1551,35 @@ public class CounterStaffDashboard extends JPanel {
 
                 int y0 = headerHeight;
 
-                // ── Hour header labels ──
+                // Hour header labels
                 g2.setFont(new Font("SansSerif", Font.BOLD, 11));
                 for (int h = 0; h < totalHours; h++) {
-                    int x = leftPad + h * hourWidth;
+                    int x    = leftPad + h * hourWidth;
                     int hour = startHour + h;
-                    String lbl = (hour <= 12 ? hour : hour - 12) + ":00 " + (hour < 12 ? "AM" : "PM");
+                    String lbl = (hour <= 12 ? hour : hour - 12)
+                            + ":00 " + (hour < 12 ? "AM" : "PM");
                     g2.setColor(UIConstants.TEXT_MUTED);
                     g2.drawString(lbl, x + 4, y0 - 8);
                 }
 
-                // ── Horizontal row separators only ──
+                // Row separators
                 for (int r = 0; r <= byTech.size(); r++) {
                     int y = y0 + r * rowHeight;
                     g2.setColor(new Color(235, 237, 242));
                     g2.drawLine(leftPad, y, leftPad + totalHours * hourWidth, y);
                 }
 
-                // ── Technician rows (no left name label) ──
+                // Technician rows
                 int rowIdx = 0;
                 for (Map.Entry<String, List<Appointment>> entry : byTech.entrySet()) {
-                    String techName = entry.getKey();
-                    List<Appointment> appts = entry.getValue();
-                    int rowY = y0 + rowIdx * rowHeight;
+                    String             techName = entry.getKey();
+                    List<Appointment>  appts    = entry.getValue();
+                    int                rowY     = y0 + rowIdx * rowHeight;
 
-                    // ── Draw appointment bars ──
                     for (Appointment a : appts) {
-                        String dt = a.getDateTime();
+                        String dt       = a.getDateTime();
                         String timePart = dt.contains(" ") ? dt.split(" ")[1] : "09:00";
-                        String[] hm = timePart.split(":");
+                        String[] hm     = timePart.split(":");
                         int apptHour = 9, apptMin = 0;
                         try {
                             apptHour = Integer.parseInt(hm[0]);
@@ -1558,7 +1587,7 @@ public class CounterStaffDashboard extends JPanel {
                         } catch (NumberFormatException ignored) {}
 
                         double startOffset = (apptHour - startHour) + apptMin / 60.0;
-                        double duration = a.getDurationHours();
+                        double duration    = a.getDurationHours();
                         if (startOffset < 0) { duration += startOffset; startOffset = 0; }
                         if (startOffset + duration > totalHours) duration = totalHours - startOffset;
                         if (duration <= 0) continue;
@@ -1568,11 +1597,10 @@ public class CounterStaffDashboard extends JPanel {
                         int barY = rowY + 6;
                         int barH = rowHeight - 12;
 
-                        // Bar color based on status
                         Color barColor;
                         switch (a.getStatus()) {
-                            case "Completed":   barColor = new Color(40, 167, 69); break;
-                            case "In Progress": barColor = new Color(255, 165, 0); break;
+                            case "Completed":   barColor = new Color(40, 167, 69);   break;
+                            case "In Progress": barColor = new Color(255, 165, 0);   break;
                             default:            barColor = new Color(108, 117, 125); break;
                         }
 
@@ -1584,47 +1612,39 @@ public class CounterStaffDashboard extends JPanel {
                         g2.setColor(barColor);
                         g2.fillRoundRect(barX, barY, barW, barH, 12, 12);
 
-                        // Left accent stripe
+                        // Left highlight stripe
                         g2.setColor(new Color(255, 255, 255, 60));
                         g2.fillRoundRect(barX, barY, 5, barH, 4, 4);
 
-                        // 4-line bar text (bigger bar = more room)
+                        // Text inside the bar
                         String custName = resolveUserName(acctService, a.getCustomerEmail());
                         g2.setColor(Color.WHITE);
 
-                        // Line 1: technician name (bold)
                         g2.setFont(new Font("SansSerif", Font.BOLD, 12));
                         FontMetrics fm1 = g2.getFontMetrics();
-                        if (fm1.stringWidth(techName) < barW - 16) {
+                        if (fm1.stringWidth(techName) < barW - 16)
                             g2.drawString(techName, barX + 12, barY + 18);
-                        }
 
-                        // Line 2: service type
                         g2.setFont(new Font("SansSerif", Font.PLAIN, 12));
                         FontMetrics fm2 = g2.getFontMetrics();
-                        if (fm2.stringWidth(a.getServiceType()) < barW - 16) {
+                        if (fm2.stringWidth(a.getServiceType()) < barW - 16)
                             g2.drawString(a.getServiceType(), barX + 12, barY + 35);
-                        }
 
-                        // Line 3: customer name
                         g2.setFont(new Font("SansSerif", Font.PLAIN, 11));
                         FontMetrics fm3 = g2.getFontMetrics();
                         String custLine = "Customer: " + custName;
-                        if (fm3.stringWidth(custLine) < barW - 16) {
+                        if (fm3.stringWidth(custLine) < barW - 16)
                             g2.drawString(custLine, barX + 12, barY + 51);
-                        }
 
-                        // Line 4: time + duration + status
                         g2.setFont(new Font("SansSerif", Font.PLAIN, 10));
                         FontMetrics fm4 = g2.getFontMetrics();
-                        String line4 = timePart + "  \u2022  " + a.getDurationHours() + "h  \u2022  " + a.getStatus();
-                        if (fm4.stringWidth(line4) < barW - 16) {
+                        String line4 = timePart + "  \u2022  "
+                                + a.getDurationHours() + "h  \u2022  " + a.getStatus();
+                        if (fm4.stringWidth(line4) < barW - 16)
                             g2.drawString(line4, barX + 12, barY + 66);
-                        }
                     }
                     rowIdx++;
                 }
-
                 g2.dispose();
             }
 
@@ -1661,24 +1681,31 @@ public class CounterStaffDashboard extends JPanel {
         return dot;
     }
 
-    // ─── Profile content ─────────────────────────────────────────
+    // =========================================================
+    // PROFILE CONTENT
+    // =========================================================
 
+    // Called when the user clicks "View Profile" in the dropdown.
+    // Reloads all profile fields and images using getUserId().
     private void refreshProfileFields() {
         User user = app.getLoggedInUserObj();
         if (user == null) return;
-        if (profileNameField  != null) { profileNameField.setText(user.getName());  profileNameField.setForeground(Color.BLACK); }
+
+        if (profileNameField  != null) { profileNameField.setText(user.getName());   profileNameField.setForeground(Color.BLACK); }
         if (profileEmailField != null) { profileEmailField.setText(user.getEmail()); profileEmailField.setForeground(Color.BLACK); }
         if (profileRoleLabel  != null) {
             String r = user.getRole();
             profileRoleLabel.setText(r.substring(0, 1).toUpperCase() + r.substring(1));
         }
-        profileImage = profilePicStorage.loadImage(user.getEmail());
-        bannerImage  = backgroundStorage.loadImage(user.getEmail());
+
+        // ← FIXED: was user.getEmail(), now user.getUserId()
+        // Loads S1.jpg or T3.jpg instead of ian@apu.asc.com.jpg
+        profileImage = profilePicStorage.loadImage(user.getUserId());
+        bannerImage  = backgroundStorage.loadImage(user.getUserId());
+
         if (profileBanner   != null) profileBanner.repaint();
         if (profilePicLabel != null) profilePicLabel.repaint();
     }
-
-    // ─── Profile page (banner hero + form card, matching Admin style) ─────
 
     private JPanel buildProfileContent() {
         JPanel page = new JPanel(new BorderLayout());
@@ -1735,8 +1762,8 @@ public class CounterStaffDashboard extends JPanel {
                     drawCameraIcon(g2, cx, cy, 28, Color.WHITE);
                     g2.setColor(Color.WHITE);
                     g2.setFont(new Font("SansSerif", Font.BOLD, 13));
-                    FontMetrics fm = g2.getFontMetrics();
-                    String msg = "Click to change";
+                    FontMetrics fm  = g2.getFontMetrics();
+                    String      msg = "Click to change";
                     g2.drawString(msg, cx - fm.stringWidth(msg) / 2, cy + 44);
                 }
                 g2.dispose();
@@ -1821,66 +1848,107 @@ public class CounterStaffDashboard extends JPanel {
         g2.fillOval(0, 0, size, size);
         g2.setColor(Color.WHITE);
         g2.setStroke(new BasicStroke(size / 18f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        int eyeY = size * 38 / 100, eyeOff = size * 18 / 100, eyeR = size / 14;
+        int eyeY  = size * 38 / 100;
+        int eyeOff = size * 18 / 100;
+        int eyeR  = size / 14;
         g2.fillOval(size / 2 - eyeOff - eyeR, eyeY - eyeR, eyeR * 2, eyeR * 2);
         g2.fillOval(size / 2 + eyeOff - eyeR, eyeY - eyeR, eyeR * 2, eyeR * 2);
-        g2.drawArc(size * 28 / 100, size * 44 / 100, size * 44 / 100, size * 26 / 100, 200, 140);
+        g2.drawArc(size * 28 / 100, size * 44 / 100,
+                   size * 44 / 100, size * 26 / 100, 200, 140);
     }
+
+    // =========================================================
+    // IMAGE PICKERS
+    // Called when the user clicks the profile picture circle
+    // or the banner area on the Profile page.
+    // =========================================================
 
     private void chooseProfileImage() {
         User user = app.getLoggedInUserObj();
         if (user == null) return;
+
         FileDialog fd = new FileDialog(
                 (Frame) SwingUtilities.getWindowAncestor(this),
                 "Choose Profile Picture", FileDialog.LOAD);
         fd.setFile("*.jpg;*.jpeg;*.png;*.gif;*.bmp");
         fd.setVisible(true);
         if (fd.getFile() == null) return;
+
         try {
-            BufferedImage image = ImageIO.read(new java.io.File(fd.getDirectory(), fd.getFile()));
+            BufferedImage image = ImageIO.read(
+                    new java.io.File(fd.getDirectory(), fd.getFile()));
             if (image == null) {
-                JOptionPane.showMessageDialog(app, "Could not read the selected image.", "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(app,
+                        "Could not read the selected image.", "Error",
+                        JOptionPane.ERROR_MESSAGE);
                 return;
             }
-            if (!profilePicStorage.saveImage(user.getEmail(), image)) {
-                JOptionPane.showMessageDialog(app, "Failed to save profile picture.", "Error", JOptionPane.ERROR_MESSAGE);
+
+            // ← FIXED: was user.getEmail(), now user.getUserId()
+            // Saves the file as S1.jpg or T3.jpg instead of ian@apu.asc.com.jpg
+            if (!profilePicStorage.saveImage(user.getUserId(), image)) {
+                JOptionPane.showMessageDialog(app,
+                        "Failed to save profile picture.", "Error",
+                        JOptionPane.ERROR_MESSAGE);
                 return;
             }
+
             profileImage = image;
             if (profilePicLabel != null) profilePicLabel.repaint();
             if (avatarLabel     != null) avatarLabel.repaint();
+
         } catch (java.io.IOException ex) {
             ex.printStackTrace();
-            JOptionPane.showMessageDialog(app, "Failed to read the selected image.", "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(app,
+                    "Failed to read the selected image.", "Error",
+                    JOptionPane.ERROR_MESSAGE);
         }
     }
 
     private void chooseBannerImage() {
         User user = app.getLoggedInUserObj();
         if (user == null) return;
+
         FileDialog fd = new FileDialog(
                 (Frame) SwingUtilities.getWindowAncestor(this),
                 "Choose Background Image", FileDialog.LOAD);
         fd.setFile("*.jpg;*.jpeg;*.png;*.gif;*.bmp");
         fd.setVisible(true);
         if (fd.getFile() == null) return;
+
         try {
-            BufferedImage image = ImageIO.read(new java.io.File(fd.getDirectory(), fd.getFile()));
+            BufferedImage image = ImageIO.read(
+                    new java.io.File(fd.getDirectory(), fd.getFile()));
             if (image == null) {
-                JOptionPane.showMessageDialog(app, "Could not read the selected image.", "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(app,
+                        "Could not read the selected image.", "Error",
+                        JOptionPane.ERROR_MESSAGE);
                 return;
             }
-            if (!backgroundStorage.saveImage(user.getEmail(), image)) {
-                JOptionPane.showMessageDialog(app, "Failed to save background image.", "Error", JOptionPane.ERROR_MESSAGE);
+
+            // ← FIXED: was user.getEmail(), now user.getUserId()
+            // Saves the file as S1.jpg or T3.jpg instead of ian@apu.asc.com.jpg
+            if (!backgroundStorage.saveImage(user.getUserId(), image)) {
+                JOptionPane.showMessageDialog(app,
+                        "Failed to save background image.", "Error",
+                        JOptionPane.ERROR_MESSAGE);
                 return;
             }
+
             bannerImage = image;
             if (profileBanner != null) profileBanner.repaint();
+
         } catch (java.io.IOException ex) {
             ex.printStackTrace();
-            JOptionPane.showMessageDialog(app, "Failed to read the selected image.", "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(app,
+                    "Failed to read the selected image.", "Error",
+                    JOptionPane.ERROR_MESSAGE);
         }
     }
+
+    // =========================================================
+    // PROFILE FORM CARD
+    // =========================================================
 
     private JPanel buildProfileFormCard() {
         JPanel card = UIFactory.createCard();
@@ -1900,15 +1968,20 @@ public class CounterStaffDashboard extends JPanel {
         card.add(topSep);
         card.add(Box.createVerticalStrut(22));
 
-        card.add(UIFactory.createFieldLabel("Name")); card.add(Box.createVerticalStrut(6));
-        profileNameField = UIFactory.createTextField("Enter your name"); card.add(profileNameField);
+        card.add(UIFactory.createFieldLabel("Name"));
+        card.add(Box.createVerticalStrut(6));
+        profileNameField = UIFactory.createTextField("Enter your name");
+        card.add(profileNameField);
         card.add(Box.createVerticalStrut(16));
 
-        card.add(UIFactory.createFieldLabel("Email")); card.add(Box.createVerticalStrut(6));
-        profileEmailField = UIFactory.createTextField("Enter your email"); card.add(profileEmailField);
+        card.add(UIFactory.createFieldLabel("Email"));
+        card.add(Box.createVerticalStrut(6));
+        profileEmailField = UIFactory.createTextField("Enter your email");
+        card.add(profileEmailField);
         card.add(Box.createVerticalStrut(16));
 
-        card.add(UIFactory.createFieldLabel("Role")); card.add(Box.createVerticalStrut(6));
+        card.add(UIFactory.createFieldLabel("Role"));
+        card.add(Box.createVerticalStrut(6));
         profileRoleLabel = new JLabel("\u2014");
         profileRoleLabel.setFont(UIConstants.FONT_BODY);
         profileRoleLabel.setForeground(UIConstants.TEXT_SECONDARY);
@@ -1933,27 +2006,45 @@ public class CounterStaffDashboard extends JPanel {
         String newEmail = UIFactory.getFieldValue(profileEmailField, "Enter your email");
 
         if (newName.isEmpty() || newEmail.isEmpty()) {
-            JOptionPane.showMessageDialog(app, "Name and email cannot be empty.", "Error", JOptionPane.ERROR_MESSAGE); return;
+            JOptionPane.showMessageDialog(app,
+                    "Name and email cannot be empty.", "Error",
+                    JOptionPane.ERROR_MESSAGE);
+            return;
         }
         if (!newName.matches("[a-zA-Z ]{2,50}")) {
-            JOptionPane.showMessageDialog(app, "Name must be 2-50 characters (letters only).", "Error", JOptionPane.ERROR_MESSAGE); return;
+            JOptionPane.showMessageDialog(app,
+                    "Name must be 2-50 characters (letters only).", "Error",
+                    JOptionPane.ERROR_MESSAGE);
+            return;
         }
         if (!newEmail.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
-            JOptionPane.showMessageDialog(app, "Please enter a valid email address.", "Error", JOptionPane.ERROR_MESSAGE); return;
-        }
-        AccountService svc = app.getAccountService();
-        if (!newEmail.equalsIgnoreCase(user.getEmail()) && svc.emailExists(newEmail)) {
-            JOptionPane.showMessageDialog(app, "An account with this email already exists.", "Error", JOptionPane.ERROR_MESSAGE); return;
+            JOptionPane.showMessageDialog(app,
+                    "Please enter a valid email address.", "Error",
+                    JOptionPane.ERROR_MESSAGE);
+            return;
         }
 
-        User updated = new User(user.getUserId(), newName, newEmail, user.getPassword(), user.getRole(), 0);
+        AccountService svc = app.getAccountService();
+        if (!newEmail.equalsIgnoreCase(user.getEmail()) && svc.emailExists(newEmail)) {
+            JOptionPane.showMessageDialog(app,
+                    "An account with this email already exists.", "Error",
+                    JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        User updated = new User(user.getUserId(), newName, newEmail,
+                user.getPassword(), user.getRole(), 0);
         if (svc.updateUser(user.getEmail(), updated)) {
             app.setLoggedInUser(newName);
             app.setLoggedInUserObj(updated);
             refreshUser();
-            JOptionPane.showMessageDialog(app, "Profile updated successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(app,
+                    "Profile updated successfully!", "Success",
+                    JOptionPane.INFORMATION_MESSAGE);
         } else {
-            JOptionPane.showMessageDialog(app, "Failed to save profile.", "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(app,
+                    "Failed to save profile.", "Error",
+                    JOptionPane.ERROR_MESSAGE);
         }
     }
 }

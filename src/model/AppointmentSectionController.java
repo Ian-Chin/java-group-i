@@ -9,38 +9,6 @@ import java.util.Map;
 import java.util.LinkedHashMap;
 import java.util.Set;
 
-/**
- * AppointmentSectionController — handles all logic for the Upcoming Appointments
- * section in the Customer Dashboard.
- *
- * This controller separates business logic from the UI (CustomerDashboard.java).
- * The dashboard only calls methods here — it never reads files or calculates
- * amounts itself.
- *
- * Java OOP principles used:
- *  - Encapsulation  : all appointment logic is hidden inside this class
- *  - Abstraction    : the dashboard calls simple methods like getPendingAppointments()
- *                     without knowing how data is read from files
- *  - Separation of Concerns : appointment logic here, payment logic in PaymentService
- *
- * METHODS MOVED FROM CustomerDashboard.java (appointment-related only):
- *  - countThisMonth()        : counts appointments in the current month (stat card)
- *  - buildMonthlyCounts()    : builds month → count map for the bar chart
- *  - buildServiceBreakdown() : builds service type → count map for the donut chart
- *  - getNextAppointmentDate(): formats the next upcoming appointment date for display
- *  - getDaysUntilLabel()     : returns "Today", "Tomorrow", or "In N days" label
- *
- * PRICING (calculateAmount):
- *  - Normal Service = RM 50.00  flat rate (regardless of duration)
- *  - Major Service  = RM 200.00 flat rate (regardless of duration)
- *  Duration is informational only and does NOT affect the price.
- *
- * Methods in other files:
- *  - getVehicleLabel()      → VehicleService   (vehicle data lookup)
- *  - buildVehicleSubtitle() → VehicleService   (reads vehicle type data)
- *  - calcPendingAmount()    → PaymentService   (payment total)
- *  - calcTotalSpent()       → PaymentService   (payment total)
- */
 public class AppointmentSectionController {
 
     // ── Services used to read/write data files ────────────────────
@@ -83,7 +51,6 @@ public class AppointmentSectionController {
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Kept so existing call sites compile — intentionally does nothing.
      * Expired appointments are hidden by getPendingAppointments() instead.
      */
     public void autoCompleteExpired() {
@@ -95,8 +62,7 @@ public class AppointmentSectionController {
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Returns upcoming (Pending or In Progress) appointments for the
-     * currently logged-in customer.
+     * Returns upcoming (Pending or In Progress) appointments for the currently logged-in customer.
      *
      * Row layout: [0] appointmentID  [1] vehicleID  [2] technicianID
      *             [3] serviceType    [4] status     [5] dateTime     [6] duration
@@ -110,13 +76,6 @@ public class AppointmentSectionController {
     // ═══════════════════════════════════════════════════════════════
     // PENDING PAYMENT
     // ═══════════════════════════════════════════════════════════════
-
-    /**
-     * Returns completed but unpaid appointments for the currently logged-in customer.
-     *
-     * Row layout: [0] appointmentID  [1] vehicleID  [2] technicianID
-     *             [3] serviceType    [4] status     [5] dateTime     [6] duration
-     */
     public List<String[]> getUnpaidAppointments() {
         User user = sessionView.getLoggedInUserObj();
         if (user == null) return new java.util.ArrayList<>();
@@ -136,14 +95,6 @@ public class AppointmentSectionController {
     // ═══════════════════════════════════════════════════════════════
     // ALL APPOINTMENTS — for dashboard stats / charts
     // ═══════════════════════════════════════════════════════════════
-
-    /**
-     * Returns ALL appointments (any status) for the currently logged-in customer.
-     * Used by the bar chart, donut chart, and total count stat card.
-     *
-     * Row layout: [0] appointmentID  [1] vehicleID  [2] technicianID
-     *             [3] serviceType    [4] status     [5] dateTime     [6] duration
-     */
     public List<String[]> getAllAppointmentsForUser() {
         User user = sessionView.getLoggedInUserObj();
         if (user == null) return new java.util.ArrayList<>();
@@ -153,32 +104,9 @@ public class AppointmentSectionController {
     // ═══════════════════════════════════════════════════════════════
     // AMOUNT CALCULATION  ← FIXED
     // ═══════════════════════════════════════════════════════════════
-
-    /**
-     * Returns the flat-rate payment amount for a given service type.
-     *
-     * Pricing rules (FLAT RATE — duration does NOT affect the price):
-     *   Normal Service = RM  50.00
-     *   Major Service  = RM 200.00
-     *
-     * Examples:
-     *   Normal Service, 1 hour  →  RM  50.00
-     *   Major Service,  3 hours →  RM 200.00   (NOT RM 600 or RM 1050)
-     *
-     * The durationStr parameter is accepted for API compatibility but
-     * is intentionally ignored — it has no effect on the price.
-     *
-     * NOTE: This lives here (not PaymentService) because the pricing rule
-     * depends on the service type stored in appointments.txt.
-     *
-     * @param serviceType  e.g. "Major Service" or "Normal Service"
-     * @param durationStr  duration string from appointments.txt — ignored
-     * @return flat price as a formatted string e.g. "50.00" or "200.00"
-     */
     public String calculateAmount(String serviceType, String durationStr) {
-        // Flat rate — duration is informational only, it does NOT multiply the price.
-        // Normal Service = RM 50.00   regardless of hours
-        // Major Service  = RM 200.00  regardless of hours
+        // Normal Service = RM 50.00
+        // Major Service  = RM 200.00
         double price = serviceType.equalsIgnoreCase("Major Service") ? 200.00 : 50.00;
         return String.format("%.2f", price);
     }
@@ -254,18 +182,7 @@ public class AppointmentSectionController {
 
     // ═══════════════════════════════════════════════════════════════
     // DASHBOARD APPOINTMENT STAT HELPERS
-    // (moved from CustomerDashboard.java — appointment-related only)
     // ═══════════════════════════════════════════════════════════════
-
-    /**
-     * Counts how many appointments fall in the current calendar month.
-     * Used by the "Total Appointments" stat card subtitle (e.g. "▲ 3 this month").
-     *
-     * Data source: appointments.txt (dateTime column) → belongs here.
-     *
-     * @param appts  list of appointment rows (any status)
-     * @return count of appointments whose dateTime falls in the current month
-     */
     public int countThisMonth(List<String[]> appts) {
         LocalDate today = LocalDate.now();
         int count = 0;
@@ -283,14 +200,8 @@ public class AppointmentSectionController {
      * Builds a month-label → appointment-count map for the last N months.
      * Used by the Service Activity bar chart in the dashboard.
      *
-     * Data source: appointments.txt (dateTime column) → belongs here.
-     *
      * Example result for months=6 (current month = April):
      *   { "Nov"→0, "Dec"→1, "Jan"→2, "Feb"→0, "Mar"→3, "Apr"→1 }
-     *
-     * @param appts   list of all appointment rows
-     * @param months  how many months back to include
-     * @return ordered map of month abbreviation → count
      */
     public Map<String, Integer> buildMonthlyCounts(List<String[]> appts, int months) {
         Map<String, Integer> counts = new LinkedHashMap<>();
@@ -316,11 +227,6 @@ public class AppointmentSectionController {
     /**
      * Builds a service-type → count map for the donut chart.
      * Top 3 types listed individually; the rest grouped as "Other".
-     *
-     * Data source: appointments.txt (serviceType column) → belongs here.
-     *
-     * @param appts  list of all appointment rows
-     * @return ordered map of service type → count (max 4 entries)
      */
     public Map<String, Integer> buildServiceBreakdown(List<String[]> appts) {
         Map<String, Integer> raw = new LinkedHashMap<>();
@@ -339,11 +245,6 @@ public class AppointmentSectionController {
     /**
      * Formats the date of the next upcoming appointment for display.
      * Used by the "Next Appointment" stat card value (e.g. "26 Mar 2026").
-     *
-     * Data source: appointments.txt (dateTime column) → belongs here.
-     *
-     * @param upcoming  sorted list of upcoming appointment rows (nearest first)
-     * @return formatted date string, or empty string if none
      */
     public String getNextAppointmentDate(List<String[]> upcoming) {
         if (upcoming.isEmpty()) return "";
@@ -359,13 +260,7 @@ public class AppointmentSectionController {
     /**
      * Returns a human-friendly label for how far away an appointment is.
      * Used by the "Next Appointment" stat card subtitle.
-     *
-     * Data source: appointments.txt (dateTime column) → belongs here.
-     *
      * Examples: same day → "Today", next day → "Tomorrow", later → "In 5 days"
-     *
-     * @param dateTimeStr  the appointment's dateTime e.g. "2026-04-25 09:00"
-     * @return label string, or empty string if the date cannot be parsed
      */
     public String getDaysUntilLabel(String dateTimeStr) {
         try {

@@ -11,27 +11,6 @@ import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.util.List;
 
-/**
- * ServiceHistoryPage
- *
- * RESPONSIBILITIES (view only):
- *   - Builds and displays all GUI components (stat cards, search/sort bar, table).
- *   - Delegates ALL data loading, filtering, sorting, ID resolution, and stat
- *     computation to ServiceHistoryService.
- *
- * DATA FLOW:
- *   refresh()
- *     └─► serviceHistoryService.getRecordsForCustomer()   → filtered rows
- *     └─► serviceHistoryService.getSummaryStats()         → SummaryStats object
- *     └─► serviceHistoryService.buildTableRows()          → display-ready Object[] rows
- *
- *   applySort()
- *     └─► serviceHistoryService.applySort()               → sets sort keys on rowSorter
- *         (sort option labels come from serviceHistoryService.getAvailableSortOptions())
- *
- *   applyFilter()
- *     └─► serviceHistoryService.applyFilter()             → sets RowFilter on rowSorter
- */
 public class ServiceHistoryPage extends JPanel {
 
     // ── Data-layer service ────────────────────────────────────────
@@ -341,16 +320,6 @@ public class ServiceHistoryPage extends JPanel {
 
     // ─────────────────────────────────────────────────────────────
     // buildSearchSortBar()
-    //
-    // A bar at the top of the table card containing two controls:
-    //   • A text field  — live keyword search across all columns
-    //   • A JComboBox   — sorts the table by date or technician
-    //
-    // Layout: both controls are flush to the RIGHT edge of the bar,
-    // with 8 px between them. This mirrors PaymentHistoryPage exactly.
-    //
-    // The sort option labels are fetched from ServiceHistoryService
-    // so the view never hard-codes them here.
     // ─────────────────────────────────────────────────────────────
     private JPanel buildSearchSortBar() {
 
@@ -426,10 +395,6 @@ public class ServiceHistoryPage extends JPanel {
 
     // ─────────────────────────────────────────────────────────────
     // applyFilter()
-    //
-    // Called on every keystroke in the search field.
-    // Delegates entirely to ServiceHistoryService — no filter logic
-    // lives in the view.
     // ─────────────────────────────────────────────────────────────
     private void applyFilter() {
         serviceHistoryService.applyFilter(rowSorter,
@@ -438,10 +403,6 @@ public class ServiceHistoryPage extends JPanel {
 
     // ─────────────────────────────────────────────────────────────
     // applySort()
-    //
-    // Called when the user changes the selection in the sort dropdown.
-    // Delegates entirely to ServiceHistoryService — no sort logic
-    // lives in the view.
     // ─────────────────────────────────────────────────────────────
     private void applySort() {
         serviceHistoryService.applySort(rowSorter,
@@ -450,10 +411,6 @@ public class ServiceHistoryPage extends JPanel {
 
     // ═══════════════════════════════════════════════════════════════
     // refresh()
-    //
-    // Called when the page becomes visible or the user logs in.
-    // Delegates all data loading and computation to ServiceHistoryService,
-    // then applies the results to the GUI labels and table.
     // ═══════════════════════════════════════════════════════════════
     public void refresh() {
         model.User loggedInUser = getLoggedInUser();
@@ -525,9 +482,6 @@ public class ServiceHistoryPage extends JPanel {
 
     // ─────────────────────────────────────────────────────────────
     // getLoggedInUser()
-    //
-    // Walks up the Swing parent chain to find AppFrame,
-    // then returns the currently logged-in User object.
     // ─────────────────────────────────────────────────────────────
     private model.User getLoggedInUser() {
         Container parent = getParent();

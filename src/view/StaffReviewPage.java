@@ -12,28 +12,6 @@ import java.awt.event.*;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * StaffReviewPage
- *
- * RESPONSIBILITY — GUI only.
- * All data access, filtering, sorting, and star-string building
- * are delegated to StaffReviewService. This class:
- *   - Builds and lays out every Swing component.
- *   - Calls service methods to get data and processed lists.
- *   - Puts results into the table and summary cards.
- *
- * CHANGE FROM PREVIOUS VERSION:
- *   - Removed the CardLayout / empty-state panel entirely.
- *   - The page now ALWAYS shows the full layout:
- *       two summary cards (showing "0.0" and empty bars when no data)
- *       + search/filter controls
- *       + the review table (showing no rows when there is no data).
- *   - This matches the Dashboard behaviour where 0 values are
- *     displayed instead of a special "no data" card.
- *   - applyFilters() now calls service.filterReviews() and
- *     service.sortReviews() instead of containing that logic inline.
- *   - buildStarString() now delegates to service.buildStarString().
- */
 public class StaffReviewPage extends JPanel {
 
     // ── Colours ───────────────────────────────────────────────────
@@ -160,7 +138,6 @@ public class StaffReviewPage extends JPanel {
     // buildDataPanel()
     //   NORTH  — two summary cards side by side
     //   CENTER — table card (search/filter + table)
-    // Always visible regardless of whether data exists.
     // ─────────────────────────────────────────────────────────────
     private JPanel buildDataPanel() {
         JPanel panel = new JPanel(new BorderLayout());
@@ -516,10 +493,6 @@ public class StaffReviewPage extends JPanel {
 
     // ─────────────────────────────────────────────────────────────
     // applyFilters()
-    //
-    // Called whenever the search text, dropdown, or a column header
-    // changes. Delegates filtering and sorting to StaffReviewService,
-    // then puts the result into the table.
     // ─────────────────────────────────────────────────────────────
     private void applyFilters() {
         // Read current UI state

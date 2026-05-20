@@ -7,17 +7,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * MyFeedbackService
- *
- * Handles ALL data logic for the MyFeedbackPage:
- *   - Reading / writing feedback.txt
- *   - Reading appointments.txt, accounts.txt, vehicles.txt
- *   - Searching, filtering, and sorting Pending and History data
- *   - Generating the next Feedback ID
- *
- * MyFeedbackPage only calls the public methods here and uses the
- * returned lists to fill its tables — keeping GUI and logic separated.
- *
  * feedback.txt format — 8 fields separated by commas:
  *   [0] feedbackID
  *   [1] customerID
@@ -27,9 +16,6 @@ import java.util.stream.Collectors;
  *   [5] condition        e.g. "Excellent", "Good", "Average", "Poor", "Unsatisfactory"
  *   [6] feedbackText     e.g. "Full service completed - engine oil changed..."
  *   [7] date             e.g. "2026-03-05"
- *
- * Example line:
- *   FB1,C1,AP1,V1,T1,Good,Full service completed - engine oil changed.,2026-03-05
  *
  * Star-to-condition mapping:
  *   5 stars → "Excellent"
@@ -77,11 +63,10 @@ public class MyFeedbackService {
         public String date;             // e.g. "2026-03-05"
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // AppointmentRow — lightweight object for the "pending feedback"
-    // table — shows completed appointments the customer has NOT yet
-    // submitted feedback for.
-    // ─────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────────
+    // AppointmentRow — lightweight object for the "pending feedback" table
+    // Shows completed appointments the customer has NOT yet submitted feedback for.
+    // ─────────────────────────────────────────────────────────────────────────────
     public static class AppointmentRow {
         public String appointmentId;   // e.g. "AP1"
         public String serviceType;     // e.g. "Oil Change"
@@ -97,9 +82,6 @@ public class MyFeedbackService {
 
     // ─────────────────────────────────────────────────────────────
     // getFeedbackByCustomer()
-    //
-    // Returns all feedback rows that belong to the given customer.
-    // Used by MyFeedbackPage to populate the history table.
     // ─────────────────────────────────────────────────────────────
     public List<MyFeedback> getFeedbackByCustomer(String customerId) {
 
@@ -151,11 +133,6 @@ public class MyFeedbackService {
     // ═════════════════════════════════════════════════════════════
 
     // ─────────────────────────────────────────────────────────────
-    // saveFeedback()
-    //
-    // Appends a new feedback row to feedback.txt.
-    // Returns true if saved successfully, false otherwise.
-    //
     // Parameters:
     //   customerId    — e.g. "C1"
     //   appointmentId — e.g. "AP1"
@@ -202,13 +179,10 @@ public class MyFeedbackService {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // hasFeedbackForAppointment()
-    //
-    // Returns true if feedback.txt already has a row for this
-    // appointmentId + customerId combination.
+    // ───────────────────────────────────────────────────────────────────────────────────────────────
+    // Returns true if feedback.txt already has a row for this appointmentId + customerId combination.
     // Used to hide the Feedback button for appointments already reviewed.
-    // ─────────────────────────────────────────────────────────────
+    // ───────────────────────────────────────────────────────────────────────────────────────────────
     public boolean hasFeedbackForAppointment(String customerId, String appointmentId) {
         File file = new File(FEEDBACK_FILE);
         if (!file.exists()) return false;
@@ -240,8 +214,6 @@ public class MyFeedbackService {
     // ═════════════════════════════════════════════════════════════
 
     // ─────────────────────────────────────────────────────────────
-    // getCompletedAppointmentsWithoutFeedback()
-    //
     // Reads appointments.txt and returns completed appointments for
     // this customer that do NOT yet have a feedback entry.
     //
@@ -314,17 +286,10 @@ public class MyFeedbackService {
     // ═════════════════════════════════════════════════════════════
 
     // ─────────────────────────────────────────────────────────────
-    // filterAndSortPending()
-    //
     // Applies a text search query and a sort option to a list of
     // pending AppointmentRow objects and returns the resulting list.
     //
     // Called by MyFeedbackPage.applyPendingSearchAndSort().
-    //
-    // Parameters:
-    //   source     — the full currentPending list held by the page
-    //   query      — lower-cased search text; empty string = no filter
-    //   sortOption — one of the strings shown in pendingSortCombo
     // ─────────────────────────────────────────────────────────────
     public List<AppointmentRow> filterAndSortPending(List<AppointmentRow> source,
                                                      String query,
@@ -368,8 +333,6 @@ public class MyFeedbackService {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // filterAndSortHistory()
-    //
     // Applies a text search query and a sort/filter option to a list
     // of MyFeedback objects and returns the resulting list.
     //
@@ -381,11 +344,6 @@ public class MyFeedbackService {
     //   "Average"        — 3 stars
     //   "Poor"           — 2 stars
     //   "Unsatisfactory" — 1 star
-    //
-    // Parameters:
-    //   source     — the full currentHistory list held by the page
-    //   query      — lower-cased search text; empty string = no filter
-    //   sortOption — one of the strings shown in historySortCombo
     // ─────────────────────────────────────────────────────────────
     public List<MyFeedback> filterAndSortHistory(List<MyFeedback> source,
                                                  String query,
@@ -486,11 +444,6 @@ public class MyFeedbackService {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // buildPendingTableRows()
-    //
-    // Converts a list of AppointmentRow objects into a 2-D Object
-    // array ready to be inserted directly into a DefaultTableModel.
-    //
     // Each row has 5 elements matching the pending table columns:
     //   [0] Appointment ID
     //   [1] Service Type
@@ -514,11 +467,6 @@ public class MyFeedbackService {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // buildHistoryTableRows()
-    //
-    // Converts a list of MyFeedback objects into a 2-D Object array
-    // ready to be inserted directly into a DefaultTableModel.
-    //
     // Each row has 8 elements matching the history table columns:
     //   [0] Feedback ID
     //   [1] Appointment ID
@@ -552,8 +500,6 @@ public class MyFeedbackService {
     // ═════════════════════════════════════════════════════════════
 
     // ─────────────────────────────────────────────────────────────
-    // conditionRank()
-    //
     // Maps a condition label to a numeric rank for sorting purposes.
     //   Excellent      → 5  (best)
     //   Good           → 4
@@ -576,8 +522,6 @@ public class MyFeedbackService {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // parseDuration()
-    //
     // Extracts the numeric part of a duration string so rows can be
     // sorted by duration length.
     //   e.g. "1.5 hr(s)" → 1.5,  "2" → 2.0,  "abc" → 0.0
@@ -593,8 +537,6 @@ public class MyFeedbackService {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // parseFeedbackLine()
-    //
     // Parses one line from feedback.txt into a MyFeedback object.
     // Returns null if the line is badly formatted.
     //
@@ -606,7 +548,6 @@ public class MyFeedbackService {
 
         // Split by comma, limit to EXPECTED_COLUMNS so feedback text (field 6)
         // can safely contain commas (they were replaced with semicolons on save,
-        // but we support commas here too as a safety net via the limit).
         String[] parts = line.split(",", EXPECTED_COLUMNS);
 
         if (parts.length < EXPECTED_COLUMNS) {
@@ -636,13 +577,8 @@ public class MyFeedbackService {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // lookUpName()
-    //
     // Finds a user's name by their ID in accounts.txt.
     // Returns the ID itself as a fallback if not found.
-    //
-    // accounts.txt format:
-    //   [0] userID, [1] name, [2] email, [3] password, [4] role, [5] profilePic
     // ─────────────────────────────────────────────────────────────
     private String lookUpName(String userId) {
         if (userId == null || userId.isEmpty()) return "Unknown";
@@ -669,11 +605,6 @@ public class MyFeedbackService {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // lookUpVehicle()
-    //
-    // Finds a vehicle's type and plate by vehicleID in vehicles.txt.
-    // Returns ["Unknown", "Unknown"] if not found.
-    //
     // vehicles.txt format:
     //   [0] vehicleID, [1] userID, [2] vehicleType, [3] plate,
     //   [4] brand, [5] year, [6] colour
@@ -707,8 +638,6 @@ public class MyFeedbackService {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // generateNextFeedbackId()
-    //
     // Reads feedback.txt, finds the highest existing FB number,
     // and returns the next ID e.g. "FB7" if "FB6" already exists.
     // ─────────────────────────────────────────────────────────────

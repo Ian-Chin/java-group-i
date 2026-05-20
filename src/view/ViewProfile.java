@@ -21,60 +21,6 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
-/**
- * ============================================================
- * ViewProfile.java — Customer Profile Page (GUI only)
- * ============================================================
- *
- * This class is responsible ONLY for building and displaying the
- * profile UI. All business logic has been moved to:
- *
- *   CustomerProfileController.java  — Personal Information card
- *     - getCurrentName()            : read current name from file
- *     - getCurrentEmail()           : read current email from file
- *     - hasNoChanges()              : detect no-op saves
- *     - saveProfile()               : validate + persist name/email
- *
- *   VehicleSectionController.java   — My Vehicles card
- *     - loadVehiclesForUser()       : read vehicles.txt for this user
- *     - handleAdd()                 : validate + save new vehicle
- *     - handleEdit()                : validate + update existing vehicle
- *     - handleDelete() /
- *       deleteVehicleDirectly()     : remove vehicle from file
- *     - validateFields()            : shared add/edit validation
- *
- * ============================================================
- *
- * SCROLL BAR / GHOST SPACE FIX (latest change):
- *
- *   ROOT CAUSE:
- *   vehicleAddPanel was being added to vehicleListPanel during
- *   buildVehicleCard() with setVisible(false).
- *
- *   In Java Swing, an INVISIBLE component still occupies space
- *   inside a BoxLayout panel. The layout still measures its size
- *   even when hidden, so vehicleListPanel's total height was always:
- *       (6 rows x 64px) + (5 gaps x 6px) + (add-form 64px) = 478px
- *   This is MORE than the scroll pane's fixed height of 414px.
- *   Result: scroll bar appeared even with only 6 vehicles, and
- *   scrolling down revealed an empty gap at the bottom.
- *
- *   THE FIX — one change in buildVehicleCard():
- *
- *   BEFORE (broken):
- *     vehicleAddPanel = buildAddForm();
- *     vehicleAddPanel.setVisible(false);    <- hidden but STILL IN the panel
- *     vehicleAddPanel.setAlignmentX(...);
- *     vehicleCard.add(vehicleAddPanel);     <- caused ghost space
- *
- *   AFTER (fixed):
- *     vehicleAddPanel = buildAddForm();
- *     // NOT added to any panel here.
- *     // It only enters vehicleListPanel when + Add is clicked,
- *     // and is removed again on Cancel or successful Save.
- *
- * ============================================================
- */
 public class ViewProfile extends JPanel {
 
     // =========================================================
@@ -110,10 +56,10 @@ public class ViewProfile extends JPanel {
     private JButton btnSave;
     private JButton btnCancel;
 
-    private JPanel      vehicleListPanel;   // The inner panel that holds vehicle rows
-    private JPanel      vehicleAddPanel;    // The add form — NOT pre-added to any panel
-    private JPanel      vehicleCard;        // The outer card container
-    private JScrollPane vehicleScrollPane;  // Scroll pane wrapping vehicleListPanel
+    private JPanel      vehicleListPanel;   
+    private JPanel      vehicleAddPanel;    
+    private JPanel      vehicleCard;        
+    private JScrollPane vehicleScrollPane;  
 
     private JComboBox<String> addTypeCombo;
     private int avatarColorIndex = 0;
@@ -295,10 +241,6 @@ public class ViewProfile extends JPanel {
 
     /**
      * Loads vehicles for the currently logged-in user.
-     *
-     * CHANGED: was calling vehicleService.getVehiclesByUserId() directly.
-     * Now delegates to vehicleController.loadVehiclesForUser() so that
-     * the data-reading logic lives in VehicleSectionController.java.
      */
     private void loadVehicles() {
         User user = app.getLoggedInUserObj();
@@ -482,20 +424,6 @@ public class ViewProfile extends JPanel {
     // PERSONAL INFORMATION CARD  (GUI only)
     // =========================================================
 
-    /**
-     * Builds the Personal Information card.
-     *
-     * All data reads use profileController.getCurrentName() /
-     * getCurrentEmail() (CustomerProfileController.java).
-     *
-     * Button actions delegate to:
-     *   enterEditMode()      — UI toggle (this file)
-     *   exitEditMode()       — UI toggle (this file)
-     *   saveProfileChanges() — UI wrapper that calls
-     *                          profileController.hasNoChanges() +
-     *                          profileController.saveProfile()
-     *                          (CustomerProfileController.java)
-     */
     private JPanel buildPersonalInfoCard() {
         JPanel card = makeCard();
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
@@ -622,10 +550,6 @@ public class ViewProfile extends JPanel {
 
     /**
      * Switches the Personal Information card to edit mode (UI only).
-     *
-     * Pre-populates the edit fields by calling:
-     *   profileController.getCurrentName()   (CustomerProfileController)
-     *   profileController.getCurrentEmail()  (CustomerProfileController)
      */
     private void enterEditMode() {
         editNameField.setText(profileController.getCurrentName());
@@ -638,10 +562,6 @@ public class ViewProfile extends JPanel {
 
     /**
      * Switches the Personal Information card back to read mode (UI only).
-     *
-     * Restores the edit fields to the current values by calling:
-     *   profileController.getCurrentName()   (CustomerProfileController)
-     *   profileController.getCurrentEmail()  (CustomerProfileController)
      */
     private void exitEditMode() {
         if (editNameField  != null) editNameField.setText(profileController.getCurrentName());
@@ -657,12 +577,6 @@ public class ViewProfile extends JPanel {
 
     /**
      * Save button handler for the Personal Information card (UI wrapper).
-     *
-     * Delegates all validation and persistence to:
-     *   profileController.hasNoChanges()  (CustomerProfileController)
-     *   profileController.saveProfile()   (CustomerProfileController)
-     *
-     * Only handles the resulting dialogs and UI state here.
      */
     private void saveProfileChanges() {
         String newName  = editNameField.getText().trim();
@@ -698,17 +612,6 @@ public class ViewProfile extends JPanel {
     // MY VEHICLES CARD  (GUI only)
     // =========================================================
 
-    /**
-     * Builds the My Vehicles card.
-     *
-     * Data loading uses vehicleController.loadVehiclesForUser()
-     * (VehicleSectionController.java).
-     *
-     * Add / Edit / Delete button actions delegate to:
-     *   vehicleController.handleAdd()              (VehicleSectionController)
-     *   vehicleController.handleEdit()             (VehicleSectionController)
-     *   vehicleController.deleteVehicleDirectly()  (VehicleSectionController)
-     */
     private JPanel buildVehicleCard() {
         vehicleCard = makeCard();
         vehicleCard.setLayout(new BoxLayout(vehicleCard, BoxLayout.Y_AXIS));
@@ -756,7 +659,6 @@ public class ViewProfile extends JPanel {
         vehicleScrollPane.getVerticalScrollBar().setUnitIncrement(10);
 
         // Fixed height = exactly MAX_VISIBLE rows visible before scrolling.
-        // Formula: (6 x 64px rows) + (5 x 6px gaps) = 384 + 30 = 414px
         int scrollPaneHeight = (MAX_VISIBLE * ROW_H) + ((MAX_VISIBLE - 1) * 6);
         vehicleScrollPane.setPreferredSize(new Dimension(0, scrollPaneHeight));
         vehicleScrollPane.setMaximumSize(new Dimension(Integer.MAX_VALUE, scrollPaneHeight));
@@ -825,14 +727,7 @@ public class ViewProfile extends JPanel {
     // =========================================================
     // ADD VEHICLE FORM  (GUI only)
     // =========================================================
-
-    /**
-     * Builds the inline add-vehicle form.
-     *
-     * The Save button delegates to vehicleController.handleAdd()
-     * (VehicleSectionController.java) for validation + persistence.
-     * This method only handles UI layout and field wiring.
-     */
+    
     private JPanel buildAddForm() {
         JPanel form = new JPanel(new BorderLayout(6, 0));
         form.setOpaque(false);
@@ -900,10 +795,7 @@ public class ViewProfile extends JPanel {
         });
 
         // ── Save: collect fields, delegate to VehicleSectionController ─
-        //
-        // CHANGED: was calling vehicleService.addVehicle() directly here.
-        // Now calls vehicleController.handleAdd() so that all validation
-        // and persistence lives in VehicleSectionController.java.
+
         Runnable doSave = () -> {
             String   type = (String) addTypeCombo.getSelectedItem();
             String[] data = { type, plateF.getText().trim(), brandF.getText().trim(),
@@ -1001,15 +893,6 @@ public class ViewProfile extends JPanel {
     // VEHICLE ROW  (GUI only)
     // =========================================================
 
-    /**
-     * Builds a single vehicle row (display + edit card) for the list.
-     *
-     * Edit Save button delegates to vehicleController.handleEdit()
-     * (VehicleSectionController.java).
-     *
-     * Remove button delegates to vehicleController.deleteVehicleDirectly()
-     * (VehicleSectionController.java).
-     */
     private JPanel buildVehicleRow(String vehicleType, String plate,
                                    String brand, String year, String colour) {
 
@@ -1112,10 +995,6 @@ public class ViewProfile extends JPanel {
         }
 
         // ── Save: collect fields, delegate to VehicleSectionController ─
-        //
-        // CHANGED: was calling vehicleService.updateVehicle() directly here.
-        // Now calls vehicleController.handleEdit() so that all validation
-        // and persistence live in VehicleSectionController.java.
         Runnable doSave = () -> {
             String nt = (eType   != null) ? (String) eType.getSelectedItem() : vehicleType;
             String np = (ePlate  != null) ? ePlate.getText().trim()  : plate;
@@ -1183,10 +1062,6 @@ public class ViewProfile extends JPanel {
         if (eColour != null) eColour.addKeyListener(enterSave);
 
         // ── Remove button: confirm then delegate to VehicleSectionController ─
-        //
-        // CHANGED: was calling vehicleService.deleteVehicle() directly here.
-        // Now calls vehicleController.deleteVehicleDirectly() so that the
-        // deletion logic lives in VehicleSectionController.java.
         removeBtn.addActionListener(e -> {
             int ch = JOptionPane.showConfirmDialog(app,
                     "Remove " + brand + " (" + plate + ")?",
@@ -1486,18 +1361,10 @@ public class ViewProfile extends JPanel {
         }
     }
 
-
     // =========================================================
     // PRIVATE INNER CLASS — ScrollableVehiclePanel
     // =========================================================
 
-    /**
-     * A JPanel that implements Scrollable so the JScrollPane knows:
-     *
-     * 1. Always stretch width to fill the viewport — no horizontal scroll bar.
-     * 2. Only show a vertical scroll bar when content height truly exceeds
-     *    the viewport height (i.e. more than MAX_VISIBLE rows).
-     */
     private static class ScrollableVehiclePanel extends JPanel
             implements javax.swing.Scrollable {
 

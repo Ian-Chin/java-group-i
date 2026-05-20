@@ -1,12 +1,9 @@
 package model;
 
-// ProfileController is an abstract base class for handling profile editing.
-
 public abstract class ProfileController {
 
     /**
      * AccountService is used to read from and write to accounts.txt.
-     * It is declared "protected" so subclasses can access it directly.
      */
     protected final AccountService accountService;
 
@@ -31,7 +28,6 @@ public abstract class ProfileController {
     
     public abstract boolean deleteAccount();
 
-    // ── Shared methods — inherited by ALL subclasses ──────────────
     // Validates the name and email entered by the user.
 
     public String validate(String newName, String newEmail) {
@@ -66,8 +62,6 @@ public abstract class ProfileController {
 
         return null; // null means all validation passed — no errors
     }
-
-    // Checks whether the user made any actual changes to their name or email.
     
     public boolean hasNoChanges(String newName, String newEmail) {
         User currentUser = getCurrentUser();

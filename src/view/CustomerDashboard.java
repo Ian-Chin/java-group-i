@@ -1095,18 +1095,6 @@ public class CustomerDashboard extends JPanel {
 
     // ═══════════════════════════════════════════════════════════════
     // showViewAllPendingDialog()
-    //
-    // NEW dedicated "All Pending Payments" dialog.
-    // Replaces the old generic showViewAllDialog() call for pending
-    // payments so we can:
-    //   • Tag the inner JScrollPane with the name "listScrollPane"
-    //   • Pass this dialog reference into every buildPaymentRow() call
-    //     so that after each Pay action the list refreshes in-place
-    //
-    // The dialog stays open while payments are being made one by one.
-    // Once the last payment is confirmed the dialog closes itself
-    // (handled in the confirmBtn action listener in
-    // showPaymentInvoiceDialog()).
     // ═══════════════════════════════════════════════════════════════
     private void showViewAllPendingDialog(String dialogTitle) {
         JDialog dialog = new JDialog(
@@ -1147,15 +1135,6 @@ public class CustomerDashboard extends JPanel {
 
     // ─────────────────────────────────────────────────────────────
     // buildPendingListScrollPane()
-    //
-    // Builds (or rebuilds) the scrollable JPanel that contains one
-    // buildPaymentRow() per unpaid appointment, wrapped in a
-    // JScrollPane.  Extracted into its own method so both the initial
-    // dialog build and the in-place refresh share the same logic.
-    //
-    // @param unpaidRows  the current list of unpaid appointments
-    // @param dialog      the parent dialog (passed into each row's Pay button)
-    // @return a configured JScrollPane ready to be placed in the dialog
     // ─────────────────────────────────────────────────────────────
     private JScrollPane buildPendingListScrollPane(List<String[]> unpaidRows,
                                                     JDialog dialog) {
@@ -1183,8 +1162,7 @@ public class CustomerDashboard extends JPanel {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // VIEW ALL DIALOG — used only for Upcoming Appointments now
-    // (Pending Payments has its own showViewAllPendingDialog above)
+    // VIEW ALL DIALOG — used only for Upcoming Appointments
     // ═══════════════════════════════════════════════════════════════
     private void showViewAllDialog(String dialogTitle,
                                    List<String[]> allRows,

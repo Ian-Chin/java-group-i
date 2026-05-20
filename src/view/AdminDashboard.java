@@ -89,10 +89,14 @@ public class AdminDashboard extends JPanel {
         if (name == null || name.isEmpty()) name = "Admin";
         if (welcomeLabel != null) welcomeLabel.setText("Welcome back, " + name);
         if (profileLabel  != null) profileLabel.setText(name);
+
         User u = app.getLoggedInUserObj();
         if (u != null) {
-            profileImage = profilePicStorage.loadImage(u.getEmail());
-            bannerImage  = backgroundStorage.loadImage(u.getEmail());
+            // ← FIXED: was u.getEmail(), now u.getUserId()
+            // This makes admin images save as M1.jpg instead of b@gmail.com.jpg
+            profileImage = profilePicStorage.loadImage(u.getUserId());
+            bannerImage  = backgroundStorage.loadImage(u.getUserId());
+
             if (profileBanner   != null) profileBanner.repaint();
             if (profilePicLabel != null) profilePicLabel.repaint();
             if (avatarLabel     != null) avatarLabel.repaint();
@@ -216,7 +220,6 @@ public class AdminDashboard extends JPanel {
         } else {
             for (int i = 0; i < show; i++) {
                 String[] r = upcoming.get(i);
-                // [0]apptID [1]custID [2]vehicleID [3]techID [4]svcType [5]status [6]dateTime
                 String cust = names.getOrDefault(r[1].trim(), r[1].trim());
                 String tech = names.getOrDefault(r[3].trim(), r[3].trim());
                 String dt   = r.length > 6 ? r[6].trim() : "";
@@ -320,9 +323,14 @@ public class AdminDashboard extends JPanel {
                 BorderFactory.createLineBorder(new Color(220,220,225), 1), new EmptyBorder(6,0,6,0)));
         menu.setBackground(Color.WHITE);
         JMenuItem vp = menuItem("View Profile");
-        vp.addActionListener(e -> { activeNav=""; headerTitle.setText("My Profile");
-            contentLayout.show(contentPanel,"Profile"); refreshProfileFields(); });
-        JMenuItem lo = menuItem("Logout"); lo.setForeground(UIConstants.TEXT_DANGER);
+        vp.addActionListener(e -> {
+            activeNav = "";
+            headerTitle.setText("My Profile");
+            contentLayout.show(contentPanel, "Profile");
+            refreshProfileFields();
+        });
+        JMenuItem lo = menuItem("Logout");
+        lo.setForeground(UIConstants.TEXT_DANGER);
         lo.addActionListener(e -> { app.setLoggedInUser(""); app.showPage(PageName.ONBOARDING); });
         menu.add(vp); menu.add(lo);
         btn.addMouseListener(new MouseAdapter() {
@@ -410,163 +418,302 @@ public class AdminDashboard extends JPanel {
     // ── Profile page ─────────────────────────────────────────────────────────
 
     private void refreshProfileFields() {
-        User u = app.getLoggedInUserObj(); if(u==null) return;
-        if(profileNameField !=null){profileNameField .setText(u.getName());  profileNameField .setForeground(Color.BLACK);}
-        if(profileEmailField!=null){profileEmailField.setText(u.getEmail()); profileEmailField.setForeground(Color.BLACK);}
-        if(profileRoleLabel !=null){String r=u.getRole(); profileRoleLabel.setText(r.substring(0,1).toUpperCase()+r.substring(1));}
-        profileImage=profilePicStorage.loadImage(u.getEmail());
-        bannerImage =backgroundStorage.loadImage(u.getEmail());
-        if(profileBanner  !=null) profileBanner.repaint();
-        if(profilePicLabel!=null) profilePicLabel.repaint();
+        User u = app.getLoggedInUserObj();
+        if (u == null) return;
+
+        if (profileNameField  != null) { profileNameField.setText(u.getName());  profileNameField.setForeground(Color.BLACK); }
+        if (profileEmailField != null) { profileEmailField.setText(u.getEmail()); profileEmailField.setForeground(Color.BLACK); }
+        if (profileRoleLabel  != null) {
+            String r = u.getRole();
+            profileRoleLabel.setText(r.substring(0, 1).toUpperCase() + r.substring(1));
+        }
+
+        // ← FIXED: was u.getEmail(), now u.getUserId()
+        profileImage = profilePicStorage.loadImage(u.getUserId());
+        bannerImage  = backgroundStorage.loadImage(u.getUserId());
+
+        if (profileBanner   != null) profileBanner.repaint();
+        if (profilePicLabel != null) profilePicLabel.repaint();
     }
 
     private JPanel buildProfileContent() {
-        JPanel page = new JPanel(new BorderLayout()); page.setBackground(UIConstants.BG_CONTENT);
-        JPanel inner = new JPanel(); inner.setLayout(new BoxLayout(inner,BoxLayout.Y_AXIS));
-        inner.setBackground(UIConstants.BG_CONTENT); inner.setBorder(new EmptyBorder(0,0,40,0));
-        inner.add(buildBannerHero()); inner.add(Box.createVerticalStrut(24));
-        JPanel c=new JPanel(new GridBagLayout()); c.setBackground(UIConstants.BG_CONTENT);
-        c.add(buildProfileFormCard()); inner.add(c);
-        JScrollPane sc=new JScrollPane(inner); sc.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        sc.setBorder(null); sc.getViewport().setBackground(UIConstants.BG_CONTENT);
-        sc.getVerticalScrollBar().setUnitIncrement(16); page.add(sc,BorderLayout.CENTER); return page;
+        JPanel page = new JPanel(new BorderLayout());
+        page.setBackground(UIConstants.BG_CONTENT);
+        JPanel inner = new JPanel();
+        inner.setLayout(new BoxLayout(inner, BoxLayout.Y_AXIS));
+        inner.setBackground(UIConstants.BG_CONTENT);
+        inner.setBorder(new EmptyBorder(0, 0, 40, 0));
+        inner.add(buildBannerHero());
+        inner.add(Box.createVerticalStrut(24));
+        JPanel c = new JPanel(new GridBagLayout());
+        c.setBackground(UIConstants.BG_CONTENT);
+        c.add(buildProfileFormCard());
+        inner.add(c);
+        JScrollPane sc = new JScrollPane(inner);
+        sc.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        sc.setBorder(null);
+        sc.getViewport().setBackground(UIConstants.BG_CONTENT);
+        sc.getVerticalScrollBar().setUnitIncrement(16);
+        page.add(sc, BorderLayout.CENTER);
+        return page;
     }
 
     private JPanel buildBannerHero() {
-        JPanel hero=new JPanel(null); hero.setOpaque(false);
-        hero.setPreferredSize(new Dimension(0,200)); hero.setMaximumSize(new Dimension(Integer.MAX_VALUE,200));
-        boolean[] bh={false}, ah={false};
-        profileBanner=new JPanel(){
-            @Override protected void paintComponent(Graphics g){
-                super.paintComponent(g); Graphics2D g2=(Graphics2D)g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
-                if(bannerImage!=null) g2.drawImage(bannerImage,0,0,getWidth(),getHeight(),null);
-                else{g2.setPaint(new GradientPaint(0,0,BANNER_BLUE,getWidth(),getHeight(),new Color(60,90,210)));
-                    g2.fillRect(0,0,getWidth(),getHeight());}
-                if(bh[0]){g2.setColor(new Color(0,0,0,110));g2.fillRect(0,0,getWidth(),getHeight());
-                    int cx=getWidth()/2,cy=getHeight()/2-10; drawCam(g2,cx,cy,28,Color.WHITE);
-                    g2.setColor(Color.WHITE);g2.setFont(new Font("SansSerif",Font.BOLD,13));
-                    FontMetrics fm=g2.getFontMetrics();String msg="Click to change";
-                    g2.drawString(msg,cx-fm.stringWidth(msg)/2,cy+44);}
-                g2.dispose();}};
-        profileBanner.setOpaque(false); profileBanner.setLayout(null);
+        JPanel hero = new JPanel(null);
+        hero.setOpaque(false);
+        hero.setPreferredSize(new Dimension(0, 200));
+        hero.setMaximumSize(new Dimension(Integer.MAX_VALUE, 200));
+
+        boolean[] bh = {false}, ah = {false};
+
+        profileBanner = new JPanel() {
+            @Override protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                if (bannerImage != null) {
+                    g2.drawImage(bannerImage, 0, 0, getWidth(), getHeight(), null);
+                } else {
+                    g2.setPaint(new GradientPaint(0, 0, BANNER_BLUE, getWidth(), getHeight(), new Color(60, 90, 210)));
+                    g2.fillRect(0, 0, getWidth(), getHeight());
+                }
+                if (bh[0]) {
+                    g2.setColor(new Color(0, 0, 0, 110));
+                    g2.fillRect(0, 0, getWidth(), getHeight());
+                    int cx = getWidth() / 2, cy = getHeight() / 2 - 10;
+                    drawCam(g2, cx, cy, 28, Color.WHITE);
+                    g2.setColor(Color.WHITE);
+                    g2.setFont(new Font("SansSerif", Font.BOLD, 13));
+                    FontMetrics fm = g2.getFontMetrics();
+                    String msg = "Click to change";
+                    g2.drawString(msg, cx - fm.stringWidth(msg) / 2, cy + 44);
+                }
+                g2.dispose();
+            }
+        };
+        profileBanner.setOpaque(false);
+        profileBanner.setLayout(null);
         profileBanner.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        profileBanner.addMouseListener(new MouseAdapter(){
-            @Override public void mouseEntered(MouseEvent e){bh[0]=true;profileBanner.repaint();}
-            @Override public void mouseExited(MouseEvent e){bh[0]=false;profileBanner.repaint();}
-            @Override public void mouseClicked(MouseEvent e){chooseBanner();}});
-        profilePicLabel=new JLabel(){
-            @Override protected void paintComponent(Graphics g){
-                Graphics2D g2=(Graphics2D)g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
-                int size=Math.min(getWidth(),getHeight());
-                if(profileImage!=null){int iw=profileImage.getWidth(),ih=profileImage.getHeight(),crop=Math.min(iw,ih);
-                    g2.setClip(new Ellipse2D.Float(0,0,size,size));
-                    g2.drawImage(profileImage,0,0,size,size,(iw-crop)/2,(ih-crop)/2,(iw-crop)/2+crop,(ih-crop)/2+crop,null);
-                    g2.setClip(null);}
-                else{g2.setColor(BRAND_BLUE);g2.fillOval(0,0,size,size);g2.setColor(Color.WHITE);
-                    g2.setStroke(new BasicStroke(size/18f,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND));
-                    int ey=size*38/100,eo=size*18/100,er=size/14;
-                    g2.fillOval(size/2-eo-er,ey-er,er*2,er*2);g2.fillOval(size/2+eo-er,ey-er,er*2,er*2);
-                    g2.drawArc(size*28/100,size*44/100,size*44/100,size*26/100,200,140);}
-                if(ah[0]){g2.setClip(new Ellipse2D.Float(0,0,size,size));g2.setColor(new Color(0,0,0,110));
-                    g2.fillOval(0,0,size,size);g2.setClip(null);drawCam(g2,size/2,size/2,20,Color.WHITE);}
-                g2.setColor(Color.WHITE);g2.setStroke(new BasicStroke(4));g2.drawOval(2,2,size-4,size-4);g2.dispose();}};
-        profilePicLabel.setPreferredSize(new Dimension(110,110));
+        profileBanner.addMouseListener(new MouseAdapter() {
+            @Override public void mouseEntered(MouseEvent e) { bh[0] = true;  profileBanner.repaint(); }
+            @Override public void mouseExited (MouseEvent e) { bh[0] = false; profileBanner.repaint(); }
+            @Override public void mouseClicked(MouseEvent e) { chooseBanner(); }
+        });
+
+        profilePicLabel = new JLabel() {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                int size = Math.min(getWidth(), getHeight());
+                if (profileImage != null) {
+                    int iw = profileImage.getWidth(), ih = profileImage.getHeight(), crop = Math.min(iw, ih);
+                    g2.setClip(new Ellipse2D.Float(0, 0, size, size));
+                    g2.drawImage(profileImage, 0, 0, size, size,
+                            (iw - crop) / 2, (ih - crop) / 2,
+                            (iw - crop) / 2 + crop, (ih - crop) / 2 + crop, null);
+                    g2.setClip(null);
+                } else {
+                    g2.setColor(BRAND_BLUE); g2.fillOval(0, 0, size, size);
+                    g2.setColor(Color.WHITE);
+                    g2.setStroke(new BasicStroke(size / 18f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    int ey = size * 38 / 100, eo = size * 18 / 100, er = size / 14;
+                    g2.fillOval(size / 2 - eo - er, ey - er, er * 2, er * 2);
+                    g2.fillOval(size / 2 + eo - er, ey - er, er * 2, er * 2);
+                    g2.drawArc(size * 28 / 100, size * 44 / 100, size * 44 / 100, size * 26 / 100, 200, 140);
+                }
+                if (ah[0]) {
+                    g2.setClip(new Ellipse2D.Float(0, 0, size, size));
+                    g2.setColor(new Color(0, 0, 0, 110));
+                    g2.fillOval(0, 0, size, size);
+                    g2.setClip(null);
+                    drawCam(g2, size / 2, size / 2, 20, Color.WHITE);
+                }
+                g2.setColor(Color.WHITE);
+                g2.setStroke(new BasicStroke(4));
+                g2.drawOval(2, 2, size - 4, size - 4);
+                g2.dispose();
+            }
+        };
+        profilePicLabel.setPreferredSize(new Dimension(110, 110));
         profilePicLabel.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        profilePicLabel.addMouseListener(new MouseAdapter(){
-            @Override public void mouseEntered(MouseEvent e){ah[0]=true;profilePicLabel.repaint();}
-            @Override public void mouseExited(MouseEvent e){ah[0]=false;profilePicLabel.repaint();}
-            @Override public void mouseClicked(MouseEvent e){choosePic();}});
-        hero.addComponentListener(new java.awt.event.ComponentAdapter(){
-            @Override public void componentResized(java.awt.event.ComponentEvent e){
-                profileBanner.setBounds(0,0,hero.getWidth(),170); profilePicLabel.setBounds(30,90,110,110);}});
-        profileBanner.setBounds(0,0,800,170); profilePicLabel.setBounds(30,90,110,110);
-        hero.add(profileBanner); hero.add(profilePicLabel);
-        hero.setComponentZOrder(profilePicLabel,0); hero.setComponentZOrder(profileBanner,1);
+        profilePicLabel.addMouseListener(new MouseAdapter() {
+            @Override public void mouseEntered(MouseEvent e) { ah[0] = true;  profilePicLabel.repaint(); }
+            @Override public void mouseExited (MouseEvent e) { ah[0] = false; profilePicLabel.repaint(); }
+            @Override public void mouseClicked(MouseEvent e) { choosePic(); }
+        });
+
+        hero.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override public void componentResized(java.awt.event.ComponentEvent e) {
+                profileBanner.setBounds(0, 0, hero.getWidth(), 170);
+                profilePicLabel.setBounds(30, 90, 110, 110);
+            }
+        });
+        profileBanner.setBounds(0, 0, 800, 170);
+        profilePicLabel.setBounds(30, 90, 110, 110);
+
+        hero.add(profileBanner);
+        hero.add(profilePicLabel);
+        hero.setComponentZOrder(profilePicLabel, 0);
+        hero.setComponentZOrder(profileBanner, 1);
         return hero;
     }
 
-    private void drawCam(Graphics2D g2,int cx,int cy,int size,Color c){
-        g2.setColor(c); g2.setStroke(new BasicStroke(size/10f,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND));
-        int bw=size,bh=size*7/10,bx=cx-bw/2,by=cy-bh/2;
-        g2.drawRoundRect(bx,by,bw,bh,size/5,size/5); int lr=size*22/100;
-        g2.drawOval(cx-lr,cy-lr+size/20,lr*2,lr*2); g2.drawRoundRect(bx+size/6,by-size/6,size/4,size/6,2,2);}
+    private void drawCam(Graphics2D g2, int cx, int cy, int size, Color c) {
+        g2.setColor(c);
+        g2.setStroke(new BasicStroke(size / 10f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        int bw = size, bh = size * 7 / 10, bx = cx - bw / 2, by = cy - bh / 2;
+        g2.drawRoundRect(bx, by, bw, bh, size / 5, size / 5);
+        int lr = size * 22 / 100;
+        g2.drawOval(cx - lr, cy - lr + size / 20, lr * 2, lr * 2);
+        g2.drawRoundRect(bx + size / 6, by - size / 6, size / 4, size / 6, 2, 2);
+    }
 
-    private void choosePic(){
-        User u=app.getLoggedInUserObj();if(u==null)return;
-        FileDialog fd=new FileDialog((Frame)SwingUtilities.getWindowAncestor(this),"Choose Profile Picture",FileDialog.LOAD);
-        fd.setFile("*.jpg;*.jpeg;*.png;*.gif;*.bmp");fd.setVisible(true);if(fd.getFile()==null)return;
-        try{BufferedImage img=ImageIO.read(new File(fd.getDirectory(),fd.getFile()));
-            if(img==null){err("Could not read image.");return;}
-            if(!profilePicStorage.saveImage(u.getEmail(),img)){err("Failed to save.");return;}
-            profileImage=img;if(profilePicLabel!=null)profilePicLabel.repaint();if(avatarLabel!=null)avatarLabel.repaint();
-        }catch(IOException ex){err("Failed to read image.");}}
+    private void choosePic() {
+        User u = app.getLoggedInUserObj();
+        if (u == null) return;
 
-    private void chooseBanner(){
-        User u=app.getLoggedInUserObj();if(u==null)return;
-        FileDialog fd=new FileDialog((Frame)SwingUtilities.getWindowAncestor(this),"Choose Background",FileDialog.LOAD);
-        fd.setFile("*.jpg;*.jpeg;*.png;*.gif;*.bmp");fd.setVisible(true);if(fd.getFile()==null)return;
-        try{BufferedImage img=ImageIO.read(new File(fd.getDirectory(),fd.getFile()));
-            if(img==null){err("Could not read image.");return;}
-            if(!backgroundStorage.saveImage(u.getEmail(),img)){err("Failed to save.");return;}
-            bannerImage=img;if(profileBanner!=null)profileBanner.repaint();
-        }catch(IOException ex){err("Failed to read image.");}}
+        FileDialog fd = new FileDialog(
+                (Frame) SwingUtilities.getWindowAncestor(this),
+                "Choose Profile Picture", FileDialog.LOAD);
+        fd.setFile("*.jpg;*.jpeg;*.png;*.gif;*.bmp");
+        fd.setVisible(true);
+        if (fd.getFile() == null) return;
 
-    private JPanel buildProfileFormCard(){
-        JPanel card=UIFactory.createCard(); card.setBorder(new EmptyBorder(32,50,40,50));
-        JLabel h=new JLabel("Profile Information"); h.setFont(new Font("SansSerif",Font.BOLD,16));
-        h.setForeground(UIConstants.TEXT_PRIMARY); h.setAlignmentX(Component.CENTER_ALIGNMENT);
+        try {
+            BufferedImage img = ImageIO.read(new File(fd.getDirectory(), fd.getFile()));
+            if (img == null) { err("Could not read image."); return; }
+
+            // ← FIXED: was u.getEmail(), now u.getUserId()
+            // This saves the file as M1.jpg instead of b@gmail.com.jpg
+            if (!profilePicStorage.saveImage(u.getUserId(), img)) {
+                err("Failed to save.");
+                return;
+            }
+
+            profileImage = img;
+            if (profilePicLabel != null) profilePicLabel.repaint();
+            if (avatarLabel     != null) avatarLabel.repaint();
+
+        } catch (IOException ex) {
+            err("Failed to read image.");
+        }
+    }
+
+    private void chooseBanner() {
+        User u = app.getLoggedInUserObj();
+        if (u == null) return;
+
+        FileDialog fd = new FileDialog(
+                (Frame) SwingUtilities.getWindowAncestor(this),
+                "Choose Background", FileDialog.LOAD);
+        fd.setFile("*.jpg;*.jpeg;*.png;*.gif;*.bmp");
+        fd.setVisible(true);
+        if (fd.getFile() == null) return;
+
+        try {
+            BufferedImage img = ImageIO.read(new File(fd.getDirectory(), fd.getFile()));
+            if (img == null) { err("Could not read image."); return; }
+
+            // ← FIXED: was u.getEmail(), now u.getUserId()
+            // This saves the file as M1.jpg instead of b@gmail.com.jpg
+            if (!backgroundStorage.saveImage(u.getUserId(), img)) {
+                err("Failed to save.");
+                return;
+            }
+
+            bannerImage = img;
+            if (profileBanner != null) profileBanner.repaint();
+
+        } catch (IOException ex) {
+            err("Failed to read image.");
+        }
+    }
+
+    private JPanel buildProfileFormCard() {
+        JPanel card = UIFactory.createCard();
+        card.setBorder(new EmptyBorder(32, 50, 40, 50));
+        JLabel h = new JLabel("Profile Information");
+        h.setFont(new Font("SansSerif", Font.BOLD, 16));
+        h.setForeground(UIConstants.TEXT_PRIMARY);
+        h.setAlignmentX(Component.CENTER_ALIGNMENT);
         card.add(h); card.add(Box.createVerticalStrut(18));
-        JSeparator sep=new JSeparator(); sep.setForeground(UIConstants.BORDER_DEFAULT);
-        sep.setMaximumSize(new Dimension(380,1)); sep.setAlignmentX(Component.CENTER_ALIGNMENT);
+        JSeparator sep = new JSeparator();
+        sep.setForeground(UIConstants.BORDER_DEFAULT);
+        sep.setMaximumSize(new Dimension(380, 1));
+        sep.setAlignmentX(Component.CENTER_ALIGNMENT);
         card.add(sep); card.add(Box.createVerticalStrut(20));
         card.add(UIFactory.createFieldLabel("Name")); card.add(Box.createVerticalStrut(6));
-        profileNameField=UIFactory.createTextField("Enter your name"); card.add(profileNameField);
+        profileNameField = UIFactory.createTextField("Enter your name"); card.add(profileNameField);
         card.add(Box.createVerticalStrut(16));
         card.add(UIFactory.createFieldLabel("Email")); card.add(Box.createVerticalStrut(6));
-        profileEmailField=UIFactory.createTextField("Enter your email"); card.add(profileEmailField);
+        profileEmailField = UIFactory.createTextField("Enter your email"); card.add(profileEmailField);
         card.add(Box.createVerticalStrut(16));
         card.add(UIFactory.createFieldLabel("Role")); card.add(Box.createVerticalStrut(6));
-        profileRoleLabel=new JLabel("\u2014"); profileRoleLabel.setFont(UIConstants.FONT_BODY);
+        profileRoleLabel = new JLabel("\u2014");
+        profileRoleLabel.setFont(UIConstants.FONT_BODY);
         profileRoleLabel.setForeground(UIConstants.TEXT_SECONDARY);
         profileRoleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        profileRoleLabel.setMaximumSize(new Dimension(380,30)); profileRoleLabel.setBorder(new EmptyBorder(8,14,8,14));
+        profileRoleLabel.setMaximumSize(new Dimension(380, 30));
+        profileRoleLabel.setBorder(new EmptyBorder(8, 14, 8, 14));
         card.add(profileRoleLabel); card.add(Box.createVerticalStrut(28));
-        JButton sv=UIFactory.createPrimaryButton("Save Changes"); sv.addActionListener(e->saveProfile()); card.add(sv);
-        return card;}
+        JButton sv = UIFactory.createPrimaryButton("Save Changes");
+        sv.addActionListener(e -> saveProfile());
+        card.add(sv);
+        return card;
+    }
 
-    private void saveProfile(){
-        User u=app.getLoggedInUserObj();if(u==null)return;
-        String n=UIFactory.getFieldValue(profileNameField,"Enter your name");
-        String e=UIFactory.getFieldValue(profileEmailField,"Enter your email");
-        if(n.isEmpty()||e.isEmpty()){err("Name and email cannot be empty.");return;}
-        if(!n.matches("[a-zA-Z ]{2,50}")){err("Name must be 2-50 characters (letters only).");return;}
-        if(!e.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")){err("Enter a valid email.");return;}
-        AccountService svc=app.getAccountService();
-        if(!e.equalsIgnoreCase(u.getEmail())&&svc.emailExists(e)){err("Email already taken.");return;}
-        User up=new User(u.getUserId(),n,e,u.getPassword(),u.getRole(),0);
-        if(svc.updateUser(u.getEmail(),up)){app.setLoggedInUser(n);app.setLoggedInUserObj(up);refreshUser();
-            JOptionPane.showMessageDialog(app,"Profile updated!","Success",JOptionPane.INFORMATION_MESSAGE);
-        }else err("Failed to save.");}
+    private void saveProfile() {
+        User u = app.getLoggedInUserObj();
+        if (u == null) return;
+
+        String n = UIFactory.getFieldValue(profileNameField, "Enter your name");
+        String e = UIFactory.getFieldValue(profileEmailField, "Enter your email");
+
+        if (n.isEmpty() || e.isEmpty()) { err("Name and email cannot be empty."); return; }
+        if (!n.matches("[a-zA-Z ]{2,50}")) { err("Name must be 2-50 characters (letters only)."); return; }
+        if (!e.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) { err("Enter a valid email."); return; }
+
+        AccountService svc = app.getAccountService();
+        if (!e.equalsIgnoreCase(u.getEmail()) && svc.emailExists(e)) { err("Email already taken."); return; }
+
+        User up = new User(u.getUserId(), n, e, u.getPassword(), u.getRole(), 0);
+        if (svc.updateUser(u.getEmail(), up)) {
+            app.setLoggedInUser(n);
+            app.setLoggedInUserObj(up);
+            refreshUser();
+            JOptionPane.showMessageDialog(app, "Profile updated!", "Success", JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            err("Failed to save.");
+        }
+    }
 
     // ── Tiny helpers ─────────────────────────────────────────────────────────
 
-    private JLabel lbl(String t, Font f, Color c){
-        JLabel l=new JLabel(t);l.setFont(f);l.setForeground(c);l.setAlignmentX(Component.LEFT_ALIGNMENT);return l;}
+    private JLabel lbl(String t, Font f, Color c) {
+        JLabel l = new JLabel(t); l.setFont(f); l.setForeground(c); l.setAlignmentX(Component.LEFT_ALIGNMENT); return l;
+    }
 
-    private JPanel row(int cols, int maxH){
-        JPanel p=new JPanel(new GridLayout(1,cols,16,0));
+    private JPanel row(int cols, int maxH) {
+        JPanel p = new JPanel(new GridLayout(1, cols, 16, 0));
         p.setBackground(UIConstants.BG_CONTENT); p.setAlignmentX(Component.LEFT_ALIGNMENT);
-        p.setMaximumSize(new Dimension(Integer.MAX_VALUE,maxH)); return p;}
+        p.setMaximumSize(new Dimension(Integer.MAX_VALUE, maxH)); return p;
+    }
 
-    private void err(String m){JOptionPane.showMessageDialog(app,m,"Error",JOptionPane.ERROR_MESSAGE);}
+    private void err(String m) { JOptionPane.showMessageDialog(app, m, "Error", JOptionPane.ERROR_MESSAGE); }
 
-    private List<String[]> csv(String path){
-        List<String[]> rows=new ArrayList<>();File f=new File(path);if(!f.exists())return rows;
-        try(BufferedReader r=new BufferedReader(new FileReader(f))){
-            String line;while((line=r.readLine())!=null)if(!line.isBlank())rows.add(line.split(",",-1));
-        }catch(IOException e){e.printStackTrace();}return rows;}
+    private List<String[]> csv(String path) {
+        List<String[]> rows = new ArrayList<>();
+        File f = new File(path);
+        if (!f.exists()) return rows;
+        try (BufferedReader r = new BufferedReader(new FileReader(f))) {
+            String line;
+            while ((line = r.readLine()) != null)
+                if (!line.isBlank()) rows.add(line.split(",", -1));
+        } catch (IOException e) { e.printStackTrace(); }
+        return rows;
+    }
 
-    private double dbl(String s){try{return Double.parseDouble(s.trim());}catch(NumberFormatException e){return 0;}}
+    private double dbl(String s) {
+        try { return Double.parseDouble(s.trim()); } catch (NumberFormatException e) { return 0; }
+    }
 }
