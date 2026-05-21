@@ -17,8 +17,7 @@ import java.util.List;
  
 
 public class TechFeedback extends JPanel {
- 
-    // ── Colours ───────────────────────────────────────────────────
+
     private static final Color COLOR_BG     = new Color(245, 246, 250);
     private static final Color COLOR_CARD   = Color.WHITE;
     private static final Color COLOR_BORDER = new Color(225, 228, 235);
@@ -37,29 +36,23 @@ public class TechFeedback extends JPanel {
     private static final String[] CONDITION_LABELS = {
         "Unsatisfactory", "Poor", "Average", "Good", "Excellent"
     };
- 
-    // ── Services ──────────────────────────────────────────────────
+
     private final AppFrame            app;
     private final AppointmentService  appointmentService = new AppointmentService();
     private final MyFeedbackService   feedbackService    = new MyFeedbackService();
  
-    // ── Summary card labels (updated by refresh) ──────────────────
     private JLabel totalCountLabel;
     private JLabel totalSubLabel;
     private JPanel barsPanel;
  
-    // ── Table ─────────────────────────────────────────────────────
     private DefaultTableModel tableModel;
     private JTable            table;
  
-    // ── Search / filter ───────────────────────────────────────────
     private JTextField        searchField;
     private JComboBox<String> conditionFilter;
- 
-    // ── Full data cached for filtering ────────────────────────────
+
     private List<Appointment> allMine = new ArrayList<>();
- 
-    // ── Table columns ─────────────────────────────────────────────
+
     private static final String[] COLUMNS = {
         "Appointment ID", "Service Type", "Date / Time",
         "Customer", "Vehicle", "Status", "Condition", "My Feedback"
@@ -248,7 +241,7 @@ public class TechFeedback extends JPanel {
         table.getTableHeader().setBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(230, 230, 238)));
  
-        // Centre renderer for all columns except "My Feedback" (col 7)
+     
         DefaultTableCellRenderer centreRenderer = new DefaultTableCellRenderer() {
             @Override public Component getTableCellRendererComponent(
                     JTable t, Object value, boolean sel, boolean foc, int row, int col) {
@@ -336,8 +329,7 @@ public class TechFeedback extends JPanel {
                 @Override public Object getCellEditorValue() { return ""; }
             }
         );
- 
-        // Allow click anywhere on the row to open dialog
+
         table.addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) {
                 int row = table.rowAtPoint(e.getPoint());
@@ -350,7 +342,6 @@ public class TechFeedback extends JPanel {
             }
         });
  
-        // Column widths
         TableColumnModel cm = table.getColumnModel();
         cm.getColumn(0).setPreferredWidth(100);
         cm.getColumn(1).setPreferredWidth(110);
@@ -369,7 +360,7 @@ public class TechFeedback extends JPanel {
         scroll.setPreferredSize(new Dimension(0, 420));
         card.add(scroll, BorderLayout.CENTER);
  
-        // Footer hint
+  
         JPanel footer = new JPanel(new BorderLayout());
         footer.setOpaque(false);
         footer.setBorder(BorderFactory.createCompoundBorder(
@@ -385,7 +376,7 @@ public class TechFeedback extends JPanel {
         return card;
     }
  
-    // ── Controls row (search + filter) ────────────────────────────
+
     private JPanel buildControlsRow() {
         JPanel row = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         row.setOpaque(false);
@@ -424,7 +415,7 @@ public class TechFeedback extends JPanel {
     private void showFeedbackDialog(String apptId, String existingCondition,
                                     String existingText, int tableRow) {
  
-        // Only allow feedback on completed appointments
+
         String status = (String) tableModel.getValueAt(tableRow, 5);
         if (!"Completed".equalsIgnoreCase(status)) {
             JOptionPane.showMessageDialog(app,
@@ -446,7 +437,7 @@ public class TechFeedback extends JPanel {
         form.setBackground(Color.WHITE);
         form.setBorder(new EmptyBorder(24, 32, 24, 32));
  
-        // ── Title ─────────────────────────────────────────────────
+
         JLabel titleLbl = new JLabel("Feedback for Appointment " + apptId);
         titleLbl.setFont(new Font("SansSerif", Font.BOLD, 15));
         titleLbl.setForeground(COLOR_TEXT);
@@ -454,7 +445,7 @@ public class TechFeedback extends JPanel {
         form.add(titleLbl);
         form.add(Box.createVerticalStrut(18));
  
-        // ── Star rating selector ───────────────────────────────────
+
         JLabel ratingLbl = new JLabel("Service Condition:");
         ratingLbl.setFont(new Font("SansSerif", Font.BOLD, 13));
         ratingLbl.setForeground(COLOR_MUTED);
@@ -462,7 +453,7 @@ public class TechFeedback extends JPanel {
         form.add(ratingLbl);
         form.add(Box.createVerticalStrut(8));
  
-        // 5 star buttons side by side
+  
         int[] selectedStars = { conditionToStars(existingCondition) };  // mutable via array
         JLabel[] starBtns   = new JLabel[5];
         JLabel conditionDesc = new JLabel(
@@ -488,20 +479,20 @@ public class TechFeedback extends JPanel {
             star.addMouseListener(new MouseAdapter() {
                 @Override public void mouseClicked(MouseEvent e) {
                     selectedStars[0] = starValue;
-                    // Update all star icons
+               
                     for (int j = 0; j < 5; j++) {
                         starBtns[j].setText(j < starValue ? "\u2605" : "\u2606");
                     }
                     conditionDesc.setText(CONDITION_LABELS[starValue - 1]);
                 }
                 @Override public void mouseEntered(MouseEvent e) {
-                    // Preview on hover
+                 
                     for (int j = 0; j < 5; j++) {
                         starBtns[j].setText(j < starValue ? "\u2605" : "\u2606");
                     }
                 }
                 @Override public void mouseExited(MouseEvent e) {
-                    // Restore actual selection
+                 
                     for (int j = 0; j < 5; j++) {
                         starBtns[j].setText(j < selectedStars[0] ? "\u2605" : "\u2606");
                     }
@@ -515,7 +506,7 @@ public class TechFeedback extends JPanel {
         form.add(conditionDesc);
         form.add(Box.createVerticalStrut(16));
  
-        // ── Feedback text area ─────────────────────────────────────
+      
         JLabel textLbl = new JLabel("Your feedback:");
         textLbl.setFont(new Font("SansSerif", Font.BOLD, 13));
         textLbl.setForeground(COLOR_MUTED);
@@ -565,18 +556,18 @@ public class TechFeedback extends JPanel {
                 return;
             }
  
-            String condition = CONDITION_LABELS[selectedStars[0] - 1]; // e.g. "Excellent"
+            String condition = CONDITION_LABELS[selectedStars[0] - 1]; 
  
-            // Save to feedback.txt in the 8-field format
+       
             boolean saved = saveFeedbackToFile(apptId, condition, text, tableRow);
  
             if (saved) {
-                // Update the table cells immediately
+               
                 tableModel.setValueAt(condition, tableRow, 6);
                 tableModel.setValueAt(text,      tableRow, 7);
                 dialog.dispose();
  
-                // Refresh summary cards
+          
                 refreshSummaryCards();
  
                 JOptionPane.showMessageDialog(app,
@@ -603,7 +594,7 @@ public class TechFeedback extends JPanel {
         User techUser = app.getLoggedInUserObj();
         if (techUser == null) return false;
  
-        // Find the matching appointment to get customerID and vehicleID
+     
         Appointment target = null;
         for (Appointment a : allMine) {
             if (a.getId().equalsIgnoreCase(apptId)) { target = a; break; }
@@ -617,8 +608,7 @@ public class TechFeedback extends JPanel {
         String date         = LocalDate.now().toString(); // yyyy-MM-dd
         String cleanText    = feedbackText.replace(",", ";"); // guard commas in CSV
  
-        // Check if a row already exists for this appointment by this technician
-        // If yes, update it; if no, append a new row.
+      
         String feedbackFile = "src" + File.separator + "TxtFile"
                             + File.separator + "feedback.txt";
         File file = new File(feedbackFile);
@@ -636,12 +626,12 @@ public class TechFeedback extends JPanel {
                     lines.add(line);
                     if (!line.isBlank() && !line.startsWith("#")) {
                         String[] parts = line.split(",", 8);
-                        // Track highest FB number for ID generation
+                    
                         if (parts.length >= 1 && parts[0].trim().matches("FB\\d+")) {
                             int n = Integer.parseInt(parts[0].trim().substring(2));
                             if (n > highestId) highestId = n;
                         }
-                        // Match: same appointmentID [2] and same technicianID [4]
+                
                         if (parts.length >= 5
                                 && parts[2].trim().equalsIgnoreCase(apptId)
                                 && parts[4].trim().equalsIgnoreCase(technicianId)) {
@@ -657,10 +647,10 @@ public class TechFeedback extends JPanel {
         }
  
         if (existingLineIndex >= 0) {
-            // Update the existing line — keep original feedbackID and customerID
+          
             String[] oldParts = lines.get(existingLineIndex).split(",", 8);
-            String updatedLine = oldParts[0].trim() + ","  // feedbackID unchanged
-                    + oldParts[1].trim() + ","             // customerID unchanged
+            String updatedLine = oldParts[0].trim() + ","  
+                    + oldParts[1].trim() + ","             
                     + apptId + ","
                     + vehicleId + ","
                     + technicianId + ","
@@ -670,7 +660,7 @@ public class TechFeedback extends JPanel {
                     + date;
             lines.set(existingLineIndex, updatedLine);
         } else {
-            // Append a new row with the next FB ID
+       
             String newId = "FB" + (highestId + 1);
             String newLine = newId + ","
                     + customerId + ","
@@ -684,7 +674,7 @@ public class TechFeedback extends JPanel {
             lines.add(newLine);
         }
  
-        // Write back
+
         try (BufferedWriter bw = new BufferedWriter(new FileWriter(file, false))) {
             for (String l : lines) {
                 bw.write(l);
@@ -711,7 +701,7 @@ public class TechFeedback extends JPanel {
                 allMine.add(a);
         }
  
-        // Reset search + filter
+    
         if (searchField    != null) searchField.setText("");
         if (conditionFilter != null) conditionFilter.setSelectedIndex(0);
  
@@ -737,11 +727,11 @@ public class TechFeedback extends JPanel {
                     user != null ? user.getUserId() : "");
             String vehicle   = a.getVehicleId();
  
-            // Condition filter
+        
             if (!"All Conditions".equals(condSel)
                     && !condSel.equalsIgnoreCase(condition)) continue;
  
-            // Search filter
+         
             if (!query.isEmpty()) {
                 boolean match = a.getId().toLowerCase().contains(query)
                         || a.getServiceType().toLowerCase().contains(query)
@@ -774,9 +764,9 @@ public class TechFeedback extends JPanel {
         User user = app.getLoggedInUserObj();
         if (user == null) return;
  
-        // Count how many appointments have feedback from this technician
+
         int total = 0;
-        int[] condCounts = new int[5]; // index 0=Unsatisfactory ... 4=Excellent
+        int[] condCounts = new int[5]; 
  
         for (Appointment a : allMine) {
             String cond = loadConditionFromFile(a.getId(), user.getUserId());
@@ -791,7 +781,7 @@ public class TechFeedback extends JPanel {
         String word = total == 1 ? "feedback submitted" : "feedbacks submitted";
         totalSubLabel.setText(word);
  
-        // Rebuild breakdown bars
+      
         barsPanel.removeAll();
         int max = Math.max(total, 1);
         for (int i = 4; i >= 0; i--) {  // Excellent → Unsatisfactory
@@ -833,7 +823,6 @@ public class TechFeedback extends JPanel {
     }
  
 
-    /** Maps condition label → star count (1-5), or 0 if empty/unknown. */
     private int conditionToStars(String condition) {
         if (condition == null) return 0;
         switch (condition.trim().toLowerCase()) {
@@ -846,7 +835,7 @@ public class TechFeedback extends JPanel {
         }
     }
  
-    /** Returns a colour for each condition label. */
+
     private Color conditionColor(String condition) {
         if (condition == null || condition.isEmpty()) return COLOR_MUTED;
         switch (condition.toLowerCase()) {
@@ -867,7 +856,7 @@ public class TechFeedback extends JPanel {
         return id;
     }
  
-    // ── Rounded card with left accent bar ─────────────────────────
+
     private JPanel makeRoundedCardWithLeftBar(Color barColor) {
         JPanel card = new JPanel(new BorderLayout()) {
             @Override protected void paintComponent(Graphics g) {
@@ -890,7 +879,7 @@ public class TechFeedback extends JPanel {
         return card;
     }
  
-    // ── Plain rounded card ────────────────────────────────────────
+
     private JPanel makeRoundedCard() {
         JPanel card = new JPanel() {
             @Override protected void paintComponent(Graphics g) {
@@ -909,7 +898,7 @@ public class TechFeedback extends JPanel {
         return card;
     }
  
-    // ── Outline button (Add Feedback / Edit) ──────────────────────
+   
     private JButton makeOutlineButton(String text) {
         JButton btn = new JButton(text) {
             private boolean hov = false;
