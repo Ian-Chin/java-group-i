@@ -1,9 +1,9 @@
 package view;
-
+ 
 import model.AppointmentService;
 import model.AppointmentService.Appointment;
 import model.User;
-
+ 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
@@ -11,11 +11,13 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
-
+ 
 public class TechFeedback extends JPanel {
 	private final AppFrame app;
 	private final AppointmentService appointmentService = new AppointmentService();
-	private JPanel listPanel; 
+	private JPanel listPanel;
+	private JTextField searchField;                          
+	private List<Appointment> appoint = new ArrayList<>();   
     private static final Color GREEN  = new Color(40,  167, 69);
     private static final Color ORANGE = new Color(255, 165,  0);
     private static final Color GREY   = new Color(108, 117, 125);
@@ -37,8 +39,43 @@ public class TechFeedback extends JPanel {
         subtitle.setBorder(new EmptyBorder(4, 0, 20, 0));
         titlePanel.add(title);
         titlePanel.add(subtitle);
+ 
+        searchField = new JTextField() {
+        @Override protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            // draw magnifier icon on the left
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(UIConstants.TEXT_MUTED);
+            g2.setStroke(new BasicStroke(1.6f));
+            int cx = 18, cy = getHeight() / 2 - 1, r = 6;
+            g2.drawOval(cx - r, cy - r, r * 2, r * 2);
+            g2.drawLine(cx + r - 1, cy + r - 1, cx + r + 3, cy + r + 3);
+            g2.dispose();
+		        }
+		    };
+        searchField.setFont(UIConstants.FONT_BODY);
+        searchField.putClientProperty("JTextField.placeholderText",
+                "Search");
+        searchField.setBorder(BorderFactory.createCompoundBorder(
+        BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1),
+        new EmptyBorder(6, 32, 6, 10)));
+        searchField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
+        searchField.setAlignmentX(Component.LEFT_ALIGNMENT);
+        searchField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent e)  { filterAndRebuild(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e)  { filterAndRebuild(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { filterAndRebuild(); }
+        });
+        JPanel searchWrapper = new JPanel(new BorderLayout());
+        searchWrapper.setBackground(UIConstants.BG_CONTENT);
+        searchWrapper.setBorder(new EmptyBorder(0, 0, 10, 0));
+        searchWrapper.setAlignmentX(Component.LEFT_ALIGNMENT);
+        searchWrapper.add(searchField, BorderLayout.CENTER);
+        titlePanel.add(searchWrapper);
+ 
         add(titlePanel, BorderLayout.NORTH);
-
+ 
         listPanel = new JPanel();
         listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
         listPanel.setBackground(UIConstants.BG_CONTENT);
@@ -54,30 +91,48 @@ public class TechFeedback extends JPanel {
     public void refresh() {
         listPanel.removeAll();
  
+        appoint.clear();
         User user = app.getLoggedInUserObj();
         if (user == null) { listPanel.revalidate(); listPanel.repaint(); return; }
  
-        // Filter appointments assigned to this technician
-        List<Appointment> mine = new ArrayList<>();
         for (Appointment a : appointmentService.getAll()) {
             if (a.getTechnicianEmail().equalsIgnoreCase(user.getUserId()))
-                mine.add(a);
+                appoint.add(a);
+        }
+        filterAndRebuild(); // NEW
+    }
+ 
+    private void filterAndRebuild() {
+        String query = searchField.getText().trim().toLowerCase();
+        List<Appointment> filtered = new ArrayList<>();
+        for (Appointment a : appoint) {
+            if (query.isEmpty()
+                    || a.getId().toLowerCase().contains(query)
+                    || a.getServiceType().toLowerCase().contains(query)
+                    || a.getDateTime().toLowerCase().contains(query)
+                    || a.getStatus().toLowerCase().contains(query)
+                    || a.getCustomerEmail().toLowerCase().contains(query)
+                    || resolveName(a.getCustomerEmail()).toLowerCase().contains(query)) {
+                filtered.add(a);
+            }
         }
  
-        if (mine.isEmpty()) {
-            JLabel empty = new JLabel("No appointments to provide feedback for.");
+        listPanel.removeAll();
+        if (filtered.isEmpty()) {
+            JLabel empty = new JLabel(appoint.isEmpty()
+                    ? "No appointments to provide feedback for."
+                    : "No appointments match your search.");
             empty.setFont(UIConstants.FONT_BODY);
             empty.setForeground(UIConstants.TEXT_MUTED);
             empty.setAlignmentX(Component.CENTER_ALIGNMENT);
             empty.setBorder(new EmptyBorder(60, 0, 0, 0));
             listPanel.add(empty);
         } else {
-            for (Appointment appt : mine) {
+            for (Appointment appt : filtered) {
                 listPanel.add(buildCard(appt));
                 listPanel.add(Box.createVerticalStrut(14));
             }
         }
- 
         listPanel.revalidate();
         listPanel.repaint();
     }
@@ -126,14 +181,14 @@ public class TechFeedback extends JPanel {
         custLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         card.add(custLabel);
         card.add(Box.createVerticalStrut(12));
-
+ 
         JLabel feedbackTitle = new JLabel("My Feedback:");
         feedbackTitle.setFont(UIConstants.FONT_SMALL_BOLD);
         feedbackTitle.setForeground(UIConstants.TEXT_MUTED);
         feedbackTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
         card.add(feedbackTitle);
         card.add(Box.createVerticalStrut(6));
-
+ 
         String existing = appointmentService.getFeedback(appt.getId());
         JTextArea feedbackArea = new JTextArea(existing != null ? existing : "");
         feedbackArea.setFont(UIConstants.FONT_BODY);
@@ -158,6 +213,7 @@ public class TechFeedback extends JPanel {
         JButton saveBtn = actionButton("Save Feedback",
                 new Color(80, 110, 230), Color.WHITE);
         saveBtn.addActionListener(e -> {
+        	
             String fb = feedbackArea.getText().trim();
             if (fb.isEmpty()) {
                 JOptionPane.showMessageDialog(app,
@@ -219,5 +275,5 @@ public class TechFeedback extends JPanel {
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         return btn;
     }
-
+ 
     }
