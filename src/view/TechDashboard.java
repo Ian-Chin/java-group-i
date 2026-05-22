@@ -30,289 +30,390 @@ import java.util.List;
  */
 public class TechDashboard extends JPanel {
  
-    private final AppFrame app;
+    private final AppFrame           app;
     private final AppointmentService appointmentService = new AppointmentService();
  
-    // Tracks which month/year the calendar is showing
-    private int calendarYear;
-    private int calendarMonth;
+    private final YearMonth[] currentMonth = { YearMonth.now() };
+    private final LocalDate[] selectedDate = { LocalDate.now() };
  
-    // Container that holds the calendar — rebuilt on month navigation
-    private JPanel calendarContainer;
+    private JPanel   calGrid;
+    private JLabel   monthLabel;
+
+    private JPanel   summaryContent;
+    private JLabel   summaryTitle;
  
     private static final Color GREEN  = new Color(40,  167, 69);
     private static final Color ORANGE = new Color(255, 165,  0);
     private static final Color GREY   = new Color(108, 117, 125);
  
-    // ══════════════════════════════════════════════════════════
-    // CONSTRUCTOR
-    // ══════════════════════════════════════════════════════════
- 
-    public TechDashboard (AppFrame app) {
+
+    public TechDashboard(AppFrame app) {
         this.app = app;
- 
-        // Start on current month
-        LocalDate today = LocalDate.now();
-        calendarYear  = today.getYear();
-        calendarMonth = today.getMonthValue();
- 
         setLayout(new BorderLayout());
         setBackground(UIConstants.BG_CONTENT);
         setBorder(new EmptyBorder(30, 36, 30, 36));
+
+        JPanel topText = new JPanel();
+        topText.setLayout(new BoxLayout(topText, BoxLayout.Y_AXIS));
+        topText.setBackground(UIConstants.BG_CONTENT);
+        topText.setBorder(new EmptyBorder(0, 0, 20, 0));
  
-        // Welcome text at top
         JLabel welcome = new JLabel("Welcome back, Technician");
-        welcome.setFont(new Font("SansSerif", Font.BOLD, 26));
+        welcome.setFont(new Font("SansSerif", Font.BOLD, 22));
         welcome.setForeground(UIConstants.TEXT_PRIMARY);
  
         JLabel sub = new JLabel("Your appointment schedule for the month.");
         sub.setFont(UIConstants.FONT_BODY);
         sub.setForeground(UIConstants.TEXT_MUTED);
-        sub.setBorder(new EmptyBorder(4, 0, 20, 0));
+        sub.setBorder(new EmptyBorder(4, 0, 0, 0));
  
-        JPanel topText = new JPanel();
-        topText.setLayout(new BoxLayout(topText, BoxLayout.Y_AXIS));
-        topText.setBackground(UIConstants.BG_CONTENT);
         topText.add(welcome);
         topText.add(sub);
         add(topText, BorderLayout.NORTH);
  
-        // Calendar container — rebuilt whenever month changes
-        calendarContainer = new JPanel(new BorderLayout());
-        calendarContainer.setBackground(UIConstants.BG_CONTENT);
-        calendarContainer.add(buildCalendar(), BorderLayout.CENTER);
-        add(calendarContainer, BorderLayout.CENTER);
+        add(buildCalendarContent(), BorderLayout.CENTER);
     }
  
-    /**
-     * Called by TechnicianDashboard when navigating to this page.
-     * Rebuilds the calendar to show fresh data.
-     */
+
     public void refresh() {
-        calendarContainer.removeAll();
-        calendarContainer.add(buildCalendar(), BorderLayout.CENTER);
-        calendarContainer.revalidate();
-        calendarContainer.repaint();
+        rebuildCalGrid();
+        refreshSummary();
     }
  
-    // ══════════════════════════════════════════════════════════
-    // CALENDAR BUILDER
-    // ══════════════════════════════════════════════════════════
+    private JPanel buildCalendarContent() {
+        JPanel page = new JPanel(new BorderLayout(16, 0));
+        page.setBackground(UIConstants.BG_CONTENT);
  
-    /**
-     * Builds the full calendar card for the current calendarYear/calendarMonth.
-     * Includes: month navigation arrows, day-of-week headers, day cells, legend.
-     */
-    private JPanel buildCalendar() {
-        YearMonth yearMonth = YearMonth.of(calendarYear, calendarMonth);
-        LocalDate firstDay  = yearMonth.atDay(1);
-        int daysInMonth = yearMonth.lengthOfMonth();
-        // Sunday=0, Monday=1 ... Saturday=6
-        int startDow = firstDay.getDayOfWeek().getValue() % 7;
- 
-        // Load this technician's appointments for this month
-        User user = app.getLoggedInUserObj();
-        Map<Integer, List<Appointment>> apptsByDay = new HashMap<>();
-        if (user != null) {
-            for (Appointment a : appointmentService.getAll()) {
-                if (!a.getTechnicianEmail().equalsIgnoreCase(user.getUserId())) continue;
-                try {
-                    String[] parts = a.getDateTime().split(" ");
-                    LocalDate date = LocalDate.parse(parts[0]);
-                    if (date.getYear() == calendarYear
-                            && date.getMonthValue() == calendarMonth) {
-                        int day = date.getDayOfMonth();
-                        apptsByDay.computeIfAbsent(day, k -> new ArrayList<>()).add(a);
-                    }
-                } catch (Exception ignored) {}
-            }
-        }
- 
-        // ── Outer rounded card ─────────────────────────────────
-        JPanel card = new JPanel() {
+        JPanel calCard = new JPanel(new BorderLayout()) {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(UIConstants.BG_CARD);
+                g2.setColor(Color.WHITE);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
+                g2.setColor(UIConstants.BORDER_DEFAULT);
+                g2.setStroke(new BasicStroke(1f));
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 16, 16);
                 g2.dispose();
             }
         };
-        card.setOpaque(false);
-        card.setLayout(new BorderLayout());
-        card.setBorder(new EmptyBorder(20, 20, 20, 20));
- 
-        // ── Navigation row: ◀ Month Year ▶ ───────────────────
-        String monthName = Month.of(calendarMonth)
-                .getDisplayName(TextStyle.FULL, Locale.ENGLISH);
-        JLabel monthYearLabel = new JLabel(
-                monthName + " " + calendarYear, SwingConstants.CENTER);
-        monthYearLabel.setFont(new Font("SansSerif", Font.BOLD, 16));
-        monthYearLabel.setForeground(UIConstants.TEXT_PRIMARY);
- 
-        JButton prevBtn = navArrowBtn("\u25C0");
-        prevBtn.addActionListener(e -> {
-            calendarMonth--;
-            if (calendarMonth < 1) { calendarMonth = 12; calendarYear--; }
-            refresh();
-        });
- 
-        JButton nextBtn = navArrowBtn("\u25B6");
-        nextBtn.addActionListener(e -> {
-            calendarMonth++;
-            if (calendarMonth > 12) { calendarMonth = 1; calendarYear++; }
-            refresh();
-        });
+        calCard.setOpaque(false);
+        calCard.setBorder(new EmptyBorder(28, 32, 24, 32));
  
         JPanel navRow = new JPanel(new BorderLayout());
         navRow.setOpaque(false);
         navRow.setBorder(new EmptyBorder(0, 0, 16, 0));
-        navRow.add(prevBtn,        BorderLayout.WEST);
-        navRow.add(monthYearLabel, BorderLayout.CENTER);
-        navRow.add(nextBtn,        BorderLayout.EAST);
-        card.add(navRow, BorderLayout.NORTH);
  
-        // ── Day-of-week header ─────────────────────────────────
-        String[] dayNames = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+        monthLabel = new JLabel("", SwingConstants.CENTER);
+        monthLabel.setFont(new Font("SansSerif", Font.BOLD, 22));
+        monthLabel.setForeground(UIConstants.TEXT_PRIMARY);
+ 
+        JButton prevBtn = calNavBtn("<");
+        JButton nextBtn = calNavBtn(">");
+ 
+        prevBtn.addActionListener(e -> {
+            currentMonth[0] = currentMonth[0].minusMonths(1);
+            rebuildCalGrid();
+        });
+        nextBtn.addActionListener(e -> {
+            currentMonth[0] = currentMonth[0].plusMonths(1);
+            rebuildCalGrid();
+        });
+ 
+        navRow.add(prevBtn,    BorderLayout.WEST);
+        navRow.add(monthLabel, BorderLayout.CENTER);
+        navRow.add(nextBtn,    BorderLayout.EAST);
+        calCard.add(navRow, BorderLayout.NORTH);
+ 
+        JPanel calBody = new JPanel(new BorderLayout(0, 8));
+        calBody.setOpaque(false);
+ 
         JPanel dowRow = new JPanel(new GridLayout(1, 7, 4, 0));
         dowRow.setOpaque(false);
-        dowRow.setBorder(new EmptyBorder(0, 0, 8, 0));
-        for (String d : dayNames) {
-            JLabel lbl = new JLabel(d, SwingConstants.CENTER);
-            lbl.setFont(new Font("SansSerif", Font.BOLD, 12));
-            lbl.setForeground(UIConstants.TEXT_MUTED);
-            dowRow.add(lbl);
+        dowRow.setBorder(new EmptyBorder(0, 0, 4, 0));
+        for (String d : new String[]{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"}) {
+            JLabel dl = new JLabel(d, SwingConstants.CENTER);
+            dl.setFont(new Font("SansSerif", Font.BOLD, 13));
+            dl.setForeground(UIConstants.TEXT_MUTED);
+            dowRow.add(dl);
         }
- 
-        // ── Day cells grid ─────────────────────────────────────
-        int totalCells = startDow + daysInMonth;
-        int numRows    = (int) Math.ceil(totalCells / 7.0);
-        JPanel grid = new JPanel(new GridLayout(numRows, 7, 4, 4));
-        grid.setOpaque(false);
- 
-        LocalDate todayDate = LocalDate.now();
- 
-        // Empty cells before day 1
-        for (int i = 0; i < startDow; i++) grid.add(emptyCell());
- 
-        // Day cells
-        for (int day = 1; day <= daysInMonth; day++) {
-            final int d = day;
-            List<Appointment> dayAppts =
-                    apptsByDay.getOrDefault(day, new ArrayList<>());
-            boolean isToday = (todayDate.getYear() == calendarYear
-                    && todayDate.getMonthValue() == calendarMonth
-                    && todayDate.getDayOfMonth() == day);
-            grid.add(buildDayCell(d, dayAppts, isToday));
-        }
- 
-        // Remaining empty cells
-        int remaining = (numRows * 7) - startDow - daysInMonth;
-        for (int i = 0; i < remaining; i++) grid.add(emptyCell());
- 
-        // Wrap header + grid
-        JPanel calBody = new JPanel(new BorderLayout(0, 0));
-        calBody.setOpaque(false);
         calBody.add(dowRow, BorderLayout.NORTH);
-        calBody.add(grid,   BorderLayout.CENTER);
  
-        JScrollPane scroll = new JScrollPane(calBody);
-        scroll.setBorder(null);
-        scroll.getViewport().setOpaque(false);
-        scroll.setOpaque(false);
-        scroll.getVerticalScrollBar().setUnitIncrement(16);
-        card.add(scroll, BorderLayout.CENTER);
+        calGrid = new JPanel(new GridLayout(0, 7, 4, 4));
+        calGrid.setOpaque(false);
+        calBody.add(calGrid, BorderLayout.CENTER);
+        calCard.add(calBody, BorderLayout.CENTER);
  
-        // ── Legend ─────────────────────────────────────────────
         JPanel legend = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 0));
         legend.setOpaque(false);
         legend.setBorder(new EmptyBorder(12, 0, 0, 0));
-        legend.add(legendItem(GREEN,  "Completed"));
-        legend.add(legendItem(ORANGE, "In Progress"));
-        legend.add(legendItem(GREY,   "Pending"));
-        card.add(legend, BorderLayout.SOUTH);
- 
-        return card;
-    }
- 
-    // ══════════════════════════════════════════════════════════
-    // DAY CELL
-    // ══════════════════════════════════════════════════════════
- 
-    /**
-     * Builds one day cell in the calendar grid.
-     * Shows the day number + up to 2 appointment chips.
-     * Clicking opens a detail popup.
-     */
-    private JPanel buildDayCell(int day,
-            List<Appointment> appts, boolean isToday) {
- 
-        JPanel cell = new JPanel() {
+        legend.add(legendDot(GREEN,  "Completed"));
+        legend.add(legendDot(ORANGE, "In Progress"));
+        legend.add(legendDot(GREY,   "Pending"));
+        calCard.add(legend, BorderLayout.SOUTH);
+
+        JPanel summaryCard = new JPanel(new BorderLayout()) {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(isToday
-                        ? new Color(235, 240, 255)
-                        : new Color(250, 250, 253));
+                g2.setColor(Color.WHITE);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
+                g2.setColor(UIConstants.BORDER_DEFAULT);
+                g2.setStroke(new BasicStroke(1f));
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 16, 16);
+                g2.dispose();
+            }
+        };
+        summaryCard.setOpaque(false);
+        summaryCard.setBorder(new EmptyBorder(24, 24, 24, 24));
+        summaryCard.setPreferredSize(new Dimension(360, 0));
+        summaryCard.setMinimumSize(new Dimension(360, 0));
+ 
+        summaryTitle = new JLabel("Appointments for today");
+        summaryTitle.setFont(new Font("SansSerif", Font.BOLD, 16));
+        summaryTitle.setForeground(UIConstants.TEXT_PRIMARY);
+        summaryTitle.setBorder(new EmptyBorder(0, 0, 14, 0));
+        summaryCard.add(summaryTitle, BorderLayout.NORTH);
+ 
+        summaryContent = new JPanel();
+        summaryContent.setLayout(new BoxLayout(summaryContent, BoxLayout.Y_AXIS));
+        summaryContent.setOpaque(false);
+ 
+        JScrollPane summaryScroll = new JScrollPane(summaryContent,
+                JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+                JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        summaryScroll.setBorder(null);
+        summaryScroll.setOpaque(false);
+        summaryScroll.getViewport().setOpaque(false);
+        summaryScroll.getVerticalScrollBar().setUnitIncrement(12);
+        summaryCard.add(summaryScroll, BorderLayout.CENTER);
+ 
+        page.add(calCard,     BorderLayout.CENTER);
+        page.add(summaryCard, BorderLayout.EAST);
+
+        rebuildCalGrid();
+        refreshSummary();
+ 
+        return page;
+    }
+ 
+    private void rebuildCalGrid() {
+        if (calGrid == null || monthLabel == null) return;
+ 
+        monthLabel.setText(currentMonth[0].getMonth()
+                .getDisplayName(TextStyle.FULL, Locale.ENGLISH)
+                + " " + currentMonth[0].getYear());
+        calGrid.removeAll();
+ 
+        User user = app.getLoggedInUserObj();
+
+        Map<String, List<String>> apptsByDate = new HashMap<>();
+        if (user != null) {
+            for (Appointment a : appointmentService.getAll()) {
+                if (!a.getTechnicianEmail().equalsIgnoreCase(user.getUserId())) continue;
+                String dt       = a.getDateTime();
+                String apptDate = dt.contains(" ") ? dt.split(" ")[0] : dt;
+                apptsByDate.computeIfAbsent(apptDate, k -> new ArrayList<>()).add(a.getStatus());
+            }
+        }
+ 
+        LocalDate first      = currentMonth[0].atDay(1);
+        int       startDow   = first.getDayOfWeek().getValue() % 7;
+        int       daysInMonth = currentMonth[0].lengthOfMonth();
+        LocalDate today       = LocalDate.now();
+
+        for (int i = 0; i < startDow; i++) calGrid.add(new JLabel(""));
+ 
+        for (int d = 1; d <= daysInMonth; d++) {
+            LocalDate    date     = currentMonth[0].atDay(d);
+            List<String> statuses = apptsByDate.getOrDefault(
+                    date.toString(), Collections.emptyList());
+            boolean isToday = date.equals(today);
+            boolean isSel   = date.equals(selectedDate[0]);
+            final int day   = d;
+ 
+            JPanel cell = new JPanel(new BorderLayout(0, 1)) {
+                @Override protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    if (isSel) {
+                        g2.setColor(UIConstants.PRIMARY);
+                        g2.fillRoundRect(2, 2, getWidth() - 4, getHeight() - 4, 10, 10);
+                    } else if (isToday) {
+                        g2.setColor(new Color(235, 240, 255));
+                        g2.fillRoundRect(2, 2, getWidth() - 4, getHeight() - 4, 10, 10);
+                    }
+                    g2.setColor(isSel ? UIConstants.PRIMARY : new Color(220, 222, 230));
+                    g2.setStroke(new BasicStroke(1f));
+                    g2.drawRoundRect(2, 2, getWidth() - 5, getHeight() - 5, 10, 10);
+                    g2.dispose();
+                }
+            };
+            cell.setOpaque(false);
+            cell.setPreferredSize(new Dimension(44, 56));
+ 
+            JLabel dayLabel = new JLabel(String.valueOf(d), SwingConstants.CENTER);
+            dayLabel.setFont(new Font("SansSerif",
+                    (isToday || isSel) ? Font.BOLD : Font.PLAIN, 14));
+            dayLabel.setForeground(isSel ? Color.WHITE
+                    : (isToday ? UIConstants.PRIMARY : UIConstants.TEXT_DARK));
+            cell.add(dayLabel, BorderLayout.CENTER);
+
+            if (!statuses.isEmpty()) {
+                JPanel barsPanel = new JPanel();
+                barsPanel.setLayout(new BoxLayout(barsPanel, BoxLayout.Y_AXIS));
+                barsPanel.setOpaque(false);
+                barsPanel.setBorder(new EmptyBorder(0, 6, 3, 6));
+ 
+                int maxBars = Math.min(statuses.size(), 3);
+                for (int si = 0; si < maxBars; si++) {
+                    String status = statuses.get(si);
+                    Color barColor;
+                    switch (status) {
+                        case "Completed":   barColor = GREEN;  break;
+                        case "In Progress": barColor = ORANGE; break;
+                        default:            barColor = GREY;   break;
+                    }
+                    final Color fc = isSel ? new Color(255, 255, 255, 200) : barColor;
+                    JPanel bar = new JPanel() {
+                        @Override protected void paintComponent(Graphics g) {
+                            Graphics2D g2 = (Graphics2D) g.create();
+                            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                            g2.setColor(fc);
+                            g2.fillRoundRect(0, 0, getWidth(), getHeight(), 4, 4);
+                            g2.dispose();
+                        }
+                    };
+                    bar.setOpaque(false);
+                    bar.setPreferredSize(new Dimension(Integer.MAX_VALUE, 4));
+                    bar.setMaximumSize(new Dimension(Integer.MAX_VALUE, 4));
+                    bar.setAlignmentX(Component.LEFT_ALIGNMENT);
+                    barsPanel.add(bar);
+                    if (si < maxBars - 1) barsPanel.add(Box.createVerticalStrut(1));
+                }
+                if (statuses.size() > 3) {
+                    JLabel more = new JLabel("+" + (statuses.size() - 3), SwingConstants.CENTER);
+                    more.setFont(new Font("SansSerif", Font.BOLD, 8));
+                    more.setForeground(isSel ? Color.WHITE : UIConstants.TEXT_MUTED);
+                    more.setAlignmentX(Component.LEFT_ALIGNMENT);
+                    barsPanel.add(more);
+                }
+                cell.add(barsPanel, BorderLayout.SOUTH);
+            }
+ 
+            cell.setCursor(new Cursor(Cursor.HAND_CURSOR));
+            cell.addMouseListener(new MouseAdapter() {
+                @Override public void mouseClicked(MouseEvent e) {
+                    LocalDate clicked = currentMonth[0].atDay(day);
+                    if (clicked.equals(selectedDate[0])) {
+                        // Second click → open detail popup (original feature)
+                        showDetailPopup(selectedDate[0]);
+                    } else {
+                        // First click → select and show summary
+                        selectedDate[0] = clicked;
+                        rebuildCalGrid();
+                        refreshSummary();
+                    }
+                }
+            });
+            calGrid.add(cell);
+        }
+ 
+        calGrid.revalidate();
+        calGrid.repaint();
+    }
+ 
+    private void refreshSummary() {
+        if (summaryContent == null || summaryTitle == null) return;
+ 
+        summaryContent.removeAll();
+        String dateStr = selectedDate[0].toString();
+        summaryTitle.setText("Appointments for " + dateStr);
+ 
+        User user = app.getLoggedInUserObj();
+        int count = 0;
+ 
+        for (Appointment a : appointmentService.getAll()) {
+            if (user != null && !a.getTechnicianEmail().equalsIgnoreCase(user.getUserId())) continue;
+            String dt       = a.getDateTime();
+            String apptDate = dt.contains(" ") ? dt.split(" ")[0] : dt;
+            if (!apptDate.equals(dateStr)) continue;
+            count++;
+            String time     = dt.contains(" ") ? dt.split(" ")[1] : "";
+            String custName = resolveName(a.getCustomerEmail());
+            summaryContent.add(buildAppointmentCard(a, custName, time));
+            summaryContent.add(Box.createVerticalStrut(8));
+        }
+ 
+        if (count == 0) {
+            JLabel empty = new JLabel("No appointments on this date.");
+            empty.setFont(UIConstants.FONT_BODY);
+            empty.setForeground(UIConstants.TEXT_MUTED);
+            empty.setAlignmentX(Component.LEFT_ALIGNMENT);
+            empty.setBorder(new EmptyBorder(12, 0, 0, 0));
+            summaryContent.add(empty);
+        }
+ 
+        summaryContent.revalidate();
+        summaryContent.repaint();
+    }
+ 
+    private JPanel buildAppointmentCard(Appointment a, String custName, String time) {
+        Color barColor;
+        switch (a.getStatus()) {
+            case "Completed":   barColor = GREEN;  break;
+            case "In Progress": barColor = ORANGE; break;
+            default:            barColor = GREY;   break;
+        }
+ 
+        JPanel card = new JPanel(new BorderLayout(8, 0)) {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(248, 249, 252));
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
-                g2.setColor(isToday ? UIConstants.PRIMARY : new Color(225, 225, 232));
-                g2.setStroke(new BasicStroke(isToday ? 2f : 1f));
+                g2.setColor(new Color(230, 232, 240));
+                g2.setStroke(new BasicStroke(1f));
                 g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 10, 10);
                 g2.dispose();
             }
         };
-        cell.setOpaque(false);
-        cell.setLayout(new BoxLayout(cell, BoxLayout.Y_AXIS));
-        cell.setBorder(new EmptyBorder(6, 6, 6, 6));
+        card.setOpaque(false);
+        card.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 90));
+        card.setMinimumSize(new Dimension(0, 72));
+        card.setBorder(new EmptyBorder(8, 8, 8, 10));
  
-        // Day number
-        JLabel dayLabel = new JLabel(String.valueOf(day));
-        dayLabel.setFont(new Font("SansSerif",
-                isToday ? Font.BOLD : Font.PLAIN, 13));
-        dayLabel.setForeground(isToday
-                ? UIConstants.PRIMARY : UIConstants.TEXT_DARK);
-        dayLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        cell.add(dayLabel);
+        // Coloured left bar
+        JPanel bar = new JPanel() {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(barColor);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 6, 6);
+                g2.dispose();
+            }
+        };
+        bar.setOpaque(false);
+        bar.setPreferredSize(new Dimension(4, 0));
+        card.add(bar, BorderLayout.WEST);
  
-        if (!appts.isEmpty()) cell.add(Box.createVerticalStrut(4));
+        JPanel details = new JPanel();
+        details.setLayout(new BoxLayout(details, BoxLayout.Y_AXIS));
+        details.setOpaque(false);
  
-        // Show up to 2 chips, then "+N more"
-        int shown = Math.min(appts.size(), 2);
-        for (int i = 0; i < shown; i++) {
-            cell.add(buildChip(appts.get(i)));
-            cell.add(Box.createVerticalStrut(2));
-        }
-        if (appts.size() > 2) {
-            JLabel more = new JLabel("+" + (appts.size() - 2) + " more");
-            more.setFont(new Font("SansSerif", Font.PLAIN, 10));
-            more.setForeground(UIConstants.TEXT_MUTED);
-            more.setAlignmentX(Component.LEFT_ALIGNMENT);
-            cell.add(more);
-        }
+        JLabel line1 = new JLabel(a.getServiceType() + "  \u2022  "
+                + a.getDurationHours() + "h  \u2022  " + time);
+        line1.setFont(UIConstants.FONT_SMALL_BOLD);
+        line1.setForeground(UIConstants.TEXT_PRIMARY);
+        line1.setAlignmentX(Component.LEFT_ALIGNMENT);
  
-        // Click to show detail popup
-        if (!appts.isEmpty()) {
-            cell.setCursor(new Cursor(Cursor.HAND_CURSOR));
-            cell.addMouseListener(new MouseAdapter() {
-                @Override public void mouseClicked(MouseEvent e) {
-                    showDetailPopup(day, appts);
-                }
-            });
-        }
-        return cell;
-    }
+        JLabel line2 = new JLabel("Customer: " + custName
+                + "  (" + a.getCustomerEmail() + ")");
+        line2.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        line2.setForeground(UIConstants.TEXT_SECONDARY);
+        line2.setAlignmentX(Component.LEFT_ALIGNMENT);
  
-    /**
-     * Coloured appointment chip shown inside a day cell.
-     * Shows: time + service type (abbreviated).
-     * Color reflects appointment status.
-     */
-    private JLabel buildChip(Appointment a) {
-        String time = a.getDateTime().contains(" ")
-                ? a.getDateTime().split(" ")[1] : "";
-        String service = a.getServiceType().replace(" Service", "");
- 
-        JLabel chip = new JLabel(time + " " + service) {
+        JLabel statusLabel = new JLabel(a.getStatus()) {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -320,40 +421,51 @@ public class TechDashboard extends JPanel {
                 switch (a.getStatus()) {
                     case "Completed":   bg = new Color(220, 245, 225); break;
                     case "In Progress": bg = new Color(255, 243, 220); break;
-                    default:            bg = new Color(230, 232, 240); break;
+                    default:            bg = new Color(235, 235, 240); break;
                 }
                 g2.setColor(bg);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 6, 6);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
                 g2.dispose();
                 super.paintComponent(g);
             }
         };
-        Color fg;
-        switch (a.getStatus()) {
-            case "Completed":   fg = GREEN;  break;
-            case "In Progress": fg = ORANGE; break;
-            default:            fg = GREY;   break;
-        }
-        chip.setForeground(fg);
-        chip.setFont(new Font("SansSerif", Font.BOLD, 10));
-        chip.setBorder(new EmptyBorder(2, 4, 2, 4));
-        chip.setOpaque(false);
-        chip.setAlignmentX(Component.LEFT_ALIGNMENT);
-        chip.setMaximumSize(new Dimension(Integer.MAX_VALUE, 20));
-        return chip;
+        statusLabel.setFont(new Font("SansSerif", Font.BOLD, 10));
+        statusLabel.setForeground(barColor);
+        statusLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        statusLabel.setBorder(new EmptyBorder(2, 8, 2, 8));
+        statusLabel.setMaximumSize(new Dimension(90, 18));
+        statusLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+ 
+        details.add(line1);
+        details.add(Box.createVerticalStrut(2));
+        details.add(line2);
+        details.add(Box.createVerticalStrut(4));
+        details.add(statusLabel);
+        card.add(details, BorderLayout.CENTER);
+ 
+        return card;
     }
  
-    /**
-     * Popup dialog showing full details for all appointments on a clicked day.
-     * Shows: status, ID, service, time, duration, customer name.
-     */
-    private void showDetailPopup(int day, List<Appointment> appts) {
-        String monthName = Month.of(calendarMonth)
+
+    private void showDetailPopup(LocalDate date) {
+        User user = app.getLoggedInUserObj();
+        String dateStr = date.toString();
+ 
+        List<Appointment> appts = new ArrayList<>();
+        for (Appointment a : appointmentService.getAll()) {
+            if (user != null && !a.getTechnicianEmail().equalsIgnoreCase(user.getUserId())) continue;
+            String dt       = a.getDateTime();
+            String apptDate = dt.contains(" ") ? dt.split(" ")[0] : dt;
+            if (apptDate.equals(dateStr)) appts.add(a);
+        }
+        if (appts.isEmpty()) return;
+ 
+        String monthName = date.getMonth()
                 .getDisplayName(TextStyle.FULL, Locale.ENGLISH);
  
         JDialog dialog = new JDialog(
                 (Frame) SwingUtilities.getWindowAncestor(this),
-                day + " " + monthName + " " + calendarYear, true);
+                date.getDayOfMonth() + " " + monthName + " " + date.getYear(), true);
         dialog.setSize(420, Math.min(80 + appts.size() * 140, 520));
         dialog.setLocationRelativeTo(this);
         dialog.setLayout(new BorderLayout());
@@ -379,7 +491,6 @@ public class TechDashboard extends JPanel {
             row.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
             row.setAlignmentX(Component.LEFT_ALIGNMENT);
  
-            // Status
             JLabel statusLbl = new JLabel(a.getStatus());
             statusLbl.setFont(new Font("SansSerif", Font.BOLD, 11));
             switch (a.getStatus()) {
@@ -391,26 +502,23 @@ public class TechDashboard extends JPanel {
             row.add(statusLbl);
             row.add(Box.createVerticalStrut(4));
  
-            // ID + Service
-            JLabel idLbl = new JLabel(a.getId() + "  ·  " + a.getServiceType());
+            JLabel idLbl = new JLabel(a.getId() + "  \u00B7  " + a.getServiceType());
             idLbl.setFont(new Font("SansSerif", Font.BOLD, 13));
             idLbl.setForeground(UIConstants.TEXT_PRIMARY);
             idLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
             row.add(idLbl);
             row.add(Box.createVerticalStrut(4));
  
-            // Time + duration
             String time = a.getDateTime().contains(" ")
                     ? a.getDateTime().split(" ")[1] : a.getDateTime();
             JLabel timeLbl = new JLabel(
-                    "\u23F0 " + time + "  ·  " + a.getDurationHours() + " hour(s)");
+                    "\u23F0 " + time + "  \u00B7  " + a.getDurationHours() + " hour(s)");
             timeLbl.setFont(UIConstants.FONT_SMALL);
             timeLbl.setForeground(UIConstants.TEXT_MUTED);
             timeLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
             row.add(timeLbl);
             row.add(Box.createVerticalStrut(4));
  
-            // Customer
             JLabel custLbl = new JLabel(
                     "Customer: " + resolveName(a.getCustomerEmail())
                     + "  (" + a.getCustomerEmail() + ")");
@@ -439,58 +547,37 @@ public class TechDashboard extends JPanel {
         dialog.setVisible(true);
     }
  
-    // ══════════════════════════════════════════════════════════
-    // HELPERS
-    // ══════════════════════════════════════════════════════════
- 
     private String resolveName(String id) {
-        for (model.User u : app.getAccountService().getAllUsers()) {
-            if (u.getUserId() != null && u.getUserId().equalsIgnoreCase(id))
-                return u.getName();
+        for (User u : app.getAccountService().getAllUsers()) {
+            if (u.getUserId() != null && u.getUserId().equalsIgnoreCase(id)) return u.getName();
             if (u.getEmail().equalsIgnoreCase(id)) return u.getName();
         }
         return id;
     }
  
-    private JPanel emptyCell() {
-        JPanel cell = new JPanel();
-        cell.setOpaque(false);
-        return cell;
-    }
- 
-    private JButton navArrowBtn(String text) {
-        JButton btn = new JButton(text) {
-            @Override protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(getModel().isRollover()
-                        ? new Color(235, 240, 255) : Color.WHITE);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
-                g2.dispose();
-                super.paintComponent(g);
-            }
-        };
-        btn.setFont(new Font("SansSerif", Font.PLAIN, 13));
+    private JButton calNavBtn(String text) {
+        JButton btn = new JButton(text);
+        btn.setFont(new Font("SansSerif", Font.PLAIN, 14));
         btn.setForeground(UIConstants.TEXT_DARK);
-        btn.setPreferredSize(new Dimension(36, 30));
+        btn.setPreferredSize(new Dimension(40, 32));
         btn.setContentAreaFilled(false);
         btn.setBorderPainted(false);
         btn.setFocusPainted(false);
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        btn.setRolloverEnabled(true);
         return btn;
     }
  
-    private JPanel legendItem(Color color, String text) {
+    private JPanel legendDot(Color color, String text) {
         JPanel item = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
         item.setOpaque(false);
-        JLabel dot = new JLabel("\u25CF");
-        dot.setFont(new Font("SansSerif", Font.PLAIN, 14));
-        dot.setForeground(color);
-        JLabel lbl = new JLabel(text);
-        lbl.setFont(UIConstants.FONT_SMALL);
-        lbl.setForeground(UIConstants.TEXT_MUTED);
-        item.add(dot); item.add(lbl);
+        JLabel circle = new JLabel("\u25CF");
+        circle.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        circle.setForeground(color);
+        JLabel label = new JLabel(text);
+        label.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        label.setForeground(UIConstants.TEXT_DARK);
+        item.add(circle);
+        item.add(label);
         return item;
     }
 }
