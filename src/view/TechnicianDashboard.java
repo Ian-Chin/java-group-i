@@ -112,8 +112,8 @@ public class TechnicianDashboard extends JPanel {
             String r = user.getRole();
             profileRoleLabel.setText(r.substring(0, 1).toUpperCase() + r.substring(1));
         }
-        profileImage = profilePicStorage.loadImage(user.getEmail());
-        bannerImage  = backgroundStorage.loadImage(user.getEmail());
+        profileImage = profilePicStorage.loadImage(user.getUserId());
+        bannerImage  = backgroundStorage.loadImage(user.getUserId());
         if (profileBanner   != null) profileBanner.repaint();
         if (profilePicLabel != null) profilePicLabel.repaint();
     }
@@ -159,7 +159,7 @@ public class TechnicianDashboard extends JPanel {
             if (image == null) {
                 JOptionPane.showMessageDialog(app, "Could not read the selected image.", "Error", JOptionPane.ERROR_MESSAGE); return;
             }
-            if (!profilePicStorage.saveImage(user.getEmail(), image)) {
+            if (!profilePicStorage.saveImage(user.getUserId(), image)) {
                 JOptionPane.showMessageDialog(app, "Failed to save profile picture.", "Error", JOptionPane.ERROR_MESSAGE); return;
             }
             profileImage = image;
@@ -180,7 +180,7 @@ public class TechnicianDashboard extends JPanel {
             if (image == null) {
                 JOptionPane.showMessageDialog(app, "Could not read the selected image.", "Error", JOptionPane.ERROR_MESSAGE); return;
             }
-            if (!backgroundStorage.saveImage(user.getEmail(), image)) {
+            if (!backgroundStorage.saveImage(user.getUserId(), image)) {
                 JOptionPane.showMessageDialog(app, "Failed to save background image.", "Error", JOptionPane.ERROR_MESSAGE); return;
             }
             bannerImage = image;
@@ -508,6 +508,7 @@ public class TechnicianDashboard extends JPanel {
         return sidebar;
     }
  
+
  
     public TechnicianDashboard(AppFrame app) {
         this.app = app;
@@ -550,8 +551,8 @@ public class TechnicianDashboard extends JPanel {
  
         User user = app.getLoggedInUserObj();
         if (user != null) {
-            profileImage = profilePicStorage.loadImage(user.getEmail());
-            bannerImage  = backgroundStorage.loadImage(user.getEmail());
+            profileImage = profilePicStorage.loadImage(user.getUserId());
+            bannerImage  = backgroundStorage.loadImage(user.getUserId());
             if (profileBanner   != null) profileBanner.repaint();
             if (profilePicLabel != null) profilePicLabel.repaint();
         }
