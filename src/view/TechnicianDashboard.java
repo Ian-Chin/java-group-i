@@ -24,34 +24,28 @@ public class TechnicianDashboard extends JPanel {
     private JPanel     contentPanel;
     private String     activeNav = "Dashboard";
  
-    // ── Header widgets ─────────────────────────────────────────
     private JLabel headerTitle;
     private JLabel profileLabel;
     private JLabel avatarLabel;
  
-    // ── Profile page fields ────────────────────────────────────
     private JTextField profileNameField;
     private JTextField profileEmailField;
     private JLabel     profileRoleLabel;
- 
-    // ── Profile picture / banner ───────────────────────────────
+
     private BufferedImage profileImage = null;
     private BufferedImage bannerImage  = null;
     private JPanel        profileBanner;
     private JLabel        profilePicLabel;
     private final ProfilePicStorage      profilePicStorage   = new ProfilePicStorage();
     private final BackgroundImageStorage backgroundStorage   = new BackgroundImageStorage();
- 
-    // ── Sub-panels (kept as fields so we can call refresh) ─────
+
     private TechDashboard  dashboardPanel;
     private TechAppointment appointmentPanel;
     private TechFeedback    feedbackPanel;
- 
-    // ── Brand / avatar constants ───────────────────────────────
+
     private static final Color BRAND_BLUE  = new Color(80, 110, 230);
     private static final Color BANNER_BLUE = new Color(100, 130, 240);
- 
-    // ── Sidebar nav ────────────────────────────────────────────
+
     private static final String[] NAV_ITEMS = {
             "Dashboard", "My Appointments", "My Feedbacks"
     };
@@ -380,10 +374,6 @@ public class TechnicianDashboard extends JPanel {
         return page;
     }
  
-    // ══════════════════════════════════════════════════════════
-    // HEADER
-    // ══════════════════════════════════════════════════════════
- 
     private JPanel buildProfileArea() {
         JPanel profileArea = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 12));
         profileArea.setBackground(UIConstants.BG_HEADER);
@@ -471,9 +461,6 @@ public class TechnicianDashboard extends JPanel {
         return header;
     }
  
-    // ══════════════════════════════════════════════════════════
-    // SIDEBAR
-    // ══════════════════════════════════════════════════════════
  
     private JPanel buildSidebar() {
         JPanel sidebar = new JPanel();
@@ -521,9 +508,6 @@ public class TechnicianDashboard extends JPanel {
         return sidebar;
     }
  
-    // ══════════════════════════════════════════════════════════
-    // CONSTRUCTOR
-    // ══════════════════════════════════════════════════════════
  
     public TechnicianDashboard(AppFrame app) {
         this.app = app;
