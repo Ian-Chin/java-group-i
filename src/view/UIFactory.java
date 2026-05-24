@@ -72,6 +72,105 @@ public final class UIFactory {
         return wrapper;
     }
 
+    // ─── Stack the APU logo above an existing card ─────────────
+
+    public static JPanel addLogoAbove(JComponent card, Class<?> resourceClass, int logoSize) {
+        JPanel wrapper = new JPanel();
+        wrapper.setOpaque(false);
+        wrapper.setLayout(new BoxLayout(wrapper, BoxLayout.Y_AXIS));
+
+        ImageIcon icon = new ImageIcon(resourceClass.getResource("/Image/apu-logo.png"));
+        Image scaled = icon.getImage().getScaledInstance(logoSize, logoSize, Image.SCALE_SMOOTH);
+        JLabel logo = new JLabel(new ImageIcon(scaled));
+        logo.setAlignmentX(Component.CENTER_ALIGNMENT);
+        logo.setHorizontalAlignment(SwingConstants.CENTER);
+        logo.setPreferredSize(new Dimension(logoSize, logoSize));
+        logo.setMaximumSize(new Dimension(logoSize, logoSize));
+
+        card.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        wrapper.add(logo);
+        wrapper.add(Box.createVerticalStrut(12));
+        wrapper.add(card);
+        return wrapper;
+    }
+
+    // ─── Form card with image embedded inside one half ─────────
+    //
+    // Returns a single white rounded card whose left or right half is
+    // filled by the given image (clipped to match the card's rounded
+    // corners on that side) and whose other half hosts the supplied
+    // vertical form column.
+
+    public static JPanel createSplitFormCard(JPanel formColumn, String imageResource,
+                                             Class<?> resourceClass, boolean imageOnLeft,
+                                             int imageWidth, int cardHeight) {
+        ImageIcon icon = new ImageIcon(resourceClass.getResource(imageResource));
+        final Image img = icon.getImage();
+        final int ARC = 24;
+
+        JPanel imagePanel = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                        RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                int w = getWidth(), h = getHeight();
+                java.awt.geom.Area clip = new java.awt.geom.Area(new Rectangle(0, 0, w, h));
+                java.awt.geom.Area rounded = new java.awt.geom.Area(
+                        new java.awt.geom.RoundRectangle2D.Float(
+                                imageOnLeft ? 0 : -ARC, 0,
+                                w + ARC, h, ARC * 2, ARC * 2));
+                clip.intersect(rounded);
+                g2.setClip(clip);
+
+                int iw = img.getWidth(null);
+                int ih = img.getHeight(null);
+                if (iw > 0 && ih > 0) {
+                    double scale = Math.max((double) w / iw, (double) h / ih);
+                    int drawW = (int) Math.ceil(iw * scale);
+                    int drawH = (int) Math.ceil(ih * scale);
+                    int x = (w - drawW) / 2;
+                    int y = (h - drawH) / 2;
+                    g2.drawImage(img, x, y, drawW, drawH, null);
+                }
+                g2.dispose();
+            }
+        };
+        imagePanel.setOpaque(false);
+        Dimension imgDim = new Dimension(imageWidth, cardHeight);
+        imagePanel.setPreferredSize(imgDim);
+        imagePanel.setMinimumSize(imgDim);
+        imagePanel.setMaximumSize(imgDim);
+
+        JPanel card = new JPanel(new BorderLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(UIConstants.BG_CARD);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), ARC, ARC);
+                g2.setColor(new Color(210, 210, 220, 120));
+                g2.setStroke(new BasicStroke(1f));
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, ARC, ARC);
+                g2.dispose();
+            }
+        };
+        card.setOpaque(false);
+
+        formColumn.setOpaque(false);
+
+        if (imageOnLeft) {
+            card.add(imagePanel, BorderLayout.WEST);
+            card.add(formColumn, BorderLayout.CENTER);
+        } else {
+            card.add(formColumn, BorderLayout.CENTER);
+            card.add(imagePanel, BorderLayout.EAST);
+        }
+        return card;
+    }
+
     // ─── Primary button (filled blue) ───────────────────────────
 
     public static JButton createPrimaryButton(String text) {
@@ -392,5 +491,18 @@ public final class UIFactory {
         g2.fillOval(w - w / 4 - r2 / 2, h - r2 / 3, r2, r2);
 
         g2.dispose();
+    }
+
+    // ─── Logo label for inline use inside a form column ─────────
+
+    public static JLabel createInlineLogo(Class<?> resourceClass, int size) {
+        ImageIcon icon = new ImageIcon(resourceClass.getResource("/Image/apu-logo.png"));
+        Image scaled = icon.getImage().getScaledInstance(size, size, Image.SCALE_SMOOTH);
+        JLabel label = new JLabel(new ImageIcon(scaled));
+        label.setHorizontalAlignment(SwingConstants.CENTER);
+        label.setAlignmentX(Component.CENTER_ALIGNMENT);
+        label.setPreferredSize(new Dimension(size, size));
+        label.setMaximumSize(new Dimension(size, size));
+        return label;
     }
 }

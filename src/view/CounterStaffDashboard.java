@@ -79,15 +79,15 @@ public class CounterStaffDashboard extends JPanel {
         contentPanel  = new JPanel(contentLayout);
         contentPanel.setBackground(UIConstants.BG_CONTENT);
 
-        contentPanel.add(buildDashboardContent(),                              "Dashboard");
-        contentPanel.add(new CustomerManagementPanel(app.getAccountService()), "Customer Management");
-        contentPanel.add(new AppointmentPanel(app.getAccountService()),        "Appointments");
-        contentPanel.add(buildCalendarContent(),                               "Calendar");
-        contentPanel.add(new PaymentCollectionPanel(app.getAccountService()),  "Payment Collection");
+        contentPanel.add(wrapScrollable(buildDashboardContent()),                              "Dashboard");
+        contentPanel.add(wrapScrollable(new CustomerManagementPanel(app.getAccountService())), "Customer Management");
+        contentPanel.add(wrapScrollable(new AppointmentPanel(app.getAccountService())),        "Appointments");
+        contentPanel.add(wrapScrollable(buildCalendarContent()),                               "Calendar");
+        contentPanel.add(wrapScrollable(new PaymentCollectionPanel(app.getAccountService())),  "Payment Collection");
 
         dayDetailPanel = new JPanel(new BorderLayout());
         dayDetailPanel.setBackground(UIConstants.BG_CONTENT);
-        contentPanel.add(dayDetailPanel, "DayDetail");
+        contentPanel.add(wrapScrollable(dayDetailPanel), "DayDetail");
 
         contentPanel.add(buildProfileContent(), "Profile");
 
@@ -358,6 +358,18 @@ public class CounterStaffDashboard extends JPanel {
     // =========================================================
     // DASHBOARD CONTENT
     // =========================================================
+
+    private JScrollPane wrapScrollable(JComponent content) {
+        JScrollPane scroll = new JScrollPane(content,
+                JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+                JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        scroll.setBorder(null);
+        scroll.setViewportBorder(null);
+        scroll.getViewport().setBackground(UIConstants.BG_CONTENT);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        scroll.getHorizontalScrollBar().setUnitIncrement(16);
+        return scroll;
+    }
 
     private JPanel buildDashboardContent() {
         JPanel page = new JPanel();

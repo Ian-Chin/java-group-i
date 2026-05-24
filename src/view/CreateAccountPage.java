@@ -26,9 +26,15 @@ public class CreateAccountPage extends JPanel {
         topBar.add(backBtn);
         add(topBar, BorderLayout.NORTH);
 
-        // Main card
-        JPanel card = UIFactory.createCard();
-        card.setBorder(new EmptyBorder(20, 50, 40, 50));
+        // Form column (transparent; the surrounding split card paints the white background)
+        JPanel card = new JPanel();
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setOpaque(false);
+        card.setBorder(new EmptyBorder(28, 50, 40, 50));
+
+        // Logo (inside the form box)
+        card.add(UIFactory.createInlineLogo(getClass(), 90));
+        card.add(Box.createVerticalStrut(10));
 
         // Title
         JLabel titleLabel = new JLabel("Create Account");
@@ -83,10 +89,13 @@ public class CreateAccountPage extends JPanel {
         });
         card.add(loginLink);
 
-        // Wrapper to center the card with pop-out logo
+        // Single card with image embedded on the left and the form on the right
+        JPanel splitCard = UIFactory.createSplitFormCard(
+                card, "/Image/signup-side.jpg", getClass(), true, 420, 600);
+
         JPanel wrapper = new JPanel(new GridBagLayout());
         wrapper.setOpaque(false);
-        wrapper.add(UIFactory.createCardWithLogo(card, getClass()));
+        wrapper.add(splitCard);
         add(wrapper, BorderLayout.CENTER);
     }
 
