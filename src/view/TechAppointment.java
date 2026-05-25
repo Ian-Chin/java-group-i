@@ -23,31 +23,31 @@ import java.util.List;
 public class TechAppointment extends JPanel {
  
 
-    private static final Color BG      = new Color(245, 246, 250);
-    private static final Color CARD    = Color.WHITE;
-    private static final Color BORDER  = new Color(225, 228, 235);
-    private static final Color TEXT    = new Color(30,  35,  50);
-    private static final Color MUTED   = new Color(110, 118, 140);
-    private static final Color BLUE    = new Color(80,  110, 230);
-    private static final Color GREEN   = new Color(40,  167, 69);
-    private static final Color ORANGE  = new Color(255, 165,  0);
-    private static final Color GREY    = new Color(108, 117, 125);
-    private static final Color PURPLE  = new Color(130, 80,  220);
+    private static final Color BG = new Color(245, 246, 250);
+    private static final Color CARD = Color.WHITE;
+    private static final Color BORDER = new Color(225, 228, 235);
+    private static final Color TEXT = new Color(30,  35,  50);
+    private static final Color MUTED = new Color(110, 118, 140);
+    private static final Color BLUE = new Color(80,  110, 230);
+    private static final Color GREEN = new Color(40,  167, 69);
+    private static final Color ORANGE = new Color(255, 165,  0);
+    private static final Color GREY = new Color(108, 117, 125);
+    private static final Color PURPLE = new Color(130, 80,  220);
  
     private static final String[] COLUMNS = {
         "Appt ID", "Service Type", "Date / Time", "Duration",
         "Customer", "Vehicle", "Status", "Action"
     };
  
-    private final AppFrame           app;
+    private final AppFrame app;
     private final AppointmentService appointmentSvc = new AppointmentService();
  
     private JLabel lblTotal, lblPending, lblCompleted;
  
     private DefaultTableModel tableModel;
-    private JTable            table;
+    private JTable table;
  
-    private JTextField        searchField;
+    private JTextField searchField;
     private JComboBox<String> statusFilter;
  
     private final List<Appointment> allMine = new ArrayList<>();
@@ -60,8 +60,8 @@ public class TechAppointment extends JPanel {
         JPanel page = new JPanel(new BorderLayout());
         page.setBackground(BG);
         page.setBorder(new EmptyBorder(24, 28, 28, 28));
-        page.add(buildSubtitle(),  BorderLayout.NORTH);
-        page.add(buildBody(),      BorderLayout.CENTER);
+        page.add(buildSubtitle(), BorderLayout.NORTH);
+        page.add(buildBody(), BorderLayout.CENTER);
  
         JScrollPane outer = new JScrollPane(page);
         outer.setBorder(null);
@@ -87,7 +87,7 @@ public class TechAppointment extends JPanel {
     private JPanel buildBody() {
         JPanel body = new JPanel(new BorderLayout(0, 18));
         body.setOpaque(false);
-        body.add(buildKpiRow(),    BorderLayout.NORTH);
+        body.add(buildKpiRow(), BorderLayout.NORTH);
         body.add(buildTableCard(), BorderLayout.CENTER);
         return body;
     }
@@ -96,18 +96,18 @@ public class TechAppointment extends JPanel {
         JPanel row = new JPanel(new GridLayout(1, 3, 16, 0));
         row.setOpaque(false);
  
-        lblTotal     = new JLabel("0");
-        lblPending   = new JLabel("0");
+        lblTotal = new JLabel("0");
+        lblPending = new JLabel("0");
         lblCompleted = new JLabel("0");
  
-        row.add(kpiCard("Total Assigned",   lblTotal,     "\u2756", BLUE,   new Color(235, 240, 255)));
-        row.add(kpiCard("Pending / In Progress", lblPending,   "\u29D6", ORANGE, new Color(255, 245, 230)));
-        row.add(kpiCard("Completed",        lblCompleted, "\u2714", GREEN,  new Color(220, 245, 225)));
+        row.add(kpiCard("Total Assigned", lblTotal, "\u2756", BLUE, new Color(235, 240, 255)));
+        row.add(kpiCard("Pending / In Progress", lblPending, "\u29D6", ORANGE, new Color(255, 245, 230)));
+        row.add(kpiCard("Completed", lblCompleted, "\u2714", GREEN, new Color(220, 245, 225)));
         return row;
     }
  
     private JPanel kpiCard(String title, JLabel valueLabel, String icon,
-                           Color accent, Color iconBg) {
+        Color accent, Color iconBg) {
         JPanel card = roundedCard(true, accent);
         card.setLayout(new BorderLayout(14, 0));
  
@@ -116,7 +116,7 @@ public class TechAppointment extends JPanel {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                        RenderingHints.VALUE_ANTIALIAS_ON);
+                RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setColor(iconBg);
                 g2.fillOval(0, 0, getWidth(), getHeight());
                 g2.dispose();
@@ -186,7 +186,7 @@ public class TechAppointment extends JPanel {
  
         DefaultTableCellRenderer centre = new DefaultTableCellRenderer() {
             @Override public Component getTableCellRendererComponent(
-                    JTable t, Object v, boolean sel, boolean foc, int r, int c) {
+                JTable t, Object v, boolean sel, boolean foc, int r, int c) {
                 super.getTableCellRendererComponent(t, v, sel, foc, r, c);
                 setHorizontalAlignment(CENTER);
                 setBorder(new EmptyBorder(0, 8, 0, 8));
@@ -204,11 +204,11 @@ public class TechAppointment extends JPanel {
             Color fc, bg2;
             switch (s) {
                 case "Completed":
-                    fc = GREEN;  bg2 = new Color(220, 245, 225); break;
+                    fc = GREEN; bg2 = new Color(220, 245, 225); break;
                 case "In Progress":
                     fc = ORANGE; bg2 = new Color(255, 245, 225); break;
                 default:
-                    fc = GREY;   bg2 = new Color(235, 235, 240); break;
+                    fc = GREY; bg2 = new Color(235, 235, 240); break;
             }
             badge.setForeground(fc);
             badge.setOpaque(true);
@@ -230,7 +230,7 @@ public class TechAppointment extends JPanel {
                 @Override protected void paintComponent(Graphics g) {
                     Graphics2D g2 = (Graphics2D) g.create();
                     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                            RenderingHints.VALUE_ANTIALIAS_ON);
+                    RenderingHints.VALUE_ANTIALIAS_ON);
                     g2.setColor(bg2);
                     g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
                     g2.dispose();
@@ -269,8 +269,8 @@ public class TechAppointment extends JPanel {
             @Override public void mouseClicked(MouseEvent e) {
                 int row = table.rowAtPoint(e.getPoint());
                 if (row < 0) return;
-                String apptId  = (String) tableModel.getValueAt(row, 0);
-                String status  = (String) tableModel.getValueAt(row, 6);
+                String apptId = (String) tableModel.getValueAt(row, 0);
+                String status = (String) tableModel.getValueAt(row, 6);
                 Appointment appt = findAppt(apptId);
                 if (appt != null) openDetailDialog(appt, row);
             }
@@ -284,7 +284,6 @@ public class TechAppointment extends JPanel {
         scroll.setPreferredSize(new Dimension(0, 440));
         card.add(scroll, BorderLayout.CENTER);
  
-        // Footer
         JPanel footer = new JPanel(new BorderLayout());
         footer.setOpaque(false);
         footer.setBorder(BorderFactory.createCompoundBorder(
@@ -310,8 +309,8 @@ public class TechAppointment extends JPanel {
             new LineBorder(BORDER, 1, true), new EmptyBorder(2, 8, 2, 8)));
         searchField.setToolTipText("Search appointments…");
         searchField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-            public void insertUpdate(javax.swing.event.DocumentEvent e)  { applyFilters(); }
-            public void removeUpdate(javax.swing.event.DocumentEvent e)  { applyFilters(); }
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { applyFilters(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { applyFilters(); }
             public void changedUpdate(javax.swing.event.DocumentEvent e) { applyFilters(); }
         });
  
@@ -338,8 +337,7 @@ public class TechAppointment extends JPanel {
         form.setLayout(new BoxLayout(form, BoxLayout.Y_AXIS));
         form.setBackground(Color.WHITE);
         form.setBorder(new EmptyBorder(28, 36, 24, 36));
- 
-        // ── Title ──────────────────────────────────────────────────
+
         JLabel title = new JLabel("Appointment Details");
         title.setFont(new Font("SansSerif", Font.BOLD, 16));
         title.setForeground(TEXT);
@@ -355,13 +353,13 @@ public class TechAppointment extends JPanel {
  
         String custName = resolveName(appt.getCustomerId());
         String[][] fields = {
-            {"Appointment ID",  appt.getId()},
-            {"Service Type",    appt.getServiceType()},
-            {"Date / Time",     appt.getDateTime()},
-            {"Duration",        appt.getDurationHours() + " hour(s)"},
-            {"Customer",        custName + " (" + appt.getCustomerId() + ")"},
-            {"Vehicle",         appt.getVehicleId()},
-            {"Status",          appt.getStatus()},
+            {"Appointment ID", appt.getId()},
+            {"Service Type", appt.getServiceType()},
+            {"Date / Time", appt.getDateTime()},
+            {"Duration", appt.getDurationHours() + " hour(s)"},
+            {"Customer", custName + " (" + appt.getCustomerId() + ")"},
+            {"Vehicle", appt.getVehicleId()},
+            {"Status", appt.getStatus()},
         };
  
         for (String[] field : fields) {
@@ -381,9 +379,9 @@ public class TechAppointment extends JPanel {
  
             if (field[0].equals("Status")) {
                 switch (field[1]) {
-                    case "Completed":   val.setForeground(GREEN);  break;
+                    case "Completed": val.setForeground(GREEN);  break;
                     case "In Progress": val.setForeground(ORANGE); break;
-                    default:            val.setForeground(GREY);   break;
+                    default: val.setForeground(GREY);   break;
                 }
                 val.setFont(new Font("SansSerif", Font.BOLD, 13));
             }
@@ -440,7 +438,7 @@ public class TechAppointment extends JPanel {
                 if (confirm == JOptionPane.YES_OPTION) {
                     if (appointmentSvc.updateStatus(appt.getId(), "Completed")) {
                         dlg.dispose();
-                        refresh();  // full reload
+                        refresh();  
                         JOptionPane.showMessageDialog(app,
                             appt.getId() + " marked as Completed.",
                             "Success", JOptionPane.INFORMATION_MESSAGE);
@@ -470,15 +468,15 @@ public class TechAppointment extends JPanel {
                 allMine.add(a);
         }
  
-        if (searchField   != null) searchField.setText("");
-        if (statusFilter  != null) statusFilter.setSelectedIndex(0);
+        if (searchField != null) searchField.setText("");
+        if (statusFilter != null) statusFilter.setSelectedIndex(0);
  
         applyFilters();
         updateKpis();
     }
  
     private void applyFilters() {
-        String query  = searchField  != null ? searchField.getText().trim().toLowerCase() : "";
+        String query  = searchField != null ? searchField.getText().trim().toLowerCase() : "";
         String selSt  = statusFilter != null
                 ? (String) statusFilter.getSelectedItem() : "All Status";
  
@@ -508,7 +506,7 @@ public class TechAppointment extends JPanel {
                 custName,
                 a.getVehicleId(),
                 a.getStatus(),
-                ""   // action column — rendered dynamically
+                "" 
             });
         }
     }
@@ -520,8 +518,8 @@ public class TechAppointment extends JPanel {
             if ("Completed".equalsIgnoreCase(a.getStatus()))       completed++;
             else                                                    pending++;
         }
-        if (lblTotal     != null) lblTotal.setText(String.valueOf(total));
-        if (lblPending   != null) lblPending.setText(String.valueOf(pending));
+        if (lblTotal != null) lblTotal.setText(String.valueOf(total));
+        if (lblPending != null) lblPending.setText(String.valueOf(pending));
         if (lblCompleted != null) lblCompleted.setText(String.valueOf(completed));
     }
  
@@ -568,7 +566,7 @@ public class TechAppointment extends JPanel {
         JButton btn = new JButton(label) {
             private boolean hov = false;
             { addMouseListener(new MouseAdapter() {
-                public void mouseEntered(MouseEvent e) { hov = true;  repaint(); }
+                public void mouseEntered(MouseEvent e) { hov = true; repaint(); }
                 public void mouseExited (MouseEvent e) { hov = false; repaint(); }
             }); }
             @Override protected void paintComponent(Graphics g) {

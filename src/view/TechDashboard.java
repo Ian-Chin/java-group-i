@@ -30,21 +30,21 @@ import java.util.List;
  */
 public class TechDashboard extends JPanel {
  
-    private final AppFrame           app;
+    private final AppFrame app;
     private final AppointmentService appointmentService = new AppointmentService();
  
     private final YearMonth[] currentMonth = { YearMonth.now() };
     private final LocalDate[] selectedDate = { LocalDate.now() };
  
-    private JPanel   calGrid;
-    private JLabel   monthLabel;
+    private JPanel calGrid;
+    private JLabel monthLabel;
 
-    private JPanel   summaryContent;
-    private JLabel   summaryTitle;
+    private JPanel summaryContent;
+    private JLabel summaryTitle;
  
-    private static final Color GREEN  = new Color(40,  167, 69);
+    private static final Color GREEN = new Color(40,  167, 69);
     private static final Color ORANGE = new Color(255, 165,  0);
-    private static final Color GREY   = new Color(108, 117, 125);
+    private static final Color GREY = new Color(108, 117, 125);
  
 
     public TechDashboard(AppFrame app) {
@@ -119,9 +119,9 @@ public class TechDashboard extends JPanel {
             rebuildCalGrid();
         });
  
-        navRow.add(prevBtn,    BorderLayout.WEST);
+        navRow.add(prevBtn, BorderLayout.WEST);
         navRow.add(monthLabel, BorderLayout.CENTER);
-        navRow.add(nextBtn,    BorderLayout.EAST);
+        navRow.add(nextBtn, BorderLayout.EAST);
         calCard.add(navRow, BorderLayout.NORTH);
  
         JPanel calBody = new JPanel(new BorderLayout(0, 8));
@@ -146,9 +146,9 @@ public class TechDashboard extends JPanel {
         JPanel legend = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 0));
         legend.setOpaque(false);
         legend.setBorder(new EmptyBorder(12, 0, 0, 0));
-        legend.add(legendDot(GREEN,  "Completed"));
+        legend.add(legendDot(GREEN, "Completed"));
         legend.add(legendDot(ORANGE, "In Progress"));
-        legend.add(legendDot(GREY,   "Pending"));
+        legend.add(legendDot(GREY, "Pending"));
         calCard.add(legend, BorderLayout.SOUTH);
 
         JPanel summaryCard = new JPanel(new BorderLayout()) {
@@ -187,7 +187,7 @@ public class TechDashboard extends JPanel {
         summaryScroll.getVerticalScrollBar().setUnitIncrement(12);
         summaryCard.add(summaryScroll, BorderLayout.CENTER);
  
-        page.add(calCard,     BorderLayout.CENTER);
+        page.add(calCard, BorderLayout.CENTER);
         page.add(summaryCard, BorderLayout.EAST);
 
         rebuildCalGrid();
@@ -210,26 +210,26 @@ public class TechDashboard extends JPanel {
         if (user != null) {
             for (Appointment a : appointmentService.getAll()) {
                 if (!a.getTechnicianEmail().equalsIgnoreCase(user.getUserId())) continue;
-                String dt       = a.getDateTime();
+                String dt = a.getDateTime();
                 String apptDate = dt.contains(" ") ? dt.split(" ")[0] : dt;
                 apptsByDate.computeIfAbsent(apptDate, k -> new ArrayList<>()).add(a.getStatus());
             }
         }
  
-        LocalDate first      = currentMonth[0].atDay(1);
-        int       startDow   = first.getDayOfWeek().getValue() % 7;
-        int       daysInMonth = currentMonth[0].lengthOfMonth();
-        LocalDate today       = LocalDate.now();
+        LocalDate first = currentMonth[0].atDay(1);
+        int startDow = first.getDayOfWeek().getValue() % 7;
+        int daysInMonth = currentMonth[0].lengthOfMonth();
+        LocalDate today = LocalDate.now();
 
         for (int i = 0; i < startDow; i++) calGrid.add(new JLabel(""));
  
         for (int d = 1; d <= daysInMonth; d++) {
-            LocalDate    date     = currentMonth[0].atDay(d);
+            LocalDate date = currentMonth[0].atDay(d);
             List<String> statuses = apptsByDate.getOrDefault(
                     date.toString(), Collections.emptyList());
             boolean isToday = date.equals(today);
-            boolean isSel   = date.equals(selectedDate[0]);
-            final int day   = d;
+            boolean isSel = date.equals(selectedDate[0]);
+            final int day = d;
  
             JPanel cell = new JPanel(new BorderLayout(0, 1)) {
                 @Override protected void paintComponent(Graphics g) {
@@ -305,10 +305,10 @@ public class TechDashboard extends JPanel {
                 @Override public void mouseClicked(MouseEvent e) {
                     LocalDate clicked = currentMonth[0].atDay(day);
                     if (clicked.equals(selectedDate[0])) {
-                        // Second click → open detail popup (original feature)
+                     
                         showDetailPopup(selectedDate[0]);
                     } else {
-                        // First click → select and show summary
+                        
                         selectedDate[0] = clicked;
                         rebuildCalGrid();
                         refreshSummary();
@@ -334,11 +334,11 @@ public class TechDashboard extends JPanel {
  
         for (Appointment a : appointmentService.getAll()) {
             if (user != null && !a.getTechnicianEmail().equalsIgnoreCase(user.getUserId())) continue;
-            String dt       = a.getDateTime();
+            String dt = a.getDateTime();
             String apptDate = dt.contains(" ") ? dt.split(" ")[0] : dt;
             if (!apptDate.equals(dateStr)) continue;
             count++;
-            String time     = dt.contains(" ") ? dt.split(" ")[1] : "";
+            String time = dt.contains(" ") ? dt.split(" ")[1] : "";
             String custName = resolveName(a.getCustomerEmail());
             summaryContent.add(buildAppointmentCard(a, custName, time));
             summaryContent.add(Box.createVerticalStrut(8));
@@ -360,9 +360,9 @@ public class TechDashboard extends JPanel {
     private JPanel buildAppointmentCard(Appointment a, String custName, String time) {
         Color barColor;
         switch (a.getStatus()) {
-            case "Completed":   barColor = GREEN;  break;
+            case "Completed": barColor = GREEN;  break;
             case "In Progress": barColor = ORANGE; break;
-            default:            barColor = GREY;   break;
+            default: barColor = GREY;   break;
         }
  
         JPanel card = new JPanel(new BorderLayout(8, 0)) {
@@ -419,9 +419,9 @@ public class TechDashboard extends JPanel {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 Color bg;
                 switch (a.getStatus()) {
-                    case "Completed":   bg = new Color(220, 245, 225); break;
+                    case "Completed": bg = new Color(220, 245, 225); break;
                     case "In Progress": bg = new Color(255, 243, 220); break;
-                    default:            bg = new Color(235, 235, 240); break;
+                    default: bg = new Color(235, 235, 240); break;
                 }
                 g2.setColor(bg);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
@@ -454,7 +454,7 @@ public class TechDashboard extends JPanel {
         List<Appointment> appts = new ArrayList<>();
         for (Appointment a : appointmentService.getAll()) {
             if (user != null && !a.getTechnicianEmail().equalsIgnoreCase(user.getUserId())) continue;
-            String dt       = a.getDateTime();
+            String dt = a.getDateTime();
             String apptDate = dt.contains(" ") ? dt.split(" ")[0] : dt;
             if (apptDate.equals(dateStr)) appts.add(a);
         }
@@ -494,9 +494,9 @@ public class TechDashboard extends JPanel {
             JLabel statusLbl = new JLabel(a.getStatus());
             statusLbl.setFont(new Font("SansSerif", Font.BOLD, 11));
             switch (a.getStatus()) {
-                case "Completed":   statusLbl.setForeground(GREEN);  break;
+                case "Completed": statusLbl.setForeground(GREEN);  break;
                 case "In Progress": statusLbl.setForeground(ORANGE); break;
-                default:            statusLbl.setForeground(GREY);   break;
+                default: statusLbl.setForeground(GREY);   break;
             }
             statusLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
             row.add(statusLbl);

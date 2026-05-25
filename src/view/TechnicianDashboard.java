@@ -21,8 +21,8 @@ public class TechnicianDashboard extends JPanel {
     private final AppFrame app;
  
     private CardLayout contentLayout;
-    private JPanel     contentPanel;
-    private String     activeNav = "Dashboard";
+    private JPanel contentPanel;
+    private String activeNav = "Dashboard";
  
     private JLabel headerTitle;
     private JLabel profileLabel;
@@ -30,20 +30,20 @@ public class TechnicianDashboard extends JPanel {
  
     private JTextField profileNameField;
     private JTextField profileEmailField;
-    private JLabel     profileRoleLabel;
+    private JLabel profileRoleLabel;
 
     private BufferedImage profileImage = null;
     private BufferedImage bannerImage  = null;
-    private JPanel        profileBanner;
-    private JLabel        profilePicLabel;
-    private final ProfilePicStorage      profilePicStorage   = new ProfilePicStorage();
-    private final BackgroundImageStorage backgroundStorage   = new BackgroundImageStorage();
+    private JPanel profileBanner;
+    private JLabel profilePicLabel;
+    private final ProfilePicStorage profilePicStorage = new ProfilePicStorage();
+    private final BackgroundImageStorage backgroundStorage = new BackgroundImageStorage();
 
-    private TechDashboard  dashboardPanel;
+    private TechDashboard dashboardPanel;
     private TechAppointment appointmentPanel;
-    private TechFeedback    feedbackPanel;
+    private TechFeedback feedbackPanel;
 
-    private static final Color BRAND_BLUE  = new Color(80, 110, 230);
+    private static final Color BRAND_BLUE = new Color(80, 110, 230);
     private static final Color BANNER_BLUE = new Color(100, 130, 240);
 
     private static final String[] NAV_ITEMS = {
@@ -106,22 +106,22 @@ public class TechnicianDashboard extends JPanel {
     private void refreshProfileFields() {
         User user = app.getLoggedInUserObj();
         if (user == null) return;
-        if (profileNameField  != null) { profileNameField.setText(user.getName());  profileNameField.setForeground(Color.BLACK); }
+        if (profileNameField != null) { profileNameField.setText(user.getName()); profileNameField.setForeground(Color.BLACK); }
         if (profileEmailField != null) { profileEmailField.setText(user.getEmail()); profileEmailField.setForeground(Color.BLACK); }
-        if (profileRoleLabel  != null) {
+        if (profileRoleLabel != null) {
             String r = user.getRole();
             profileRoleLabel.setText(r.substring(0, 1).toUpperCase() + r.substring(1));
         }
         profileImage = profilePicStorage.loadImage(user.getUserId());
-        bannerImage  = backgroundStorage.loadImage(user.getUserId());
-        if (profileBanner   != null) profileBanner.repaint();
+        bannerImage = backgroundStorage.loadImage(user.getUserId());
+        if (profileBanner != null) profileBanner.repaint();
         if (profilePicLabel != null) profilePicLabel.repaint();
     }
  
     private void handleProfileSave() {
         User user = app.getLoggedInUserObj();
         if (user == null) return;
-        String newName  = UIFactory.getFieldValue(profileNameField,  "Enter your name");
+        String newName = UIFactory.getFieldValue(profileNameField,  "Enter your name");
         String newEmail = UIFactory.getFieldValue(profileEmailField, "Enter your email");
         if (newName.isEmpty() || newEmail.isEmpty()) {
             JOptionPane.showMessageDialog(app, "Name and email cannot be empty.", "Error", JOptionPane.ERROR_MESSAGE); return;
@@ -164,7 +164,7 @@ public class TechnicianDashboard extends JPanel {
             }
             profileImage = image;
             if (profilePicLabel != null) profilePicLabel.repaint();
-            if (avatarLabel     != null) avatarLabel.repaint();
+            if (avatarLabel != null) avatarLabel.repaint();
         } catch (java.io.IOException ex) { ex.printStackTrace(); }
     }
  
@@ -305,7 +305,7 @@ public class TechnicianDashboard extends JPanel {
         hero.add(profileBanner);
         hero.add(profilePicLabel);
         hero.setComponentZOrder(profilePicLabel, 0);
-        hero.setComponentZOrder(profileBanner,   1);
+        hero.setComponentZOrder(profileBanner, 1);
         return hero;
     }
  
@@ -451,8 +451,8 @@ public class TechnicianDashboard extends JPanel {
         header.setBackground(UIConstants.BG_HEADER);
         header.setPreferredSize(new Dimension(0, UIConstants.HEADER_HEIGHT));
         header.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(0, 0, 1, 0, UIConstants.BORDER_HEADER),
-                new EmptyBorder(0, 30, 0, 25)));
+        BorderFactory.createMatteBorder(0, 0, 1, 0, UIConstants.BORDER_HEADER),
+        new EmptyBorder(0, 30, 0, 25)));
         headerTitle = new JLabel("Dashboard");
         headerTitle.setFont(UIConstants.FONT_BODY_BOLD);
         headerTitle.setForeground(UIConstants.TEXT_PRIMARY);
@@ -497,10 +497,10 @@ public class TechnicianDashboard extends JPanel {
                 for (int j = 0; j < btns.length; j++) styleNavBtn(btns[j], NAV_ITEMS[j].equals(activeNav));
                 headerTitle.setText(name);
                 contentLayout.show(contentPanel, name);
-                // Refresh the panel when navigating to it
+               
                 if (name.equals("My Appointments") && appointmentPanel != null) appointmentPanel.refresh();
-                if (name.equals("My Feedbacks")    && feedbackPanel    != null) feedbackPanel.refresh();
-                if (name.equals("Dashboard")        && dashboardPanel   != null) dashboardPanel.refresh();
+                if (name.equals("My Feedbacks") && feedbackPanel != null) feedbackPanel.refresh();
+                if (name.equals("Dashboard")&& dashboardPanel != null) dashboardPanel.refresh();
             });
             sidebar.add(btns[i]); sidebar.add(Box.createVerticalStrut(2));
         }
@@ -520,18 +520,18 @@ public class TechnicianDashboard extends JPanel {
         rightSide.add(buildHeader(), BorderLayout.NORTH);
  
         contentLayout = new CardLayout();
-        contentPanel  = new JPanel(contentLayout);
+        contentPanel = new JPanel(contentLayout);
         contentPanel.setBackground(UIConstants.BG_CONTENT);
  
-        // Create each panel — each is its own class
-        dashboardPanel   = new TechDashboard(app);
-        appointmentPanel = new TechAppointment(app);
-        feedbackPanel    = new TechFeedback(app);
  
-        // Add to CardLayout — name must match NAV_ITEMS exactly
-        contentPanel.add(dashboardPanel,   "Dashboard");
+        dashboardPanel = new TechDashboard(app);
+        appointmentPanel = new TechAppointment(app);
+        feedbackPanel = new TechFeedback(app);
+ 
+
+        contentPanel.add(dashboardPanel, "Dashboard");
         contentPanel.add(appointmentPanel, "My Appointments");
-        contentPanel.add(feedbackPanel,    "My Feedbacks");
+        contentPanel.add(feedbackPanel, "My Feedbacks");
         contentPanel.add(buildProfilePage(), "Profile");
  
         rightSide.add(contentPanel, BorderLayout.CENTER);
@@ -552,15 +552,15 @@ public class TechnicianDashboard extends JPanel {
         User user = app.getLoggedInUserObj();
         if (user != null) {
             profileImage = profilePicStorage.loadImage(user.getUserId());
-            bannerImage  = backgroundStorage.loadImage(user.getUserId());
-            if (profileBanner   != null) profileBanner.repaint();
+            bannerImage = backgroundStorage.loadImage(user.getUserId());
+            if (profileBanner != null) profileBanner.repaint();
             if (profilePicLabel != null) profilePicLabel.repaint();
         }
         if (avatarLabel != null) avatarLabel.repaint();
  
-        // Refresh all sub-panels
-        if (dashboardPanel   != null) dashboardPanel.refresh();
+ 
+        if (dashboardPanel != null) dashboardPanel.refresh();
         if (appointmentPanel != null) appointmentPanel.refresh();
-        if (feedbackPanel    != null) feedbackPanel.refresh();
+        if (feedbackPanel != null) feedbackPanel.refresh();
     }
 }

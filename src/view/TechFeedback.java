@@ -18,18 +18,18 @@ import java.util.List;
 
 public class TechFeedback extends JPanel {
 
-    private static final Color COLOR_BG     = new Color(245, 246, 250);
-    private static final Color COLOR_CARD   = Color.WHITE;
+    private static final Color COLOR_BG = new Color(245, 246, 250);
+    private static final Color COLOR_CARD = Color.WHITE;
     private static final Color COLOR_BORDER = new Color(225, 228, 235);
-    private static final Color COLOR_TEXT   = new Color(30,  35,  50);
-    private static final Color COLOR_MUTED  = new Color(110, 118, 140);
-    private static final Color BLUE_ACCENT  = new Color(80,  110, 230);
-    private static final Color GREEN        = new Color(40,  167, 69);
-    private static final Color ORANGE       = new Color(255, 165,  0);
-    private static final Color GREY         = new Color(108, 117, 125);
-    private static final Color YELLOW_STAR  = new Color(255, 193,  7);
+    private static final Color COLOR_TEXT = new Color(30,  35,  50);
+    private static final Color COLOR_MUTED = new Color(110, 118, 140);
+    private static final Color BLUE_ACCENT = new Color(80,  110, 230);
+    private static final Color GREEN = new Color(40,  167, 69);
+    private static final Color ORANGE = new Color(255, 165,  0);
+    private static final Color GREY = new Color(108, 117, 125);
+    private static final Color YELLOW_STAR = new Color(255, 193,  7);
  
-    private static final Color BAR_COLOR_COUNT     = YELLOW_STAR;
+    private static final Color BAR_COLOR_COUNT = YELLOW_STAR;
     private static final Color BAR_COLOR_BREAKDOWN = BLUE_ACCENT;
  
     
@@ -37,18 +37,18 @@ public class TechFeedback extends JPanel {
         "Unsatisfactory", "Poor", "Average", "Good", "Excellent"
     };
 
-    private final AppFrame            app;
-    private final AppointmentService  appointmentService = new AppointmentService();
-    private final MyFeedbackService   feedbackService    = new MyFeedbackService();
+    private final AppFrame app;
+    private final AppointmentService appointmentService = new AppointmentService();
+    private final MyFeedbackService feedbackService = new MyFeedbackService();
  
     private JLabel totalCountLabel;
     private JLabel totalSubLabel;
     private JPanel barsPanel;
  
     private DefaultTableModel tableModel;
-    private JTable            table;
+    private JTable table;
  
-    private JTextField        searchField;
+    private JTextField searchField;
     private JComboBox<String> conditionFilter;
 
     private List<Appointment> allMine = new ArrayList<>();
@@ -69,7 +69,7 @@ public class TechFeedback extends JPanel {
         pageContent.setBorder(new EmptyBorder(24, 28, 28, 28));
  
         pageContent.add(buildSubtitleRow(), BorderLayout.NORTH);
-        pageContent.add(buildDataPanel(),   BorderLayout.CENTER);
+        pageContent.add(buildDataPanel(), BorderLayout.CENTER);
  
         JScrollPane outerScroll = new JScrollPane(pageContent);
         outerScroll.setBorder(null);
@@ -103,7 +103,7 @@ public class TechFeedback extends JPanel {
  
         JPanel topRow = buildTopCardsRow();
         topRow.setBorder(new EmptyBorder(0, 0, 18, 0));
-        panel.add(topRow,         BorderLayout.NORTH);
+        panel.add(topRow, BorderLayout.NORTH);
         panel.add(buildTableCard(), BorderLayout.CENTER);
         return panel;
     }
@@ -117,7 +117,6 @@ public class TechFeedback extends JPanel {
         return row;
     }
  
-
     private JPanel buildCountCard() {
         JPanel card = makeRoundedCardWithLeftBar(BAR_COLOR_COUNT);
  
@@ -250,7 +249,7 @@ public class TechFeedback extends JPanel {
                 return this;
             }
         };
-        for (int i = 0; i < COLUMNS.length - 1; i++)  // all except last
+        for (int i = 0; i < COLUMNS.length - 1; i++)  
             table.getColumnModel().getColumn(i).setCellRenderer(centreRenderer);
  
         table.getColumnModel().getColumn(5).setCellRenderer(
@@ -260,9 +259,9 @@ public class TechFeedback extends JPanel {
                 badge.setFont(new Font("SansSerif", Font.BOLD, 11));
                 badge.setOpaque(true);
                 switch (status) {
-                    case "Completed":   badge.setForeground(GREEN);  break;
+                    case "Completed": badge.setForeground(GREEN);  break;
                     case "In Progress": badge.setForeground(ORANGE); break;
-                    default:            badge.setForeground(GREY);   break;
+                    default: badge.setForeground(GREY);   break;
                 }
                 JPanel wrap = new JPanel(new GridBagLayout());
                 wrap.setBackground(row % 2 == 0 ? Color.WHITE : new Color(248, 249, 253));
@@ -317,9 +316,9 @@ public class TechFeedback extends JPanel {
                 @Override public Component getTableCellEditorComponent(
                         JTable t, Object value, boolean sel, int row, int col) {
                     fireEditingStopped();
-                    String apptId    = (String) tableModel.getValueAt(row, 0);
+                    String apptId = (String) tableModel.getValueAt(row, 0);
                     String existingCondition = (String) tableModel.getValueAt(row, 6);
-                    String existingText      = (String) tableModel.getValueAt(row, 7);
+                    String existingText = (String) tableModel.getValueAt(row, 7);
                     showFeedbackDialog(apptId, existingCondition, existingText, row);
                     return new JLabel();
                 }
@@ -331,9 +330,9 @@ public class TechFeedback extends JPanel {
             @Override public void mouseClicked(MouseEvent e) {
                 int row = table.rowAtPoint(e.getPoint());
                 if (row >= 0) {
-                    String apptId            = (String) tableModel.getValueAt(row, 0);
+                    String apptId = (String) tableModel.getValueAt(row, 0);
                     String existingCondition = (String) tableModel.getValueAt(row, 6);
-                    String existingText      = (String) tableModel.getValueAt(row, 7);
+                    String existingText = (String) tableModel.getValueAt(row, 7);
                     showFeedbackDialog(apptId, existingCondition, existingText, row);
                 }
             }
@@ -388,9 +387,9 @@ public class TechFeedback extends JPanel {
         searchField.setToolTipText("Search by any column");
         searchField.getDocument().addDocumentListener(
             new javax.swing.event.DocumentListener() {
-                public void insertUpdate(javax.swing.event.DocumentEvent e)  { applyFilters(); }
-                public void removeUpdate(javax.swing.event.DocumentEvent e)  { applyFilters(); }
-                public void changedUpdate(javax.swing.event.DocumentEvent e) { applyFilters(); }
+                public void insertUpdate(javax.swing.event.DocumentEvent e){ applyFilters(); }
+                public void removeUpdate(javax.swing.event.DocumentEvent e){ applyFilters(); }
+                public void changedUpdate(javax.swing.event.DocumentEvent e){ applyFilters(); }
             });
  
         String[] conditionOptions = {
@@ -524,7 +523,7 @@ public class TechFeedback extends JPanel {
         form.add(area);
         form.add(Box.createVerticalStrut(20));
  
-        // ── Button row ─────────────────────────────────────────────
+       
         JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         btnRow.setOpaque(false);
         btnRow.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -538,7 +537,7 @@ public class TechFeedback extends JPanel {
         cancelBtn.addActionListener(e -> dialog.dispose());
  
         saveBtn.addActionListener(e -> {
-            // Validate
+            
             if (selectedStars[0] == 0) {
                 JOptionPane.showMessageDialog(dialog,
                         "Please select a star rating before saving.",
@@ -602,8 +601,8 @@ public class TechFeedback extends JPanel {
         String vehicleId    = target.getVehicleId();
         String technicianId = techUser.getUserId();
         String serviceType = target.getServiceType();
-        String date         = LocalDate.now().toString(); // yyyy-MM-dd
-        String cleanText    = feedbackText.replace(",", ";"); // guard commas in CSV
+        String date         = LocalDate.now().toString();
+        String cleanText    = feedbackText.replace(",", ";"); 
  
       
         String feedbackFile = "src" + File.separator + "TxtFile"
@@ -699,7 +698,7 @@ public class TechFeedback extends JPanel {
         }
  
     
-        if (searchField    != null) searchField.setText("");
+        if (searchField != null) searchField.setText("");
         if (conditionFilter != null) conditionFilter.setSelectedIndex(0);
  
         applyFilters();
@@ -708,7 +707,7 @@ public class TechFeedback extends JPanel {
  
 
     private void applyFilters() {
-        String query    = searchField     != null ? searchField.getText().trim().toLowerCase() : "";
+        String query    = searchField != null ? searchField.getText().trim().toLowerCase() : "";
         String condSel  = conditionFilter != null
                 ? (String) conditionFilter.getSelectedItem() : "All Conditions";
  
@@ -769,7 +768,7 @@ public class TechFeedback extends JPanel {
             String cond = loadConditionFromFile(a.getId(), user.getUserId());
             if (!cond.isEmpty()) {
                 total++;
-                int rank = conditionToStars(cond) - 1; // 0-4
+                int rank = conditionToStars(cond) - 1; 
                 if (rank >= 0 && rank < 5) condCounts[rank]++;
             }
         }
@@ -781,7 +780,7 @@ public class TechFeedback extends JPanel {
       
         barsPanel.removeAll();
         int max = Math.max(total, 1);
-        for (int i = 4; i >= 0; i--) {  // Excellent → Unsatisfactory
+        for (int i = 4; i >= 0; i--) {  
             barsPanel.add(buildOneBarRow(CONDITION_LABELS[i], condCounts[i], max));
             barsPanel.add(Box.createVerticalStrut(6));
         }
@@ -792,11 +791,11 @@ public class TechFeedback extends JPanel {
 
 
     private String loadConditionFromFile(String apptId, String techId) {
-        return readFeedbackField(apptId, techId, 5); // col 5 = condition
+        return readFeedbackField(apptId, techId, 5);
     }
  
     private String loadFeedbackTextFromFile(String apptId, String techId) {
-        return readFeedbackField(apptId, techId, 6); // col 6 = feedbackText
+        return readFeedbackField(apptId, techId, 6); 
     }
  
     private String readFeedbackField(String apptId, String techId, int fieldIndex) {
@@ -823,12 +822,12 @@ public class TechFeedback extends JPanel {
     private int conditionToStars(String condition) {
         if (condition == null) return 0;
         switch (condition.trim().toLowerCase()) {
-            case "excellent":      return 5;
-            case "good":           return 4;
-            case "average":        return 3;
-            case "poor":           return 2;
+            case "excellent": return 5;
+            case "good": return 4;
+            case "average": return 3;
+            case "poor": return 2;
             case "unsatisfactory": return 1;
-            default:               return 0;
+            default: return 0;
         }
     }
  
@@ -836,12 +835,12 @@ public class TechFeedback extends JPanel {
     private Color conditionColor(String condition) {
         if (condition == null || condition.isEmpty()) return COLOR_MUTED;
         switch (condition.toLowerCase()) {
-            case "excellent":      return new Color(40,  167, 69);
-            case "good":           return new Color(23,  162, 184);
-            case "average":        return new Color(255, 193,  7);
-            case "poor":           return new Color(255, 140,  0);
-            case "unsatisfactory": return new Color(220,  53, 69);
-            default:               return COLOR_MUTED;
+            case "excellent": return new Color(40, 167, 69);
+            case "good": return new Color(23, 162, 184);
+            case "average": return new Color(255, 193, 7);
+            case "poor": return new Color(255, 140, 0);
+            case "unsatisfactory": return new Color(220, 53, 69);
+            default: return COLOR_MUTED;
         }
     }
  
@@ -901,7 +900,7 @@ public class TechFeedback extends JPanel {
             private boolean hov = false;
             { addMouseListener(new MouseAdapter() {
                 public void mouseEntered(MouseEvent e) { hov = true;  repaint(); }
-                public void mouseExited (MouseEvent e) { hov = false; repaint(); }
+                public void mouseExited(MouseEvent e) { hov = false; repaint(); }
             }); }
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -924,18 +923,17 @@ public class TechFeedback extends JPanel {
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         btn.addMouseListener(new MouseAdapter() {
             public void mouseEntered(MouseEvent e) { btn.setForeground(Color.WHITE); }
-            public void mouseExited (MouseEvent e) { btn.setForeground(BLUE_ACCENT); }
+            public void mouseExited(MouseEvent e) { btn.setForeground(BLUE_ACCENT); }
         });
         return btn;
     }
- 
-    // ── Dialog button (Cancel / Save Feedback) ────────────────────
+
     private JButton makeDialogButton(String text, Color bg, Color fg, Color border) {
         JButton btn = new JButton(text) {
             private boolean hov = false;
             { addMouseListener(new MouseAdapter() {
                 public void mouseEntered(MouseEvent e) { hov = true;  repaint(); }
-                public void mouseExited (MouseEvent e) { hov = false; repaint(); }
+                public void mouseExited(MouseEvent e) { hov = false; repaint(); }
             }); }
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
