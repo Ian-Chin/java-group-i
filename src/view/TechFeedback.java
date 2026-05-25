@@ -58,10 +58,7 @@ public class TechFeedback extends JPanel {
         "Customer", "Vehicle", "Status", "Condition", "My Feedback"
     };
  
-    // ════════════════════════════════════════════════════════════════
-    // CONSTRUCTOR
-    // ════════════════════════════════════════════════════════════════
-    public TechFeedback(AppFrame app) {
+     public TechFeedback(AppFrame app) {
         this.app = app;
  
         setLayout(new BorderLayout());
@@ -350,7 +347,7 @@ public class TechFeedback extends JPanel {
         cm.getColumn(4).setPreferredWidth(80);
         cm.getColumn(5).setPreferredWidth(90);
         cm.getColumn(6).setPreferredWidth(100);
-        cm.getColumn(7).setPreferredWidth(260);
+        cm.getColumn(7).setPreferredWidth(300);
  
         JScrollPane scroll = new JScrollPane(table);
         scroll.setBorder(null);
@@ -923,7 +920,7 @@ public class TechFeedback extends JPanel {
         btn.setContentAreaFilled(false);
         btn.setBorderPainted(false);
         btn.setFocusPainted(false);
-        btn.setPreferredSize(new Dimension(100, 28));
+        btn.setPreferredSize(new Dimension(120, 28));
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         btn.addMouseListener(new MouseAdapter() {
             public void mouseEntered(MouseEvent e) { btn.setForeground(Color.WHITE); }
