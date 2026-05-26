@@ -15,9 +15,8 @@ import java.util.*;
  *   [0]apptID  [1]custID  [2]vehicleID  [3]techID  [4]serviceType
  *   [5]status  [6]dateTime(yyyy-MM-dd HH:mm)  [7]durationHrs
  *
- * customer_comments.txt
- *   [0]commentID  [1]custID  [2]apptID  [3]vehicleID  [4]staffID
- *   [5]techID  [6]rating  [7]commentText  [8]date
+ * feedback.txt
+ *   [0]FBID  [1]custID  [2]apptID  [3]vehicleID  [4]techID  [5]ratingWords  [6]comment  [7]date
  *
  * accounts.txt
  *   [0]userID  [1]name  [2]email  [3]password  [4]role  [5]profilePic
@@ -37,7 +36,7 @@ public class DashboardData {
     private static final String BASE = "src" + SEP + "TxtFile" + SEP;
 
     private static final String APPT_FILE     = BASE + "appointments.txt";
-    private static final String COMMENTS_FILE = BASE + "customer_comments.txt";
+    private static final String COMMENTS_FILE = BASE + "feedback.txt";
     private static final String ACCOUNTS_FILE = BASE + "accounts.txt";
     private static final String PAYMENTS_FILE = BASE + "payments.txt";
     private static final String VEHICLES_FILE = BASE + "vehicles.txt";
@@ -92,13 +91,23 @@ public class DashboardData {
         return sum;
     }
 
-    /** Average customer rating from comments[6]. */
+    /** Average customer rating from comments[5] (Word-based). */
     public double averageRating() {
         if (comments.isEmpty()) return 0;
         double sum = 0; int n = 0;
         for (String[] r : comments) {
-            if (r.length < 7) continue;
-            try { sum += Double.parseDouble(r[6].trim()); n++; }
+            if (r.length < 6) continue;
+            try {
+                String ratingStr = r[5].trim();
+                double rating = 0;
+                if(ratingStr.equalsIgnoreCase("Excellent")) rating = 5.0;
+                else if(ratingStr.equalsIgnoreCase("Good")) rating = 4.0;
+                else if(ratingStr.equalsIgnoreCase("Average")) rating = 3.0;
+                else if(ratingStr.equalsIgnoreCase("Poor")) rating = 2.0;
+                else rating = Double.parseDouble(ratingStr);
+                
+                sum += rating; n++; 
+            }
             catch (Exception ignored) {}
         }
         return n == 0 ? 0 : sum / n;
@@ -106,25 +115,24 @@ public class DashboardData {
 
     // ─── Pie chart data ───────────────────────────────────────────────────────
 
-    /** Completed / In Progress / Pending counts. */
+    /** Appointment Status Breakdown. */
     public Map<String, Integer> statusBreakdown() {
         Map<String, Integer> m = new LinkedHashMap<>();
-        m.put("Completed",   completedCount());
-        m.put("In Progress", inProgressCount());
-        m.put("Pending",     pendingCount());
+        for (String[] r : appointments) {
+            if (r.length < 6) continue;
+            String t = r[5].trim();
+            if (!t.isEmpty()) m.merge(t, 1, Integer::sum);
+        }
         return m;
     }
 
-    /** Normal Service vs Major Service counts. */
+    /** Service type breakdown. */
     public Map<String, Integer> serviceTypeBreakdown() {
         Map<String, Integer> m = new LinkedHashMap<>();
-        m.put("Normal Service", 0);
-        m.put("Major Service",  0);
         for (String[] r : appointments) {
             if (r.length < 5) continue;
             String t = r[4].trim();
-            if ("Normal Service".equalsIgnoreCase(t))      m.merge("Normal Service", 1, Integer::sum);
-            else if ("Major Service".equalsIgnoreCase(t))  m.merge("Major Service",  1, Integer::sum);
+            if (!t.isEmpty()) m.merge(t, 1, Integer::sum);
         }
         return m;
     }
@@ -198,15 +206,22 @@ public class DashboardData {
 
     /**
      * Average customer rating per technician.
-     * Uses resolved names. Requires comments[5]=techID and comments[6]=rating.
+     * Uses resolved names. Requires comments[4]=techID and comments[5]=rating.
      */
     public Map<String, Double> avgRatingByTechnician() {
         Map<String, List<Double>> raw = new HashMap<>();
         for (String[] r : comments) {
-            if (r.length < 7) continue;
+            if (r.length < 6) continue;
             try {
-                double rating = Double.parseDouble(r[6].trim());
-                String id     = r[5].trim();
+                String ratingStr = r[5].trim();
+                double rating = 0;
+                if(ratingStr.equalsIgnoreCase("Excellent")) rating = 5.0;
+                else if(ratingStr.equalsIgnoreCase("Good")) rating = 4.0;
+                else if(ratingStr.equalsIgnoreCase("Average")) rating = 3.0;
+                else if(ratingStr.equalsIgnoreCase("Poor")) rating = 2.0;
+                else rating = Double.parseDouble(ratingStr);
+
+                String id     = r[4].trim();
                 String name   = idToName.getOrDefault(id, id);
                 raw.computeIfAbsent(name, k -> new ArrayList<>()).add(rating);
             } catch (Exception ignored) {}
