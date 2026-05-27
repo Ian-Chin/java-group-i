@@ -169,7 +169,7 @@ public class ReportPanel extends JPanel {
                 for (Map.Entry<String, Integer> e : slices.entrySet()) {
                     double sweep = e.getValue() * 360.0 / total;
                     g2.setColor(colors[ci % colors.length]);
-                    g2.fill(new Arc2D.Double(x, y, dim, dim, angle, sweep, Arc2D.PIE));
+                    g2.fill(new Arc2D.Double(x, y, dim, dim, angle, -sweep, Arc2D.PIE));
                     angle -= sweep; ci++;
                 }
                 g2.setColor(UIConstants.BG_CARD);
