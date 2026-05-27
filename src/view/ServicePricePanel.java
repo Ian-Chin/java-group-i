@@ -285,7 +285,7 @@ public class ServicePricePanel extends JPanel {
         JDialog dialog = new JDialog(
                 (Frame) SwingUtilities.getWindowAncestor(this),
                 isEdit ? "Edit Service" : "Add Service", true);
-        dialog.setSize(400, 220);
+        dialog.setSize(400, 300);
         dialog.setLocationRelativeTo(this);
         dialog.setLayout(new BorderLayout());
 
