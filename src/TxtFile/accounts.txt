@@ -3,9 +3,9 @@ S1,Ian Chin,ian@apu.asc.com,admin1234,staff,0
 S2,xxx,x@gmail.com,XXX1234,staff,0
 T1,Alex Wong,alex@apu.asc.com,Tech1234,technician,1
 T2,Sarah Lee,sarah@apu.asc.com,Tech1234,technician,2
-,Mike Tan,mike@gamil.com,Tech1234,technician,4
+T3,Mike Tan,mike@gamil.com,Tech1234,technician,4
 T4,James Lim,james@apu.asc.com,Tech1234,technician,5
-,bbb,bo@gmail.com,Bowie1234,customer,0
+C1,bbb,bo@gmail.com,Bowie1234,customer,0
 C2,test,t@gmail.com,123456789ss,customer,0
 C3,Zhi Lin,lin@gmail.com,lin12345,customer,1
 C4,Didi,didi@gmail.com,didi0000,customer,0
