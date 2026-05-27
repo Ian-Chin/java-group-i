@@ -562,8 +562,11 @@ public class CustomerManagementPanel extends JPanel {
         if (pw.length() < 8 || !pw.matches(".*[a-zA-Z].*") || !pw.matches(".*\\d.*")) {
             error("Password must be 8+ characters with letters and numbers."); return;
         }
+        boolean userExists = accountService.getAllUsers().stream()
+                .anyMatch(u -> u.getName().equalsIgnoreCase(name) && u.getEmail().equalsIgnoreCase(email));
+        if (userExists) { error("User already existed."); return; }
         if (accountService.emailExists(email)) {
-            error("Email already registered."); return;
+            error("Email already existed."); return;
         }
 
         accountService.register(new User(name, email, pw, "customer"));
@@ -586,7 +589,7 @@ public class CustomerManagementPanel extends JPanel {
             error("Enter a valid email."); return;
         }
         if (!email.equalsIgnoreCase(original.getEmail()) && accountService.emailExists(email)) {
-            error("Email already taken."); return;
+            error("Email already existed."); return;
         }
 
         User updated = new User(name, email, original.getPassword(), "customer", original.getProfilePicture());

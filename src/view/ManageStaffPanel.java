@@ -335,7 +335,18 @@ public class ManageStaffPanel extends JPanel {
 
         if (name.isEmpty() || email.isEmpty() || pw.isEmpty()) { error("All fields are required."); return; }
         if (!email.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) { error("Enter a valid email address."); return; }
-        if (accountService.emailExists(email)) { error("This email is already registered."); return; }
+        
+        // 1. If the input name and email match existing user in accounts.txt
+        boolean userExists = accountService.getAllUsers().stream()
+                .anyMatch(u -> u.getName().equalsIgnoreCase(name) && u.getEmail().equalsIgnoreCase(email));
+        if (userExists) { 
+            // 2. System prompts error message: "User already existed."
+            error("User already existed."); 
+            return; 
+        }
+        
+        // Additional check: if only the email exists, prompt accordingly.
+        if (accountService.emailExists(email)) { error("Email already existed."); return; }
 
         accountService.register(new User(name, email, pw, role));
         dlg.dispose();
@@ -350,7 +361,13 @@ public class ManageStaffPanel extends JPanel {
 
         if (name.isEmpty() || email.isEmpty()) { error("Name and email cannot be empty."); return; }
         if (!email.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) { error("Enter a valid email address."); return; }
-        if (!email.equalsIgnoreCase(orig.getEmail()) && accountService.emailExists(email)) { error("This email is already taken."); return; }
+        
+        // 1. If the updated email already exists in accounts.txt for another account
+        if (!email.equalsIgnoreCase(orig.getEmail()) && accountService.emailExists(email)) { 
+            // 2. System prompts error message: "Email already existed."
+            error("Email already existed."); 
+            return; 
+        }
 
         accountService.updateUser(orig.getEmail(),
                 new User(name, email, orig.getPassword(), role, orig.getProfilePicture()));
