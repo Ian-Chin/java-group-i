@@ -31,8 +31,14 @@ public class AppointmentPanel extends JPanel {
     private JComboBox<String> technicianCombo;
     private JComboBox<String> serviceTypeCombo;
     private JButton datePickerBtn;
-    private LocalDate selectedDate = LocalDate.now();
+    private LocalDate selectedDate = null;
     private JComboBox<String> timeCombo;
+
+    private static final String CUSTOMER_PLACEHOLDER = "-- Select a customer --";
+    private static final String TECHNICIAN_PLACEHOLDER = "-- Select a technician --";
+    private static final String SERVICE_PLACEHOLDER = "-- Select a service type --";
+    private static final String TIME_PLACEHOLDER = "-- Select a time slot --";
+    private static final String DATE_PLACEHOLDER = "Select a date";
 
     // Table
     private DefaultTableModel tableModel;
@@ -152,12 +158,13 @@ public class AppointmentPanel extends JPanel {
         formContent.add(Box.createVerticalStrut(14));
 
         serviceTypeCombo = styledCombo();
+        serviceTypeCombo.addItem(SERVICE_PLACEHOLDER);
         serviceTypeCombo.addItem("Normal Service (1 Hour)");
         serviceTypeCombo.addItem("Major Service (3 Hours)");
         formContent.add(formRow("Service Type", serviceTypeCombo));
         formContent.add(Box.createVerticalStrut(14));
 
-        datePickerBtn = new JButton(selectedDate.toString()) {
+        datePickerBtn = new JButton(DATE_PLACEHOLDER) {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -275,44 +282,66 @@ public class AppointmentPanel extends JPanel {
         JPanel controlsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         controlsPanel.setOpaque(false);
 
-        searchField = new JTextField(15) {
+        final String searchPlaceholder = "Search appointments...";
+        JPanel searchWrap = new JPanel(new BorderLayout()) {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                boolean focused = searchField != null && searchField.hasFocus();
                 g2.setColor(Color.WHITE);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
-                g2.dispose();
-                super.paintComponent(g);
-            }
-            @Override protected void paintBorder(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(UIConstants.BORDER_DEFAULT);
-                g2.setStroke(new BasicStroke(1f));
-                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
+                g2.setColor(focused ? UIConstants.PRIMARY : UIConstants.BORDER_DEFAULT);
+                g2.setStroke(new BasicStroke(focused ? 1.5f : 1f));
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 10, 10);
                 g2.dispose();
             }
         };
+        searchWrap.setOpaque(false);
+        searchWrap.setPreferredSize(new Dimension(280, 38));
+
+        JLabel searchIcon = new JLabel("\u2315");
+        searchIcon.setFont(new Font("SansSerif", Font.PLAIN, 16));
+        searchIcon.setForeground(UIConstants.TEXT_MUTED);
+        searchIcon.setBorder(new EmptyBorder(0, 12, 0, 0));
+        searchIcon.setPreferredSize(new Dimension(34, 38));
+
+        searchField = new JTextField();
         searchField.setFont(UIConstants.FONT_BODY);
-        searchField.setForeground(UIConstants.TEXT_DARK);
+        searchField.setBorder(new EmptyBorder(6, 8, 6, 12));
         searchField.setOpaque(false);
-        searchField.setBorder(new EmptyBorder(6, 10, 6, 10));
-        searchField.setPreferredSize(new Dimension(200, 32));
-        searchField.setToolTipText("Search appointments...");
-        searchField.addKeyListener(new java.awt.event.KeyAdapter() {
-            @Override public void keyReleased(java.awt.event.KeyEvent e) {
-                refreshTable();
+        searchField.setText(searchPlaceholder);
+        searchField.setForeground(Color.GRAY);
+        searchField.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override public void focusGained(java.awt.event.FocusEvent e) {
+                if (searchField.getText().equals(searchPlaceholder)) {
+                    searchField.setText(""); searchField.setForeground(Color.BLACK);
+                }
+                searchWrap.repaint();
+            }
+            @Override public void focusLost(java.awt.event.FocusEvent e) {
+                if (searchField.getText().isEmpty()) {
+                    searchField.setText(searchPlaceholder); searchField.setForeground(Color.GRAY);
+                }
+                searchWrap.repaint();
             }
         });
+        searchField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e)  { refreshTable(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e)  { refreshTable(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { refreshTable(); }
+        });
+
+        searchWrap.add(searchIcon, BorderLayout.WEST);
+        searchWrap.add(searchField, BorderLayout.CENTER);
 
         filterCombo = new JComboBox<>(new String[]{"All Status", "Pending", "In Progress", "Completed"});
         filterCombo.setFont(UIConstants.FONT_SMALL_BOLD);
         filterCombo.setBackground(Color.WHITE);
-        filterCombo.setPreferredSize(new Dimension(120, 32));
+        filterCombo.setPreferredSize(new Dimension(120, 38));
         filterCombo.setCursor(new Cursor(Cursor.HAND_CURSOR));
         filterCombo.addActionListener(e -> refreshTable());
 
-        controlsPanel.add(searchField);
+        controlsPanel.add(searchWrap);
         controlsPanel.add(filterCombo);
 
         headerBar.add(listTitle, BorderLayout.WEST);
@@ -519,41 +548,39 @@ public class AppointmentPanel extends JPanel {
     private void loadCustomers() {
         if (customerCombo == null) return;
         customerCombo.removeAllItems();
-        List<User> customers = accountService.getUsersByRole("customer");
-        if (customers.isEmpty()) {
-            customerCombo.addItem("-- No customers --");
-        } else {
-            for (User u : customers) {
-                customerCombo.addItem(u.getName() + " (" + u.getEmail() + ")");
-            }
+        customerCombo.addItem(CUSTOMER_PLACEHOLDER);
+        for (User u : accountService.getUsersByRole("customer")) {
+            customerCombo.addItem(u.getName() + " (" + u.getEmail() + ")");
         }
+        customerCombo.setSelectedIndex(0);
     }
 
     private void loadTechnicians() {
         if (technicianCombo == null) return;
         technicianCombo.removeAllItems();
-        List<User> techs = accountService.getUsersByRole("technician");
-        if (techs.isEmpty()) {
-            technicianCombo.addItem("-- No technicians --");
-        } else {
-            for (User u : techs) {
-                technicianCombo.addItem(u.getName() + " (" + u.getEmail() + ")");
-            }
+        technicianCombo.addItem(TECHNICIAN_PLACEHOLDER);
+        for (User u : accountService.getUsersByRole("technician")) {
+            technicianCombo.addItem(u.getName() + " (" + u.getEmail() + ")");
         }
+        technicianCombo.setSelectedIndex(0);
     }
 
     private void loadTimeSlots() {
         timeCombo.removeAllItems();
+        timeCombo.addItem(TIME_PLACEHOLDER);
         for (int h = 8; h <= 17; h++) {
             timeCombo.addItem(LocalTime.of(h, 0).toString());
         }
+        timeCombo.setSelectedIndex(0);
     }
 
     private void refreshTable() {
         tableModel.setRowCount(0);
         List<Appointment> all = appointmentService.getAll();
 
-        String searchText = (searchField != null) ? searchField.getText().trim().toLowerCase() : "";
+        String rawSearch = (searchField != null) ? searchField.getText().trim() : "";
+        if (rawSearch.equals("Search appointments...")) rawSearch = "";
+        String searchText = rawSearch.toLowerCase();
         String statusFilter = (filterCombo != null && filterCombo.getSelectedItem() != null)
                 ? filterCombo.getSelectedItem().toString() : "All Status";
 
@@ -704,24 +731,35 @@ public class AppointmentPanel extends JPanel {
     }
 
     private void handleCreate() {
-        if (customerCombo.getItemCount() == 0 || customerCombo.getSelectedItem().toString().startsWith("--")) {
+        Object custSel = customerCombo.getSelectedItem();
+        if (custSel == null || CUSTOMER_PLACEHOLDER.equals(custSel.toString())) {
             error("Please select a customer."); return;
         }
-        if (technicianCombo.getItemCount() == 0 || technicianCombo.getSelectedItem().toString().startsWith("--")) {
+        Object techSel = technicianCombo.getSelectedItem();
+        if (techSel == null || TECHNICIAN_PLACEHOLDER.equals(techSel.toString())) {
             error("Please select a technician."); return;
         }
+        Object svcSel = serviceTypeCombo.getSelectedItem();
+        if (svcSel == null || SERVICE_PLACEHOLDER.equals(svcSel.toString())) {
+            error("Please select a service type."); return;
+        }
+        if (selectedDate == null) {
+            error("Please select a date."); return;
+        }
+        Object timeSel = timeCombo.getSelectedItem();
+        if (timeSel == null || TIME_PLACEHOLDER.equals(timeSel.toString())) {
+            error("Please select a time slot."); return;
+        }
 
-        String custEntry = customerCombo.getSelectedItem().toString();
-        String techEntry = technicianCombo.getSelectedItem().toString();
-        String custEmail = extractEmail(custEntry);
-        String techEmail = extractEmail(techEntry);
+        String custEmail = extractEmail(custSel.toString());
+        String techEmail = extractEmail(techSel.toString());
 
-        String serviceSelection = serviceTypeCombo.getSelectedItem().toString();
+        String serviceSelection = svcSel.toString();
         String serviceType = serviceSelection.contains("Normal") ? "Normal Service" : "Major Service";
         int duration = serviceType.equals("Normal Service") ? 1 : 3;
 
         String date = selectedDate.toString();
-        String time = timeCombo.getSelectedItem().toString();
+        String time = timeSel.toString();
         String dateTime = date + " " + time;
 
         String id = appointmentService.nextId();
@@ -770,7 +808,7 @@ public class AppointmentPanel extends JPanel {
     }
 
     private void showCalendarPopup() {
-        LocalDate[] holder = { selectedDate };
+        LocalDate[] holder = { selectedDate != null ? selectedDate : LocalDate.now() };
         showCalendarPopup(datePickerBtn, holder, picked -> {
             selectedDate = picked;
             datePickerBtn.setText(picked.toString());
