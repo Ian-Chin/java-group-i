@@ -93,6 +93,7 @@ public class ViewFeedbackPanel extends JPanel {
 
     private JPanel finalizeSection(JPanel section, DefaultTableModel model, String[] columns, boolean isComments, boolean isEmpty) {
         JTable table = new JTable(model);
+        table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         table.setRowHeight(36);
         table.setFont(UIConstants.FONT_SMALL);
         table.setForeground(UIConstants.TEXT_DARK);
@@ -108,14 +109,28 @@ public class ViewFeedbackPanel extends JPanel {
 
         DefaultTableCellRenderer centre = new DefaultTableCellRenderer();
         centre.setHorizontalAlignment(SwingConstants.CENTER);
-        table.getColumnModel().getColumn(0).setPreferredWidth(30);
+        table.getColumnModel().getColumn(0).setPreferredWidth(40);
         table.getColumnModel().getColumn(0).setCellRenderer(centre);
 
         if (isComments) {
+            table.getColumnModel().getColumn(1).setPreferredWidth(100);
+            table.getColumnModel().getColumn(2).setPreferredWidth(120);
+            table.getColumnModel().getColumn(3).setPreferredWidth(90);
+            table.getColumnModel().getColumn(4).setPreferredWidth(110);
+            table.getColumnModel().getColumn(5).setPreferredWidth(80);
             table.getColumnModel().getColumn(5).setCellRenderer(new RatingRenderer());
+            table.getColumnModel().getColumn(6).setPreferredWidth(600);
+            table.getColumnModel().getColumn(7).setPreferredWidth(100);
+        } else {
+            table.getColumnModel().getColumn(1).setPreferredWidth(100);
+            table.getColumnModel().getColumn(2).setPreferredWidth(120);
+            table.getColumnModel().getColumn(3).setPreferredWidth(110);
+            table.getColumnModel().getColumn(4).setPreferredWidth(150);
+            table.getColumnModel().getColumn(5).setPreferredWidth(600);
+            table.getColumnModel().getColumn(6).setPreferredWidth(100);
         }
 
-        JScrollPane scroll = new JScrollPane(table);
+        JScrollPane scroll = new JScrollPane(table, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         scroll.setBorder(BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1));
         scroll.setPreferredSize(new Dimension(0, 200));
 

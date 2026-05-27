@@ -117,30 +117,17 @@ public class AdminDashboard extends JPanel {
         double avgRating = data.averageRating();
 
         // Payment split
-        int paidCount = 0, unpaidCount = 0;
-        double totalPaid = 0, totalUnpaid = 0;
-        for (String[] p : csv(BASE + "payments.txt")) {
-            if (p.length < 9) continue;
-            double amt = dbl(p[5]);
-            if ("Paid".equalsIgnoreCase(p[8].trim())) { paidCount++;   totalPaid   += amt; }
-            else                                       { unpaidCount++; totalUnpaid += amt; }
-        }
+        int paidCount = data.getPaidCount();
+        int unpaidCount = data.getUnpaidCount();
+        double totalPaid = data.getTotalPaid();
+        double totalUnpaid = data.getTotalUnpaid();
 
         // Name map
-        Map<String, String> names = new HashMap<>();
-        for (String[] p : csv(BASE + "accounts.txt"))
-            if (p.length >= 2) names.put(p[0].trim(), p[1].trim());
+        Map<String, String> names = data.getNamesLookup();
 
         // Upcoming (date >= today, not Completed)
         String today = LocalDate.now().toString();
-        List<String[]> upcoming = new ArrayList<>();
-        for (String[] r : csv(BASE + "appointments.txt")) {
-            if (r.length < 7) continue;
-            String dt = r[6].trim(), date = dt.contains(" ") ? dt.split(" ")[0] : dt;
-            if (date.compareTo(today) >= 0 && !"Completed".equalsIgnoreCase(r[5].trim()))
-                upcoming.add(r);
-        }
-        upcoming.sort((a, b) -> a[6].trim().compareTo(b[6].trim()));
+        List<String[]> upcoming = data.getUpcomingAppointments(today);
 
         Map<String, Integer> svcMap = data.serviceTypeBreakdown();
 
@@ -156,16 +143,26 @@ public class AdminDashboard extends JPanel {
         page.add(welcomeLabel); page.add(sub);
 
         // Row 1: KPI cards
-        JPanel r1 = row(4, 108);
-        r1.add(DashboardCards.buildKpiCard("Total Staff",     String.valueOf(totalStaff),
+        boolean hasFeedback = new File(BASE + "feedback.txt").exists();
+        boolean hasPayments = new File(BASE + "payments.txt").exists();
+
+        List<JPanel> kpiList = new ArrayList<>();
+        kpiList.add(DashboardCards.buildKpiCard("Total Staff",     String.valueOf(totalStaff),
                 "admin · staff · technician", "\u2663", DashboardCards.BLUE));
-        r1.add(DashboardCards.buildKpiCard("Appointments",    String.valueOf(totalAppts),
+        kpiList.add(DashboardCards.buildKpiCard("Appointments",    String.valueOf(totalAppts),
                 data.completedCount() + " completed", "\u2714", DashboardCards.GREEN));
-        r1.add(DashboardCards.buildKpiCard("Revenue (RM)",    String.format("%.0f", revenue),
-                "from paid appointments", "\u2605", DashboardCards.TEAL));
-        r1.add(DashboardCards.buildKpiCard("Avg Rating",
-                avgRating == 0 ? "N/A" : String.format("%.1f / 5", avgRating),
-                "from customer reviews", "\u2665", DashboardCards.AMBER));
+        if (hasPayments) {
+            kpiList.add(DashboardCards.buildKpiCard("Revenue (RM)",    String.format("%.0f", revenue),
+                    "from paid appointments", "\u2605", DashboardCards.TEAL));
+        }
+        if (hasFeedback) {
+            kpiList.add(DashboardCards.buildKpiCard("Avg Rating",
+                    avgRating == 0 ? "N/A" : String.format("%.1f / 5", avgRating),
+                    "from customer reviews", "\u2665", DashboardCards.AMBER));
+        }
+
+        JPanel r1 = row(kpiList.size(), 108);
+        for (JPanel k : kpiList) r1.add(k);
         page.add(r1); page.add(Box.createVerticalStrut(16));
 
         // Row 2: Upcoming + status breakdown
@@ -179,8 +176,10 @@ public class AdminDashboard extends JPanel {
         page.add(r2); page.add(Box.createVerticalStrut(16));
 
         // Row 3: Payment summary + service overview
-        JPanel r3 = row(2, 220);
-        r3.add(DashboardCards.buildPaymentSummaryCard(paidCount, unpaidCount, totalPaid, totalUnpaid));
+        JPanel r3 = row(hasPayments ? 2 : 1, 220);
+        if (hasPayments) {
+            r3.add(DashboardCards.buildPaymentSummaryCard(paidCount, unpaidCount, totalPaid, totalUnpaid));
+        }
         r3.add(buildServiceOverviewCard(svcMap, svc));
         page.add(r3); page.add(Box.createVerticalGlue());
 
@@ -254,11 +253,19 @@ public class AdminDashboard extends JPanel {
         JPanel grid = new JPanel(new GridLayout(2, 2, 10, 10));
         grid.setOpaque(false); grid.setAlignmentX(Component.LEFT_ALIGNMENT);
         grid.setMaximumSize(new Dimension(Integer.MAX_VALUE, 140));
-        grid.add(DashboardCards.buildStatTile("Normal Service",
-                String.valueOf(svcMap.getOrDefault("Normal Service", 0)),
+
+        List<Map.Entry<String, Integer>> svcList = new ArrayList<>(svcMap.entrySet());
+        svcList.sort((a, b) -> b.getValue().compareTo(a.getValue()));
+        String s1 = svcList.size() > 0 ? svcList.get(0).getKey() : "Service A";
+        int v1 = svcList.size() > 0 ? svcList.get(0).getValue() : 0;
+        String s2 = svcList.size() > 1 ? svcList.get(1).getKey() : "Service B";
+        int v2 = svcList.size() > 1 ? svcList.get(1).getValue() : 0;
+
+        grid.add(DashboardCards.buildStatTile(s1,
+                String.valueOf(v1),
                 "\u25CB", DashboardCards.BLUE, new Color(235, 240, 255)));
-        grid.add(DashboardCards.buildStatTile("Major Service",
-                String.valueOf(svcMap.getOrDefault("Major Service", 0)),
+        grid.add(DashboardCards.buildStatTile(s2,
+                String.valueOf(v2),
                 "\u25CF", DashboardCards.PURPLE, new Color(240, 230, 255)));
         grid.add(DashboardCards.buildStatTile("Technicians",
                 String.valueOf(svc.getUsersByRole("technician").size()),

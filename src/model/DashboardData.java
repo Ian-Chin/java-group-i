@@ -81,14 +81,63 @@ public class DashboardData {
 
     /** Actual total revenue — sum of paid payment amounts from payments.txt. */
     public double totalRevenue() {
+        return getTotalPaid();
+    }
+
+    public int getPaidCount() {
+        return countPayments("Paid");
+    }
+
+    public int getUnpaidCount() {
+        return payments.size() - getPaidCount(); // assuming all others are unpaid, or explicitly count "Unpaid"/"Pending"
+    }
+
+    private int countPayments(String status) {
+        int count = 0;
+        for (String[] r : payments) {
+            if (r.length >= 9 && status.equalsIgnoreCase(r[8].trim())) count++;
+        }
+        return count;
+    }
+
+    public double getTotalPaid() {
         double sum = 0;
         for (String[] r : payments) {
             if (r.length < 9) continue;
-            if (!"Paid".equalsIgnoreCase(r[8].trim())) continue;
-            try { sum += Double.parseDouble(r[5].trim()); }
-            catch (NumberFormatException ignored) {}
+            if ("Paid".equalsIgnoreCase(r[8].trim())) {
+                try { sum += Double.parseDouble(r[5].trim()); } catch (NumberFormatException ignored) {}
+            }
         }
         return sum;
+    }
+
+    public double getTotalUnpaid() {
+        double sum = 0;
+        for (String[] r : payments) {
+            if (r.length < 9) continue;
+            if (!"Paid".equalsIgnoreCase(r[8].trim())) {
+                try { sum += Double.parseDouble(r[5].trim()); } catch (NumberFormatException ignored) {}
+            }
+        }
+        return sum;
+    }
+
+    public List<String[]> getUpcomingAppointments(String todayDate) {
+        List<String[]> upcoming = new ArrayList<>();
+        for (String[] r : appointments) {
+            if (r.length < 7) continue;
+            String dt = r[6].trim();
+            String date = dt.contains(" ") ? dt.split(" ")[0] : dt;
+            if (date.compareTo(todayDate) >= 0 && !"Completed".equalsIgnoreCase(r[5].trim())) {
+                upcoming.add(r);
+            }
+        }
+        upcoming.sort((a, b) -> a[6].trim().compareTo(b[6].trim()));
+        return upcoming;
+    }
+
+    public Map<String, String> getNamesLookup() {
+        return idToName;
     }
 
     /** Average customer rating from comments[5] (Word-based). */

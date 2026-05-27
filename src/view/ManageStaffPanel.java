@@ -57,7 +57,7 @@ public class ManageStaffPanel extends JPanel {
         bar.setBackground(UIConstants.BG_CONTENT);
         bar.setBorder(new EmptyBorder(0, 0, 16, 0));
 
-        JLabel title = new JLabel("Staff Management");
+        JLabel title = new JLabel("Staff & Technician Management");
         title.setFont(UIConstants.FONT_BODY_BOLD);
         title.setForeground(UIConstants.TEXT_PRIMARY);
 
