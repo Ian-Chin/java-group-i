@@ -36,7 +36,7 @@ public class DashboardData {
     private static final String BASE = "src" + SEP + "TxtFile" + SEP;
 
     private static final String APPT_FILE     = BASE + "appointments.txt";
-    private static final String COMMENTS_FILE = BASE + "feedback.txt";
+    private static final String COMMENTS_FILE = BASE + "comments.txt";
     private static final String ACCOUNTS_FILE = BASE + "accounts.txt";
     private static final String PAYMENTS_FILE = BASE + "payments.txt";
     private static final String VEHICLES_FILE = BASE + "vehicles.txt";
@@ -140,22 +140,15 @@ public class DashboardData {
         return idToName;
     }
 
-    /** Average customer rating from comments[5] (Word-based). */
+    /** Average customer rating from comments[6] */
     public double averageRating() {
         if (comments.isEmpty()) return 0;
         double sum = 0; int n = 0;
         for (String[] r : comments) {
-            if (r.length < 6) continue;
+            if (r.length < 7) continue;
             try {
-                String ratingStr = r[5].trim();
-                double rating = 0;
-                if(ratingStr.equalsIgnoreCase("Excellent")) rating = 5.0;
-                else if(ratingStr.equalsIgnoreCase("Good")) rating = 4.0;
-                else if(ratingStr.equalsIgnoreCase("Average")) rating = 3.0;
-                else if(ratingStr.equalsIgnoreCase("Poor")) rating = 2.0;
-                else rating = Double.parseDouble(ratingStr);
-                
-                sum += rating; n++; 
+                sum += Double.parseDouble(r[6].trim());
+                n++; 
             }
             catch (Exception ignored) {}
         }
@@ -254,32 +247,23 @@ public class DashboardData {
     }
 
     /**
-     * Average customer rating per technician.
-     * Uses resolved names. Requires comments[4]=techID and comments[5]=rating.
+     * Top rating by customer frequency (5.0, 4.9, 4.8, 4.7).
+     * Uses comments[6] for rating.
      */
-    public Map<String, Double> avgRatingByTechnician() {
-        Map<String, List<Double>> raw = new HashMap<>();
-        for (String[] r : comments) {
-            if (r.length < 6) continue;
-            try {
-                String ratingStr = r[5].trim();
-                double rating = 0;
-                if(ratingStr.equalsIgnoreCase("Excellent")) rating = 5.0;
-                else if(ratingStr.equalsIgnoreCase("Good")) rating = 4.0;
-                else if(ratingStr.equalsIgnoreCase("Average")) rating = 3.0;
-                else if(ratingStr.equalsIgnoreCase("Poor")) rating = 2.0;
-                else rating = Double.parseDouble(ratingStr);
+    public Map<String, Integer> topRatingsByCustomer() {
+        Map<String, Integer> result = new LinkedHashMap<>();
+        result.put("5.0", 0);
+        result.put("4.9", 0);
+        result.put("4.8", 0);
+        result.put("4.7", 0);
 
-                String id     = r[4].trim();
-                String name   = idToName.getOrDefault(id, id);
-                raw.computeIfAbsent(name, k -> new ArrayList<>()).add(rating);
-            } catch (Exception ignored) {}
+        for (String[] r : comments) {
+            if (r.length < 7) continue;
+            String rating = r[6].trim();
+            if (result.containsKey(rating)) {
+                result.put(rating, result.get(rating) + 1);
+            }
         }
-        Map<String, Double> result = new LinkedHashMap<>();
-        raw.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
-                .forEach(e -> result.put(e.getKey(),
-                        e.getValue().stream().mapToDouble(d -> d).average().orElse(0)));
         return result;
     }
 

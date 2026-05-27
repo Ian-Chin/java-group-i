@@ -117,8 +117,8 @@ public class ReportPanel extends JPanel {
                 toNumberMap(data.appointmentsByWeek()), WEEKLY_COLORS, false),
             buildBarChart("Monthly Revenue (RM)",
                 data.revenueByMonth(), REVENUE_COLORS, true),
-            buildBarChart("Top Rating by Customer",
-                toNumberMap(data.topRatingsByCustomer()), RATING_COLORS, false)
+            buildBarChart("Avg Rating by Customers",
+                data.avgRatingByTechnician(), RATING_COLORS, true)
         ));
         dash.add(vgap(22));
 
