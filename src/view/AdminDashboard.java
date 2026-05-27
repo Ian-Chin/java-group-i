@@ -372,7 +372,7 @@ public class AdminDashboard extends JPanel {
         try { ImageIcon raw = new ImageIcon(getClass().getResource("/Image/apu-logo.png"));
             logo.add(new JLabel(new ImageIcon(raw.getImage().getScaledInstance(40,40,Image.SCALE_SMOOTH)))); }
         catch (Exception ignored) {}
-        JLabel brand = new JLabel("APU ASC Admin"); brand.setFont(UIConstants.FONT_SIDEBAR);
+        JLabel brand = new JLabel("APU ASC Manager"); brand.setFont(UIConstants.FONT_SIDEBAR);
         brand.setForeground(Color.WHITE); brand.setAlignmentX(Component.LEFT_ALIGNMENT);
         brand.setBorder(new EmptyBorder(8,0,0,0)); logo.add(brand); sb.add(logo);
         JSeparator sep = new JSeparator(); sep.setForeground(UIConstants.SIDEBAR_DIVIDER);
