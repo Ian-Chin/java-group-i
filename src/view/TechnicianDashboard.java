@@ -42,15 +42,16 @@ public class TechnicianDashboard extends JPanel {
     private TechDashboard dashboardPanel;
     private TechAppointment appointmentPanel;
     private TechFeedback feedbackPanel;
+    private TechReview reviewPanel;
 
     private static final Color BRAND_BLUE = new Color(80, 110, 230);
     private static final Color BANNER_BLUE = new Color(100, 130, 240);
 
     private static final String[] NAV_ITEMS = {
-            "Dashboard", "My Appointments", "My Feedbacks"
+            "Dashboard", "My Appointments", "My Feedbacks", "My Review"
     };
     private static final String[] NAV_ICONS = {
-            "\u2302", "\u2637", "\u2605"
+            "\u2302", "\u2637", "\u2605", "\u2709"
     };
  
  
@@ -501,6 +502,7 @@ public class TechnicianDashboard extends JPanel {
                 if (name.equals("My Appointments") && appointmentPanel != null) appointmentPanel.refresh();
                 if (name.equals("My Feedbacks") && feedbackPanel != null) feedbackPanel.refresh();
                 if (name.equals("Dashboard")&& dashboardPanel != null) dashboardPanel.refresh();
+                if (name.equals("My Review")&& reviewPanel != null) reviewPanel.refresh();
             });
             sidebar.add(btns[i]); sidebar.add(Box.createVerticalStrut(2));
         }
@@ -527,12 +529,14 @@ public class TechnicianDashboard extends JPanel {
         dashboardPanel = new TechDashboard(app);
         appointmentPanel = new TechAppointment(app);
         feedbackPanel = new TechFeedback(app);
- 
+        reviewPanel = new TechReview(app);
 
         contentPanel.add(dashboardPanel, "Dashboard");
         contentPanel.add(appointmentPanel, "My Appointments");
         contentPanel.add(feedbackPanel, "My Feedbacks");
+        contentPanel.add(reviewPanel, "My Review");
         contentPanel.add(buildProfilePage(), "Profile");
+       
  
         rightSide.add(contentPanel, BorderLayout.CENTER);
         add(rightSide, BorderLayout.CENTER);
@@ -562,5 +566,6 @@ public class TechnicianDashboard extends JPanel {
         if (dashboardPanel != null) dashboardPanel.refresh();
         if (appointmentPanel != null) appointmentPanel.refresh();
         if (feedbackPanel != null) feedbackPanel.refresh();
+        if (reviewPanel != null) reviewPanel.refresh();
     }
 }
