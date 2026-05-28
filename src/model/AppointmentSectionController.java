@@ -105,9 +105,12 @@ public class AppointmentSectionController {
     // AMOUNT CALCULATION  ← FIXED
     // ═══════════════════════════════════════════════════════════════
     public String calculateAmount(String serviceType, String durationStr) {
-        // Normal Service = RM 50.00
-        // Major Service  = RM 200.00
-        double price = serviceType.equalsIgnoreCase("Major Service") ? 200.00 : 50.00;
+        PriceConfig prices = new PriceConfig();
+        double price = "Major Service".equalsIgnoreCase(serviceType)
+                ? prices.getMajorPrice()
+                : "Normal Service".equalsIgnoreCase(serviceType)
+                        ? prices.getNormalPrice()
+                        : prices.getPriceFor(serviceType);
         return String.format("%.2f", price);
     }
 

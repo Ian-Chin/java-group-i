@@ -272,7 +272,8 @@ public class AppointmentPanel extends JPanel {
         // Header bar
         JPanel headerBar = new JPanel(new BorderLayout());
         headerBar.setOpaque(false);
-        headerBar.setBorder(new EmptyBorder(0, 4, 12, 0));
+        headerBar.setBorder(new EmptyBorder(0, 0, 14, 0));
+        headerBar.setPreferredSize(new Dimension(0, 52));
 
         JLabel listTitle = new JLabel("Appointments");
         listTitle.setFont(new Font("SansSerif", Font.BOLD, 18));
@@ -648,34 +649,112 @@ public class AppointmentPanel extends JPanel {
         }
         if (target == null) { error("Appointment not found."); return; }
 
-        // Customer combo prefilled to the appointment's current customer
-        JComboBox<String> custBox = new JComboBox<>();
-        List<User> customers = accountService.getUsersByRole("customer");
+        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this),
+                "Edit Appointment", true);
+        dialog.setUndecorated(true);
+        dialog.setSize(480, 620);
+        dialog.setLocationRelativeTo(this);
+        dialog.setLayout(new BorderLayout());
+
+        // Outer rounded card
+        JPanel outer = new JPanel(new BorderLayout()) {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(Color.WHITE);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 24, 24);
+                g2.setColor(new Color(210, 210, 220));
+                g2.setStroke(new BasicStroke(1.2f));
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 24, 24);
+                g2.dispose();
+            }
+        };
+        outer.setOpaque(false);
+
+        // Header
+        JPanel header = new JPanel();
+        header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
+        header.setOpaque(false);
+        header.setBorder(new EmptyBorder(28, 36, 20, 36));
+
+        JLabel icon = new JLabel("\u270E") {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(235, 240, 255));
+                g2.fillOval(0, 0, 48, 48);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        icon.setFont(new Font("SansSerif", Font.PLAIN, 20));
+        icon.setForeground(UIConstants.PRIMARY);
+        icon.setHorizontalAlignment(SwingConstants.CENTER);
+        icon.setVerticalAlignment(SwingConstants.CENTER);
+        icon.setPreferredSize(new Dimension(48, 48));
+        icon.setMaximumSize(new Dimension(48, 48));
+        icon.setAlignmentX(Component.CENTER_ALIGNMENT);
+        header.add(icon);
+        header.add(Box.createVerticalStrut(14));
+
+        JLabel title = new JLabel("Edit Appointment " + id);
+        title.setFont(new Font("SansSerif", Font.BOLD, 20));
+        title.setForeground(UIConstants.TEXT_PRIMARY);
+        title.setAlignmentX(Component.CENTER_ALIGNMENT);
+        header.add(title);
+        header.add(Box.createVerticalStrut(6));
+
+        JLabel subtitle = new JLabel("Update appointment details below.");
+        subtitle.setFont(UIConstants.FONT_SMALL);
+        subtitle.setForeground(UIConstants.TEXT_MUTED);
+        subtitle.setAlignmentX(Component.CENTER_ALIGNMENT);
+        header.add(subtitle);
+
+        JLabel closeBtn = new JLabel("\u2715");
+        closeBtn.setFont(new Font("SansSerif", Font.PLAIN, 16));
+        closeBtn.setForeground(UIConstants.TEXT_MUTED);
+        closeBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        closeBtn.setBorder(new EmptyBorder(12, 0, 0, 16));
+        closeBtn.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) { dialog.dispose(); }
+            @Override public void mouseEntered(MouseEvent e) { closeBtn.setForeground(UIConstants.TEXT_DANGER); }
+            @Override public void mouseExited(MouseEvent e)  { closeBtn.setForeground(UIConstants.TEXT_MUTED); }
+        });
+
+        JPanel headerRow = new JPanel(new BorderLayout());
+        headerRow.setOpaque(false);
+        headerRow.add(header, BorderLayout.CENTER);
+        JPanel closeWrap = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        closeWrap.setOpaque(false);
+        closeWrap.add(closeBtn);
+        headerRow.add(closeWrap, BorderLayout.EAST);
+        outer.add(headerRow, BorderLayout.NORTH);
+
+        // Form body — prefilled with the appointment's current values, no placeholders
+        JComboBox<String> custBox = styledCombo();
         String custSelected = null;
-        for (User u : customers) {
+        for (User u : accountService.getUsersByRole("customer")) {
             String entry = u.getName() + " (" + u.getEmail() + ")";
             custBox.addItem(entry);
             if (u.getEmail().equalsIgnoreCase(target.getCustomerEmail())) custSelected = entry;
         }
         if (custSelected != null) custBox.setSelectedItem(custSelected);
 
-        // Technician combo prefilled
-        JComboBox<String> techBox = new JComboBox<>();
-        List<User> techs = accountService.getUsersByRole("technician");
+        JComboBox<String> techBox = styledCombo();
         String techSelected = null;
-        for (User u : techs) {
+        for (User u : accountService.getUsersByRole("technician")) {
             String entry = u.getName() + " (" + u.getEmail() + ")";
             techBox.addItem(entry);
             if (u.getEmail().equalsIgnoreCase(target.getTechnicianEmail())) techSelected = entry;
         }
         if (techSelected != null) techBox.setSelectedItem(techSelected);
 
-        // Service type
-        JComboBox<String> serviceBox = new JComboBox<>(
-                new String[]{"Normal Service", "Major Service"});
-        serviceBox.setSelectedItem(target.getServiceType());
+        JComboBox<String> serviceBox = styledCombo();
+        serviceBox.addItem("Normal Service (1 Hour)");
+        serviceBox.addItem("Major Service (3 Hours)");
+        serviceBox.setSelectedItem("Major Service".equalsIgnoreCase(target.getServiceType())
+                ? "Major Service (3 Hours)" : "Normal Service (1 Hour)");
 
-        // Date & Time — split the stored "yyyy-MM-dd HH:mm" string
         String currentDate = target.getDateTime();
         String currentTime = "08:00";
         int spaceIdx = target.getDateTime().indexOf(' ');
@@ -687,47 +766,155 @@ public class AppointmentPanel extends JPanel {
         try { parsedDate = LocalDate.parse(currentDate); }
         catch (Exception ex) { parsedDate = LocalDate.now(); }
         final LocalDate[] dateHolder = { parsedDate };
-        JButton dateBtn = new JButton(dateHolder[0].toString());
+
+        JButton dateBtn = new JButton(dateHolder[0].toString()) {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(Color.WHITE);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
+                g2.setColor(UIConstants.BORDER_DEFAULT);
+                g2.setStroke(new BasicStroke(1f));
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        dateBtn.setFont(UIConstants.FONT_BODY);
+        dateBtn.setForeground(UIConstants.TEXT_DARK);
         dateBtn.setHorizontalAlignment(SwingConstants.LEFT);
+        dateBtn.setContentAreaFilled(false);
+        dateBtn.setBorderPainted(false);
+        dateBtn.setFocusPainted(false);
         dateBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        dateBtn.setBorder(new EmptyBorder(0, 12, 0, 12));
         dateBtn.addActionListener(e -> showCalendarPopup(dateBtn, dateHolder,
                 picked -> dateBtn.setText(picked.toString())));
 
-        JComboBox<String> timeBox = new JComboBox<>();
+        JComboBox<String> timeBox = styledCombo();
         for (int h = 8; h <= 17; h++) timeBox.addItem(LocalTime.of(h, 0).toString());
         timeBox.setSelectedItem(currentTime);
 
-        // Duration
-        JComboBox<Integer> durationBox = new JComboBox<>(new Integer[]{1, 2, 3, 4});
-        durationBox.setSelectedItem(target.getDurationHours());
+        JPanel form = new JPanel();
+        form.setLayout(new BoxLayout(form, BoxLayout.Y_AXIS));
+        form.setOpaque(false);
+        form.setBorder(new EmptyBorder(20, 36, 8, 36));
 
-        JPanel form = new JPanel(new GridLayout(0, 2, 8, 8));
-        form.add(new JLabel("Customer:"));     form.add(custBox);
-        form.add(new JLabel("Technician:"));   form.add(techBox);
-        form.add(new JLabel("Service:"));      form.add(serviceBox);
-        form.add(new JLabel("Date:"));         form.add(dateBtn);
-        form.add(new JLabel("Time:"));         form.add(timeBox);
-        form.add(new JLabel("Duration (hrs):")); form.add(durationBox);
+        form.add(formRow("Customer", custBox));
+        form.add(Box.createVerticalStrut(14));
+        form.add(formRow("Assign Technician", techBox));
+        form.add(Box.createVerticalStrut(14));
+        form.add(formRow("Service Type", serviceBox));
+        form.add(Box.createVerticalStrut(14));
+        form.add(dateFormRow("Date", dateBtn));
+        form.add(Box.createVerticalStrut(14));
+        form.add(formRow("Time Slot", timeBox));
+        form.add(Box.createVerticalStrut(22));
 
-        int result = JOptionPane.showConfirmDialog(this, form,
-                "Edit Appointment " + id, JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.PLAIN_MESSAGE);
-        if (result != JOptionPane.OK_OPTION) return;
+        // Buttons
+        JButton cancelBtn = new JButton("Cancel") {
+            private boolean hovering = false;
+            {
+                addMouseListener(new MouseAdapter() {
+                    public void mouseEntered(MouseEvent e) { hovering = true; repaint(); }
+                    public void mouseExited(MouseEvent e)  { hovering = false; repaint(); }
+                });
+            }
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(hovering ? new Color(245, 245, 250) : Color.WHITE);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
+                g2.setColor(UIConstants.BORDER_OUTLINE);
+                g2.setStroke(new BasicStroke(1.5f));
+                g2.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, 12, 12);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        cancelBtn.setFont(UIConstants.FONT_BODY_BOLD);
+        cancelBtn.setForeground(UIConstants.TEXT_DARK);
+        cancelBtn.setContentAreaFilled(false);
+        cancelBtn.setBorderPainted(false);
+        cancelBtn.setFocusPainted(false);
+        cancelBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        cancelBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
+        cancelBtn.addActionListener(e -> dialog.dispose());
 
-        if (custBox.getSelectedItem() == null || techBox.getSelectedItem() == null) {
-            error("Customer and technician are required."); return;
-        }
-        String custEmail = extractEmail(custBox.getSelectedItem().toString());
-        String techEmail = extractEmail(techBox.getSelectedItem().toString());
-        String serviceType = (String) serviceBox.getSelectedItem();
-        String dateTime = dateHolder[0].toString() + " " + timeBox.getSelectedItem();
-        int duration = (Integer) durationBox.getSelectedItem();
+        JButton saveBtn = new JButton("Save Changes") {
+            private boolean hovering = false;
+            {
+                addMouseListener(new MouseAdapter() {
+                    public void mouseEntered(MouseEvent e) { hovering = true; repaint(); }
+                    public void mouseExited(MouseEvent e)  { hovering = false; repaint(); }
+                });
+            }
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(hovering ? UIConstants.PRIMARY_HOVER : UIConstants.PRIMARY);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        saveBtn.setFont(UIConstants.FONT_BODY_BOLD);
+        saveBtn.setForeground(Color.WHITE);
+        saveBtn.setContentAreaFilled(false);
+        saveBtn.setBorderPainted(false);
+        saveBtn.setFocusPainted(false);
+        saveBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        saveBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
+        saveBtn.addActionListener(e -> {
+            Object custSel = custBox.getSelectedItem();
+            Object techSel = techBox.getSelectedItem();
+            Object svcSel  = serviceBox.getSelectedItem();
+            Object timeSel = timeBox.getSelectedItem();
+            if (custSel == null || techSel == null || svcSel == null || timeSel == null) {
+                error("All fields are required."); return;
+            }
+            String custEmail = extractEmail(custSel.toString());
+            String techEmail = extractEmail(techSel.toString());
+            String serviceType = svcSel.toString().contains("Normal") ? "Normal Service" : "Major Service";
+            int duration = serviceType.equals("Normal Service") ? 1 : 3;
+            String dateTime = dateHolder[0].toString() + " " + timeSel.toString();
 
-        if (appointmentService.update(id, custEmail, techEmail, serviceType, dateTime, duration)) {
-            refreshTable();
-        } else {
-            error("Failed to update appointment.");
-        }
+            if (appointmentService.update(id, custEmail, techEmail, serviceType, dateTime, duration)) {
+                dialog.dispose();
+                refreshTable();
+            } else {
+                error("Failed to update appointment.");
+            }
+        });
+
+        JPanel btnRow = new JPanel();
+        btnRow.setLayout(new BoxLayout(btnRow, BoxLayout.X_AXIS));
+        btnRow.setOpaque(false);
+        btnRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        btnRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 48));
+        cancelBtn.setPreferredSize(new Dimension(0, 44));
+        saveBtn.setPreferredSize(new Dimension(0, 44));
+        btnRow.add(cancelBtn);
+        btnRow.add(Box.createHorizontalStrut(12));
+        btnRow.add(saveBtn);
+        form.add(btnRow);
+
+        JSeparator divider = new JSeparator();
+        divider.setForeground(new Color(235, 235, 240));
+        JPanel center = new JPanel(new BorderLayout());
+        center.setOpaque(false);
+        center.add(divider, BorderLayout.NORTH);
+        center.add(form, BorderLayout.CENTER);
+        outer.add(center, BorderLayout.CENTER);
+
+        JPanel footer = new JPanel();
+        footer.setOpaque(false);
+        footer.setPreferredSize(new Dimension(0, 20));
+        outer.add(footer, BorderLayout.SOUTH);
+
+        dialog.setContentPane(outer);
+        dialog.setBackground(new Color(0, 0, 0, 0));
+        dialog.setVisible(true);
     }
 
     private void handleCreate() {
@@ -767,11 +954,21 @@ public class AppointmentPanel extends JPanel {
 
         if (appointmentService.add(appt)) {
             refreshTable();
+            resetForm();
             JOptionPane.showMessageDialog(this, "Appointment " + id + " created successfully!",
                     "Success", JOptionPane.INFORMATION_MESSAGE);
         } else {
             error("Failed to create appointment.");
         }
+    }
+
+    private void resetForm() {
+        if (customerCombo.getItemCount() > 0) customerCombo.setSelectedIndex(0);
+        if (technicianCombo.getItemCount() > 0) technicianCombo.setSelectedIndex(0);
+        if (serviceTypeCombo.getItemCount() > 0) serviceTypeCombo.setSelectedIndex(0);
+        if (timeCombo.getItemCount() > 0) timeCombo.setSelectedIndex(0);
+        selectedDate = null;
+        datePickerBtn.setText(DATE_PLACEHOLDER);
     }
 
     private String extractEmail(String entry) {

@@ -7,6 +7,7 @@ import model.BackgroundImageStorage;
 import model.PaymentService;
 import model.ProfilePicStorage;
 import model.User;
+import model.VehicleService;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -1509,6 +1510,7 @@ public class CounterStaffDashboard extends JPanel {
         // Collect appointments for this date
         AppointmentService apptService = new AppointmentService();
         AccountService     acctService = app.getAccountService();
+        VehicleService     vehService  = new VehicleService();
         String             dateStr     = date.toString();
 
         List<Appointment> dayAppts = apptService.getAll().stream()
@@ -1541,7 +1543,7 @@ public class CounterStaffDashboard extends JPanel {
         int endHour      = 20;
         int totalHours   = endHour - startHour;
         int leftPad      = 16;
-        int rowHeight    = 100;
+        int rowHeight    = 118;
         int headerHeight = 32;
 
         JPanel ganttChart = new JPanel() {
@@ -1629,7 +1631,8 @@ public class CounterStaffDashboard extends JPanel {
                         g2.fillRoundRect(barX, barY, 5, barH, 4, 4);
 
                         // Text inside the bar
-                        String custName = resolveUserName(acctService, a.getCustomerEmail());
+                        String custName    = resolveUserName(acctService, a.getCustomerEmail());
+                        String vehicleInfo = vehService.getVehiclePlate(a.getVehicleId());
                         g2.setColor(Color.WHITE);
 
                         g2.setFont(new Font("SansSerif", Font.BOLD, 12));
@@ -1639,8 +1642,9 @@ public class CounterStaffDashboard extends JPanel {
 
                         g2.setFont(new Font("SansSerif", Font.PLAIN, 12));
                         FontMetrics fm2 = g2.getFontMetrics();
-                        if (fm2.stringWidth(a.getServiceType()) < barW - 16)
-                            g2.drawString(a.getServiceType(), barX + 12, barY + 35);
+                        String svcLine = a.getServiceType() + " (" + a.getDurationHours() + "h)";
+                        if (fm2.stringWidth(svcLine) < barW - 16)
+                            g2.drawString(svcLine, barX + 12, barY + 35);
 
                         g2.setFont(new Font("SansSerif", Font.PLAIN, 11));
                         FontMetrics fm3 = g2.getFontMetrics();
@@ -1648,12 +1652,17 @@ public class CounterStaffDashboard extends JPanel {
                         if (fm3.stringWidth(custLine) < barW - 16)
                             g2.drawString(custLine, barX + 12, barY + 51);
 
-                        g2.setFont(new Font("SansSerif", Font.PLAIN, 10));
+                        g2.setFont(new Font("SansSerif", Font.PLAIN, 11));
                         FontMetrics fm4 = g2.getFontMetrics();
-                        String line4 = timePart + "  \u2022  "
-                                + a.getDurationHours() + "h  \u2022  " + a.getStatus();
-                        if (fm4.stringWidth(line4) < barW - 16)
-                            g2.drawString(line4, barX + 12, barY + 66);
+                        String vehLine = "Vehicle: " + vehicleInfo;
+                        if (fm4.stringWidth(vehLine) < barW - 16)
+                            g2.drawString(vehLine, barX + 12, barY + 67);
+
+                        g2.setFont(new Font("SansSerif", Font.PLAIN, 10));
+                        FontMetrics fm5 = g2.getFontMetrics();
+                        String line5 = timePart + "  \u2022  " + a.getStatus();
+                        if (fm5.stringWidth(line5) < barW - 16)
+                            g2.drawString(line5, barX + 12, barY + 84);
                     }
                     rowIdx++;
                 }
