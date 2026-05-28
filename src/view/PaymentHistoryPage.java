@@ -467,19 +467,20 @@ public class PaymentHistoryPage extends JPanel {
 
         // Determine which column index the service is sorting on so we can
         int sortCol;
-        SortOrder sortOrder;
         switch (selectedIndex) {
-            case 1:  sortCol = 6; sortOrder = SortOrder.DESCENDING; break;
-            case 2:  sortCol = 6; sortOrder = SortOrder.ASCENDING;  break;
-            case 3:  sortCol = 5; sortOrder = SortOrder.DESCENDING; break;
-            case 4:  sortCol = 5; sortOrder = SortOrder.ASCENDING;  break;
-            case 5:  sortCol = 7; sortOrder = SortOrder.ASCENDING;  break;
-            case 6:  sortCol = 0; sortOrder = SortOrder.ASCENDING;  break;
-            default: rowSorter.setSortKeys(null); return;
+        case 1:  sortCol = 6; break;
+        case 2:  sortCol = 6; break;
+        case 3:  sortCol = 5; break;
+        case 4:  sortCol = 5; break;
+        case 5:  sortCol = 7; break;
+        case 6:  sortCol = 0; break;
+        default: rowSorter.setSortKeys(null); return;
         }
 
         // Wrap the service's Comparator<String[]> into a column-level
         // Comparator<Object> that TableRowSorter expects
+        rowSorter.setSortKeys(null);
+        
         rowSorter.setComparator(sortCol, (Comparator<Object>) (a, b) -> {
             // Reconstruct minimal String[] stubs containing only the
             // relevant column so the service comparator can do its work
@@ -491,7 +492,7 @@ public class PaymentHistoryPage extends JPanel {
         });
 
         List<RowSorter.SortKey> keys = new ArrayList<>();
-        keys.add(new RowSorter.SortKey(sortCol, sortOrder));
+        keys.add(new RowSorter.SortKey(sortCol, SortOrder.ASCENDING));
         rowSorter.setSortKeys(keys);
     }
 
