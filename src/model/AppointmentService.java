@@ -271,11 +271,10 @@ public class AppointmentService {
 
             String status = a.getStatus();
 
-            // Step 2: We only care about "Pending" or "In Progress" appointments.
+            // Step 2: Upcoming only shows appointments the customer has accepted.
             //         "Completed" appointments go to the Payment section, not here.
             if (!status.equalsIgnoreCase("Pending")
-                    && !status.equalsIgnoreCase("In Progress")
-                    && !status.equalsIgnoreCase(STATUS_WAITING_CONFIRMATION)) {
+                    && !status.equalsIgnoreCase("In Progress")) {
                 continue;
             }
 
@@ -301,8 +300,8 @@ public class AppointmentService {
             }
         }
 
-        // Step 6: Sort so the soonest appointment appears at the top
-        result.sort((rowA, rowB) -> rowA[5].compareTo(rowB[5]));
+        // Step 6: Sort by appointment date/time from oldest to latest.
+        result.sort((rowA, rowB) -> compareDateTime(rowA[5], rowB[5]));
 
         return result;
     }
@@ -419,6 +418,24 @@ public class AppointmentService {
 
     public int countAwaitingConfirmationAppointments(String userId, String email) {
         return getAwaitingConfirmationAppointments(userId, email).size();
+    }
+
+    public Appointment findById(String appointmentId) {
+        for (Appointment appointment : getAll()) {
+            if (appointment.getId().equalsIgnoreCase(appointmentId)) {
+                return appointment;
+            }
+        }
+        return null;
+    }
+
+    public boolean updateAwaitingAppointmentDecision(String appointmentId,
+                                                     String userId,
+                                                     String email,
+                                                     boolean accepted) {
+        return accepted
+                ? acceptAwaitingAppointment(appointmentId, userId, email)
+                : rejectAwaitingAppointment(appointmentId, userId, email);
     }
 
     public boolean acceptAwaitingAppointment(String appointmentId, String userId, String email) {
@@ -662,5 +679,14 @@ public class AppointmentService {
                 trimmed.substring(0, splitAt).trim(),
                 trimmed.substring(splitAt + 1).trim()
         };
+    }
+
+    private int compareDateTime(String first, String second) {
+        try {
+            return LocalDateTime.parse(first, DATE_TIME_FORMAT)
+                    .compareTo(LocalDateTime.parse(second, DATE_TIME_FORMAT));
+        } catch (DateTimeParseException e) {
+            return String.valueOf(first).compareTo(String.valueOf(second));
+        }
     }
 }

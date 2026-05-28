@@ -37,7 +37,6 @@ public class CustomerDashboard extends JPanel {
     private JLabel profileLabel;
     private JLabel avatarLabel;
     private JLabel headerTitle;
-    private JLabel notificationBadge;
 
     // ── Avatar colours ────────────────────────────────────────────
     private static final Color[] AVATAR_COLORS = {
@@ -190,7 +189,6 @@ public class CustomerDashboard extends JPanel {
             profileImage        = profilePicStorage.loadImage(user.getUserId());
         }
         if (avatarLabel != null) avatarLabel.repaint();
-        refreshNotificationBadge();
 
         if (staffReviewPage != null) staffReviewPage.setUser(app.getLoggedInUserObj());
         if (myFeedbackPage  != null) myFeedbackPage.setUser(app.getLoggedInUserObj());
@@ -254,7 +252,8 @@ public class CustomerDashboard extends JPanel {
         outer.add(row2);
         outer.add(Box.createVerticalStrut(14));
 
-        JPanel row3 = buildBottomRow(upcoming, unpaid);
+        List<AppointmentService.Appointment> incoming = getAwaitingAppointmentsForCurrentUser();
+        JPanel row3 = buildBottomRow(upcoming, incoming, unpaid);
         row3.setAlignmentX(Component.LEFT_ALIGNMENT);
         outer.add(row3);
 
@@ -502,51 +501,134 @@ public class CustomerDashboard extends JPanel {
     // ═══════════════════════════════════════════════════════════════
     // ROW 3 — UPCOMING APPOINTMENTS + PENDING PAYMENTS
     // ═══════════════════════════════════════════════════════════════
-    private JPanel buildBottomRow(List<String[]> upcoming, List<String[]> unpaid) {
+    private JPanel buildBottomRow(List<String[]> upcoming,
+                                  List<AppointmentService.Appointment> incoming,
+                                  List<String[]> unpaid) {
         JPanel row = new JPanel(new GridLayout(1, 2, 12, 0));
         row.setOpaque(false);
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 220));
 
-        row.add(buildUpcomingCard(upcoming));
+        row.add(buildAppointmentsCard(upcoming, incoming));
         row.add(buildPendingPaymentsCard(unpaid));
         return row;
     }
 
-    private JPanel buildUpcomingCard(List<String[]> upcoming) {
+    private JPanel buildAppointmentsCard(List<String[]> upcoming,
+                                         List<AppointmentService.Appointment> incoming) {
         JPanel card = createCard();
-        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setLayout(new BorderLayout());
         card.setBorder(new EmptyBorder(14, 14, 14, 14));
+
+        JPanel headerBlock = new JPanel();
+        headerBlock.setLayout(new BoxLayout(headerBlock, BoxLayout.Y_AXIS));
+        headerBlock.setOpaque(false);
 
         JPanel titleRow = new JPanel(new BorderLayout());
         titleRow.setOpaque(false);
         titleRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
 
-        JLabel titleLbl = new JLabel("Upcoming Appointments");
-        titleLbl.setFont(new Font("SansSerif", Font.BOLD, 13));
-        titleLbl.setForeground(UIConstants.TEXT_PRIMARY);
-        titleRow.add(titleLbl, BorderLayout.WEST);
+        JButton upcomingTab = createAppointmentTabButton("Upcoming Appointments", true);
+        JButton incomingTab = createAppointmentTabButton("Incoming Appointments", false);
+        JPanel tabs = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
+        tabs.setOpaque(false);
+        tabs.add(upcomingTab);
+        tabs.add(incomingTab);
+        titleRow.add(tabs, BorderLayout.WEST);
 
+        CardLayout linkLayout = new CardLayout();
+        JPanel linkPanel = new JPanel(linkLayout);
+        linkPanel.setOpaque(false);
+
+        JPanel upcomingLinkPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        upcomingLinkPanel.setOpaque(false);
         if (upcoming.size() > 2) {
-            JButton viewAll = createTextLinkButton("View all");
-            viewAll.addActionListener(e ->
+            JButton viewAllUpcoming = createTextLinkButton("View all");
+            viewAllUpcoming.addActionListener(e ->
                     showViewAllDialog("All Upcoming Appointments", upcoming, false));
-            titleRow.add(viewAll, BorderLayout.EAST);
+            upcomingLinkPanel.add(viewAllUpcoming);
         }
-        card.add(titleRow);
-        card.add(Box.createVerticalStrut(8));
-        card.add(makeSeparator());
-        card.add(Box.createVerticalStrut(8));
+
+        JPanel incomingLinkPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        incomingLinkPanel.setOpaque(false);
+        if (incoming.size() > 2) {
+            JButton viewAllIncoming = createTextLinkButton("View all");
+            viewAllIncoming.addActionListener(e -> showIncomingAppointmentsDialog("All Incoming Appointments"));
+            incomingLinkPanel.add(viewAllIncoming);
+        }
+
+        linkPanel.add(upcomingLinkPanel, "Upcoming");
+        linkPanel.add(incomingLinkPanel, "Incoming");
+        titleRow.add(linkPanel, BorderLayout.EAST);
+
+        headerBlock.add(titleRow);
+        headerBlock.add(Box.createVerticalStrut(8));
+        headerBlock.add(makeSeparator());
+        headerBlock.add(Box.createVerticalStrut(8));
+        card.add(headerBlock, BorderLayout.NORTH);
+
+        CardLayout contentLayout = new CardLayout();
+        JPanel contentPanel = new JPanel(contentLayout);
+        contentPanel.setOpaque(false);
+        contentPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        contentPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 180));
+        contentPanel.add(buildUpcomingAppointmentContent(upcoming), "Upcoming");
+        contentPanel.add(buildIncomingAppointmentContent(incoming), "Incoming");
+        card.add(contentPanel, BorderLayout.CENTER);
+
+        upcomingTab.addActionListener(e -> {
+            updateAppointmentTabStyle(upcomingTab, true);
+            updateAppointmentTabStyle(incomingTab, false);
+            contentLayout.show(contentPanel, "Upcoming");
+            linkLayout.show(linkPanel, "Upcoming");
+        });
+        incomingTab.addActionListener(e -> {
+            updateAppointmentTabStyle(upcomingTab, false);
+            updateAppointmentTabStyle(incomingTab, true);
+            contentLayout.show(contentPanel, "Incoming");
+            linkLayout.show(linkPanel, "Incoming");
+        });
+
+        return card;
+    }
+
+    private JPanel buildUpcomingAppointmentContent(List<String[]> upcoming) {
+        JPanel content = new JPanel(new BorderLayout());
+        content.setOpaque(false);
+        content.setAlignmentX(Component.LEFT_ALIGNMENT);
+        content.setMaximumSize(new Dimension(Integer.MAX_VALUE, 180));
 
         if (upcoming.isEmpty()) {
-            card.add(makeEmptyLabel("No upcoming appointments."));
+            content.add(makeEmptyLabel("No upcoming appointments."), BorderLayout.NORTH);
         } else {
             int show = Math.min(2, upcoming.size());
+            JPanel rows = new JPanel(new GridLayout(show, 1, 0, 6));
+            rows.setOpaque(false);
             for (int i = 0; i < show; i++) {
-                card.add(buildUpcomingRow(upcoming.get(i)));
-                if (i < show - 1) card.add(Box.createVerticalStrut(6));
+                rows.add(buildUpcomingRow(upcoming.get(i)));
             }
+            content.add(rows, BorderLayout.NORTH);
         }
-        return card;
+        return content;
+    }
+
+    private JPanel buildIncomingAppointmentContent(List<AppointmentService.Appointment> incoming) {
+        JPanel content = new JPanel(new BorderLayout());
+        content.setOpaque(false);
+        content.setAlignmentX(Component.LEFT_ALIGNMENT);
+        content.setMaximumSize(new Dimension(Integer.MAX_VALUE, 180));
+
+        if (incoming.isEmpty()) {
+            content.add(makeEmptyLabel("No incoming appointments."), BorderLayout.NORTH);
+        } else {
+            int show = Math.min(2, incoming.size());
+            JPanel rows = new JPanel(new GridLayout(show, 1, 0, 6));
+            rows.setOpaque(false);
+            for (int i = 0; i < show; i++) {
+                rows.add(buildIncomingAppointmentRow(incoming.get(i), null));
+            }
+            content.add(rows, BorderLayout.NORTH);
+        }
+        return content;
     }
 
     private JPanel buildPendingPaymentsCard(List<String[]> unpaid) {
@@ -638,14 +720,14 @@ public class CustomerDashboard extends JPanel {
         info.setBorder(new EmptyBorder(0, 4, 0, 0));
 
         JLabel l1 = new JLabel(apptId + " \u00B7 " + serviceType);
-        l1.setFont(new Font("SansSerif", Font.BOLD, 12));
+        l1.setFont(new Font("SansSerif", Font.BOLD, 13));
 
         JLabel l2 = new JLabel(dateTime + " \u00B7 " + vehicleLbl);
-        l2.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        l2.setFont(new Font("SansSerif", Font.PLAIN, 12));
         l2.setForeground(UIConstants.TEXT_MUTED);
 
         JLabel l3 = new JLabel("Tech: " + techName);
-        l3.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        l3.setFont(new Font("SansSerif", Font.PLAIN, 12));
         l3.setForeground(UIConstants.TEXT_MUTED);
 
         info.add(Box.createVerticalGlue());
@@ -709,7 +791,7 @@ public class CustomerDashboard extends JPanel {
             confirmBtn.setMaximumSize(new Dimension(72, 22));
             confirmBtn.setPreferredSize(new Dimension(72, 22));
             confirmBtn.addActionListener(e -> {
-                AppointmentService.Appointment appointment = findAppointmentById(apptId);
+                AppointmentService.Appointment appointment = appointmentService.findById(apptId);
                 if (appointment != null) {
                     showAppointmentDecisionDialog(appointment, null);
                 }
@@ -1374,69 +1456,8 @@ public class CustomerDashboard extends JPanel {
             }
         });
 
-        JButton notificationButton = createNotificationButton();
-        notificationButton.addActionListener(e -> showAppointmentNotificationDialog());
-
-        profileArea.add(notificationButton);
         profileArea.add(profileButton);
         return profileArea;
-    }
-
-    private JButton createNotificationButton() {
-        JButton button = new JButton() {
-            private boolean hover = false;
-            {
-                addMouseListener(new MouseAdapter() {
-                    @Override public void mouseEntered(MouseEvent e) { hover = true; repaint(); }
-                    @Override public void mouseExited(MouseEvent e)  { hover = false; repaint(); }
-                });
-            }
-
-            @Override protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(hover ? new Color(245, 246, 250) : Color.WHITE);
-                g2.fillOval(0, 0, getWidth() - 1, getHeight() - 1);
-                g2.setColor(UIConstants.BORDER_DEFAULT);
-                g2.drawOval(0, 0, getWidth() - 1, getHeight() - 1);
-                g2.setColor(UIConstants.TEXT_PRIMARY);
-                g2.setStroke(new BasicStroke(1.8f));
-                int cx = getWidth() / 2;
-                g2.drawArc(cx - 8, 10, 16, 16, 25, 130);
-                g2.drawLine(cx - 8, 18, cx - 8, 24);
-                g2.drawLine(cx + 8, 18, cx + 8, 24);
-                g2.drawLine(cx - 10, 24, cx + 10, 24);
-                g2.fillOval(cx - 2, 28, 4, 4);
-                g2.dispose();
-            }
-        };
-        button.setPreferredSize(new Dimension(38, 38));
-        button.setContentAreaFilled(false);
-        button.setBorderPainted(false);
-        button.setFocusPainted(false);
-        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        button.setToolTipText("Appointment notifications");
-        button.setLayout(null);
-
-        notificationBadge = new JLabel("0", SwingConstants.CENTER);
-        notificationBadge.setFont(new Font("SansSerif", Font.BOLD, 10));
-        notificationBadge.setForeground(Color.WHITE);
-        notificationBadge.setOpaque(true);
-        notificationBadge.setBackground(UIConstants.TEXT_DANGER);
-        notificationBadge.setBounds(23, 0, 17, 17);
-        button.add(notificationBadge);
-        refreshNotificationBadge();
-        return button;
-    }
-
-    private void refreshNotificationBadge() {
-        if (notificationBadge == null) return;
-        User user = app.getLoggedInUserObj();
-        int count = user == null ? 0
-                : appointmentService.countAwaitingConfirmationAppointments(
-                        user.getUserId(), user.getEmail());
-        notificationBadge.setText(count > 9 ? "9+" : String.valueOf(count));
-        notificationBadge.setVisible(count > 0);
     }
 
     private List<AppointmentService.Appointment> getAwaitingAppointmentsForCurrentUser() {
@@ -1446,9 +1467,9 @@ public class CustomerDashboard extends JPanel {
                 user.getUserId(), user.getEmail());
     }
 
-    private void showAppointmentNotificationDialog() {
+    private void showIncomingAppointmentsDialog(String dialogTitle) {
         JDialog dialog = new JDialog(
-                (Frame) SwingUtilities.getWindowAncestor(this), "Appointment Notifications", true);
+                (Frame) SwingUtilities.getWindowAncestor(this), dialogTitle, true);
         dialog.setSize(560, 480);
         dialog.setLocationRelativeTo(this);
         dialog.setLayout(new BorderLayout());
@@ -1457,7 +1478,7 @@ public class CustomerDashboard extends JPanel {
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(Color.WHITE);
         header.setBorder(new EmptyBorder(16, 22, 12, 22));
-        JLabel title = new JLabel("Appointments Awaiting Confirmation");
+        JLabel title = new JLabel(dialogTitle);
         title.setFont(new Font("SansSerif", Font.BOLD, 15));
         title.setForeground(UIConstants.TEXT_PRIMARY);
         header.add(title, BorderLayout.WEST);
@@ -1491,7 +1512,7 @@ public class CustomerDashboard extends JPanel {
             listPanel.add(makeEmptyLabel("There are no appointments awaiting your confirmation."));
         } else {
             for (int i = 0; i < appointments.size(); i++) {
-                listPanel.add(buildAwaitingAppointmentRow(appointments.get(i), dialog));
+                listPanel.add(buildIncomingAppointmentRow(appointments.get(i), dialog));
                 if (i < appointments.size() - 1) listPanel.add(Box.createVerticalStrut(6));
             }
         }
@@ -1505,7 +1526,7 @@ public class CustomerDashboard extends JPanel {
         return sp;
     }
 
-    private JPanel buildAwaitingAppointmentRow(AppointmentService.Appointment appointment,
+    private JPanel buildIncomingAppointmentRow(AppointmentService.Appointment appointment,
                                                JDialog parentDialog) {
         String technician = appointmentController.resolveUserName(
                 app.getAccountService().getAllUsers(), appointment.getTechnicianId());
@@ -1516,21 +1537,46 @@ public class CustomerDashboard extends JPanel {
         panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 82));
         panel.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1),
-                new EmptyBorder(8, 10, 8, 10)));
+                new EmptyBorder(8, 8, 8, 8)));
         panel.setCursor(new Cursor(Cursor.HAND_CURSOR));
+
+        JLabel icon = new JLabel() {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(150, 100, 200, 25));
+                g2.fillOval(0, 0, 32, 32);
+                g2.setColor(new Color(120, 70, 180));
+                g2.setStroke(new BasicStroke(1.5f));
+                int cx = 16;
+                g2.drawArc(cx - 8, 8, 16, 15, 25, 130);
+                g2.drawLine(cx - 8, 16, cx - 8, 22);
+                g2.drawLine(cx + 8, 16, cx + 8, 22);
+                g2.drawLine(cx - 10, 22, cx + 10, 22);
+                g2.fillOval(cx - 2, 25, 4, 4);
+                g2.dispose();
+            }
+        };
+        icon.setPreferredSize(new Dimension(32, 32));
+
+        JPanel iconWrapper = new JPanel(new GridBagLayout());
+        iconWrapper.setOpaque(false);
+        iconWrapper.add(icon);
+        panel.add(iconWrapper, BorderLayout.WEST);
 
         JPanel info = new JPanel();
         info.setLayout(new BoxLayout(info, BoxLayout.Y_AXIS));
         info.setOpaque(false);
+        info.setBorder(new EmptyBorder(0, 4, 0, 0));
 
         JLabel main = new JLabel(appointment.getId() + " - " + appointment.getServiceType());
-        main.setFont(new Font("SansSerif", Font.BOLD, 12));
+        main.setFont(new Font("SansSerif", Font.BOLD, 13));
         main.setForeground(UIConstants.TEXT_PRIMARY);
         JLabel second = new JLabel(appointment.getDateTime() + " - " + vehicle);
-        second.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        second.setFont(new Font("SansSerif", Font.PLAIN, 12));
         second.setForeground(UIConstants.TEXT_MUTED);
         JLabel third = new JLabel("Technician: " + technician);
-        third.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        third.setFont(new Font("SansSerif", Font.PLAIN, 12));
         third.setForeground(UIConstants.TEXT_MUTED);
 
         info.add(Box.createVerticalGlue());
@@ -1545,7 +1591,7 @@ public class CustomerDashboard extends JPanel {
         JLabel status = new JLabel("Awaiting", SwingConstants.CENTER);
         status.setFont(new Font("SansSerif", Font.BOLD, 10));
         status.setForeground(new Color(120, 70, 180));
-        status.setPreferredSize(new Dimension(74, 22));
+        status.setPreferredSize(new Dimension(72, 22));
         panel.add(status, BorderLayout.EAST);
 
         panel.addMouseListener(new MouseAdapter() {
@@ -1554,15 +1600,6 @@ public class CustomerDashboard extends JPanel {
             }
         });
         return panel;
-    }
-
-    private AppointmentService.Appointment findAppointmentById(String appointmentId) {
-        for (AppointmentService.Appointment appointment : appointmentService.getAll()) {
-            if (appointment.getId().equalsIgnoreCase(appointmentId)) {
-                return appointment;
-            }
-        }
-        return null;
     }
 
     private void showAppointmentDecisionDialog(AppointmentService.Appointment appointment,
@@ -1627,11 +1664,8 @@ public class CustomerDashboard extends JPanel {
         User user = app.getLoggedInUserObj();
         if (user == null) return;
 
-        boolean saved = accepted
-                ? appointmentService.acceptAwaitingAppointment(
-                        appointment.getId(), user.getUserId(), user.getEmail())
-                : appointmentService.rejectAwaitingAppointment(
-                        appointment.getId(), user.getUserId(), user.getEmail());
+        boolean saved = appointmentService.updateAwaitingAppointmentDecision(
+                appointment.getId(), user.getUserId(), user.getEmail(), accepted);
 
         if (!saved) {
             JOptionPane.showMessageDialog(this,
@@ -1957,6 +1991,23 @@ public class CustomerDashboard extends JPanel {
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         btn.setMargin(new Insets(0, 0, 0, 0));
         return btn;
+    }
+
+    private JButton createAppointmentTabButton(String text, boolean active) {
+        JButton btn = new JButton(text);
+        btn.setContentAreaFilled(false);
+        btn.setBorderPainted(false);
+        btn.setFocusPainted(false);
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btn.setHorizontalAlignment(SwingConstants.LEFT);
+        btn.setMargin(new Insets(0, 0, 0, 0));
+        updateAppointmentTabStyle(btn, active);
+        return btn;
+    }
+
+    private void updateAppointmentTabStyle(JButton btn, boolean active) {
+        btn.setFont(new Font("SansSerif", Font.BOLD, 13));
+        btn.setForeground(active ? UIConstants.TEXT_PRIMARY : UIConstants.TEXT_MUTED);
     }
 
     private JButton createActionButton(String text, Color bg, Color fg) {
