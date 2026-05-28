@@ -73,16 +73,14 @@ public class ServicePricePanel extends JPanel {
         cards.add(buildTierCard(
                 "Normal Service", "1 hour",
                 new Color(80, 110, 230),
-                normalField,
-                normalCount + " appointments"));
+                normalField));
 
         // Major service card
         majorField = priceField(priceConfig.getMajorPrice());
         cards.add(buildTierCard(
                 "Major Service", "3 hours",
                 new Color(40, 180, 200),
-                majorField,
-                majorCount + " appointments"));
+                majorField));
 
         section.add(cards, BorderLayout.CENTER);
 
@@ -101,7 +99,7 @@ public class ServicePricePanel extends JPanel {
     }
 
     private JPanel buildTierCard(String tier, String duration, Color accent,
-                                  JTextField priceField, String statsText) {
+                                  JTextField priceField) {
         JPanel card = new JPanel() {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -132,13 +130,8 @@ public class ServicePricePanel extends JPanel {
         durLabel.setForeground(UIConstants.TEXT_MUTED);
         durLabel.setBorder(new EmptyBorder(2, 0, 8, 0));
 
-        JLabel statsLabel = new JLabel(statsText);
-        statsLabel.setFont(UIConstants.FONT_SMALL);
-        statsLabel.setForeground(accent);
-
         left.add(tierLabel);
         left.add(durLabel);
-        left.add(statsLabel);
 
         // Right: RM label + price input
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
@@ -174,6 +167,17 @@ public class ServicePricePanel extends JPanel {
         heading.setForeground(UIConstants.TEXT_PRIMARY);
         header.add(heading, BorderLayout.WEST);
 
+        JPanel actionGroup = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        actionGroup.setBackground(UIConstants.BG_CONTENT);
+        
+        JButton editBtn = smallBtn("Edit", UIConstants.PRIMARY);
+        editBtn.setPreferredSize(new Dimension(80, 32));
+        editBtn.addActionListener(e -> editSelected());
+        
+        JButton delBtn = smallBtn("Delete", UIConstants.TEXT_DANGER);
+        delBtn.setPreferredSize(new Dimension(80, 32));
+        delBtn.addActionListener(e -> deleteSelected());
+
         JButton addBtn = new JButton("+ Add Service");
         addBtn.setFont(UIConstants.FONT_SMALL_BOLD);
         addBtn.setForeground(Color.WHITE);
@@ -181,9 +185,14 @@ public class ServicePricePanel extends JPanel {
         addBtn.setBorderPainted(false);
         addBtn.setFocusPainted(false);
         addBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        addBtn.setPreferredSize(new Dimension(120, 32));
+        addBtn.setPreferredSize(new Dimension(135, 32));
         addBtn.addActionListener(e -> showServiceDialog(-1, "", PriceConfig.TIER_NORMAL));
-        header.add(addBtn, BorderLayout.EAST);
+        
+        actionGroup.add(editBtn);
+        actionGroup.add(delBtn);
+        actionGroup.add(addBtn);
+
+        header.add(actionGroup, BorderLayout.EAST);
 
         section.add(header, BorderLayout.NORTH);
         section.add(buildTable(), BorderLayout.CENTER);
@@ -236,22 +245,10 @@ public class ServicePricePanel extends JPanel {
         // Populate
         refreshTable();
 
-        // Action buttons below the table
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
-        actions.setBackground(UIConstants.BG_CARD);
-
-        JButton editBtn = smallBtn("Edit",   UIConstants.PRIMARY);
-        JButton delBtn  = smallBtn("Delete", UIConstants.TEXT_DANGER);
-        editBtn.addActionListener(e -> editSelected());
-        delBtn .addActionListener(e -> deleteSelected());
-        actions.add(editBtn);
-        actions.add(delBtn);
-
         JPanel tableCard = new JPanel(new BorderLayout());
         tableCard.setBackground(UIConstants.BG_CARD);
         tableCard.setBorder(BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1));
         tableCard.add(new JScrollPane(table), BorderLayout.CENTER);
-        tableCard.add(actions, BorderLayout.SOUTH);
 
         JScrollPane scroll = new JScrollPane(tableCard);
         scroll.setBorder(null);

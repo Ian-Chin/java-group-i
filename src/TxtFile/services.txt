@@ -1,4 +1,3 @@
-Oil & Filter Change,Normal Service
 Tyre Rotation & Balance,Normal Service
 Brake Inspection,Normal Service
 Air Filter Replacement,Normal Service
@@ -6,3 +5,4 @@ Full Engine Overhaul,Major Service
 Transmission Service,Major Service
 Suspension & Steering,Major Service
 Air-Conditioning Service,Major Service
+Oil & Filter Change,Normal Service

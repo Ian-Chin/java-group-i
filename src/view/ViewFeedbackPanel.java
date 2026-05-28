@@ -58,7 +58,7 @@ public class ViewFeedbackPanel extends JPanel {
     }
 
     private JPanel buildFeedbackSection(String heading, String subDesc, List<String[]> rows) {
-        String[] columns = {"No", "Feedback ID", "Appointment ID", "Technicia ID", "Condition", "Feedback", "Date"};
+        String[] columns = {"No", "Feedback ID", "Appointment ID", "Technician ID", "Condition", "Feedback", "Date"};
         JPanel section = createSectionBase(heading, subDesc);
         DefaultTableModel model = createModel(columns);
         

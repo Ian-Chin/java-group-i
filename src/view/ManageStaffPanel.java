@@ -26,7 +26,7 @@ public class ManageStaffPanel extends JPanel {
     private JTextField        idField;
     private JTextField        nameField;
     private JTextField        emailField;
-    private JPasswordField    passwordField;
+    private JTextField        passwordField;
     private JComboBox<String> roleCombo; // hidden data model — chips write to this
 
     private static final String[] ROLES      = {"all", "admin", "staff", "technician"};
@@ -162,7 +162,7 @@ public class ManageStaffPanel extends JPanel {
         JDialog dlg = new JDialog((Frame) SwingUtilities.getWindowAncestor(this),
                 isEdit ? "Edit Member" : "Add Staff", true);
         dlg.setResizable(false);
-        dlg.setSize(460, isEdit ? 480 : 560);
+        dlg.setSize(460, 560);
         dlg.setLocationRelativeTo(this);
 
         // ── Root ─────────────────────────────────────────────────
@@ -249,15 +249,14 @@ public class ManageStaffPanel extends JPanel {
         if (isEdit) { emailField.setText(existing.getEmail()); emailField.setForeground(Color.BLACK); }
         form.add(emailField, gc);
 
-        // ── Password (Add only) ───────────────────────────────────
-        if (!isEdit) {
-            gc.gridy = 8; gc.insets = new Insets(0, 0, 6, 0);
-            form.add(fieldLabel("Password"), gc);
+        // ── Password ───────────────────────────────────
+        gc.gridy = 8; gc.insets = new Insets(0, 0, 6, 0);
+        form.add(fieldLabel("Password"), gc);
 
-            gc.gridy = 9; gc.insets = new Insets(0, 0, 14, 0);
-            passwordField = roundedPasswordField();
-            form.add(passwordField, gc);
-        }
+        gc.gridy = 9; gc.insets = new Insets(0, 0, 14, 0);
+        passwordField = roundedField("e.g. password123");
+        if (isEdit) { passwordField.setText(existing.getPassword()); passwordField.setForeground(Color.BLACK); }
+        form.add(passwordField, gc);
 
         root.add(form, BorderLayout.CENTER);
 
@@ -342,11 +341,12 @@ public class ManageStaffPanel extends JPanel {
         String id    = textOf(idField,    "e.g. S1 or T1");
         String name  = textOf(nameField,  "e.g. John Smith");
         String email = textOf(emailField, "e.g. john@apu.asc.com");
-        String pw    = new String(passwordField.getPassword()).trim();
+        String pw    = textOf(passwordField, "e.g. password123");
         String role  = (String) roleCombo.getSelectedItem();
 
         if (id.isEmpty() || name.isEmpty() || email.isEmpty() || pw.isEmpty()) { error("All fields are required."); return; }
         if (!email.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) { error("Enter a valid email address."); return; }
+        if (pw.length() < 8 || !pw.matches(".*[a-zA-Z].*") || !pw.matches(".*\\d.*")) { error("Password must be at least 8 characters with letters and numbers."); return; }
         
         // 1. If the input name and email match existing user in accounts.txt
         boolean userExists = accountService.getAllUsers().stream()
@@ -370,10 +370,12 @@ public class ManageStaffPanel extends JPanel {
         String id    = textOf(idField,    "e.g. S1 or T1");
         String name  = textOf(nameField,  "e.g. John Smith");
         String email = textOf(emailField, "e.g. john@apu.asc.com");
+        String pw    = textOf(passwordField, "e.g. password123");
         String role  = (String) roleCombo.getSelectedItem();
 
-        if (id.isEmpty() || name.isEmpty() || email.isEmpty()) { error("ID, Name and email cannot be empty."); return; }
+        if (id.isEmpty() || name.isEmpty() || email.isEmpty() || pw.isEmpty()) { error("ID, Name, email and password cannot be empty."); return; }
         if (!email.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) { error("Enter a valid email address."); return; }
+        if (pw.length() < 8 || !pw.matches(".*[a-zA-Z].*") || !pw.matches(".*\\d.*")) { error("Password must be at least 8 characters with letters and numbers."); return; }
         
         // 1. If the updated email already exists in accounts.txt for another account
         if (!email.equalsIgnoreCase(orig.getEmail()) && accountService.emailExists(email)) { 
@@ -383,7 +385,7 @@ public class ManageStaffPanel extends JPanel {
         }
 
         accountService.updateUser(orig.getEmail(),
-                new User(id, name, email, orig.getPassword(), role, orig.getProfilePicture()));
+                new User(id, name, email, pw, role, orig.getProfilePicture()));
         dlg.dispose();
         refreshTable((String) roleFilter.getSelectedItem());
         success("Member updated successfully.");
@@ -461,33 +463,6 @@ public class ManageStaffPanel extends JPanel {
                 if (f.getText().isEmpty()) { f.setText(placeholder); f.setForeground(new Color(160, 165, 180)); }
             }
         });
-        return f;
-    }
-
-    private JPasswordField roundedPasswordField() {
-        JPasswordField f = new JPasswordField() {
-            @Override protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(FIELD_BG);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
-                g2.dispose();
-                super.paintComponent(g);
-            }
-            @Override protected void paintBorder(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(isFocusOwner() ? ACCENT : FIELD_BORDER);
-                g2.setStroke(new BasicStroke(isFocusOwner() ? 2f : 1.2f));
-                g2.drawRoundRect(1, 1, getWidth() - 2, getHeight() - 2, 10, 10);
-                g2.dispose();
-            }
-        };
-        f.setOpaque(false);
-        f.setFont(new Font("SansSerif", Font.PLAIN, 13));
-        f.setBorder(new EmptyBorder(10, 14, 10, 14));
-        f.setPreferredSize(new Dimension(0, 42)); // width = 0 lets GridBag stretch it
-        f.setEchoChar('●');
         return f;
     }
 
