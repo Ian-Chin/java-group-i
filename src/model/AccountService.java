@@ -34,10 +34,13 @@ public class AccountService {
 
     // ─── Mutations ────────────────────────────────────────────────
     public boolean register(User user) {
-        // Auto-generate a customer ID like C5, C6, etc.
-        String newId = generateNextCustomerId();
+        // Auto-generate a customer ID like C5, C6, etc. if not provided
+        String newId = user.getUserId();
+        if (newId == null || newId.trim().isEmpty()) {
+            newId = generateNextCustomerId();
+        }
 
-        // Create a new User that includes the generated ID
+        // Create a new User that includes the ID
         User userWithId = new User(newId, user.getName(), user.getEmail(),
                                    user.getPassword(), user.getRole(), user.getProfilePicture());
 

@@ -23,6 +23,7 @@ public class ManageStaffPanel extends JPanel {
     private JTable             table;
     private JComboBox<String>  roleFilter;
 
+    private JTextField        idField;
     private JTextField        nameField;
     private JTextField        emailField;
     private JPasswordField    passwordField;
@@ -30,7 +31,7 @@ public class ManageStaffPanel extends JPanel {
 
     private static final String[] ROLES      = {"all", "admin", "staff", "technician"};
     private static final String[] FORM_ROLES = {"admin", "staff", "technician"};
-    private static final String[] COLUMNS    = {"#", "Name", "Email", "Role"};
+    private static final String[] COLUMNS    = {"NO", "ID", "Name", "Email", "Role"};
 
     // ── Dialog colours ────────────────────────────────────────────
     private static final Color DLG_BG       = new Color(250, 250, 252);
@@ -149,7 +150,7 @@ public class ManageStaffPanel extends JPanel {
         int row = 1;
         for (User u : users) {
             if (u.getRole().equalsIgnoreCase("customer")) continue;
-            tableModel.addRow(new Object[]{row++, u.getName(), u.getEmail(), u.getRole()});
+            tableModel.addRow(new Object[]{row++, u.getUserId(), u.getName(), u.getEmail(), u.getRole()});
         }
     }
 
@@ -161,7 +162,7 @@ public class ManageStaffPanel extends JPanel {
         JDialog dlg = new JDialog((Frame) SwingUtilities.getWindowAncestor(this),
                 isEdit ? "Edit Member" : "Add Staff", true);
         dlg.setResizable(false);
-        dlg.setSize(460, isEdit ? 400 : 480);
+        dlg.setSize(460, isEdit ? 480 : 560);
         dlg.setLocationRelativeTo(this);
 
         // ── Root ─────────────────────────────────────────────────
@@ -218,32 +219,42 @@ public class ManageStaffPanel extends JPanel {
         JPanel chipsPanel = buildRoleChips(isEdit ? existing.getRole() : "staff");
         form.add(chipsPanel, gc);
 
-        // ── Name label ────────────────────────────────────────────
+        // ── ID label ────────────────────────────────────────────
         gc.gridy = 2; gc.insets = new Insets(0, 0, 6, 0);
+        form.add(fieldLabel("Staff/Tech ID"), gc);
+
+        // ── ID field ────────────────────────────────────────────
+        gc.gridy = 3; gc.insets = new Insets(0, 0, 14, 0);
+        idField = roundedField("e.g. S1 or T1");
+        if (isEdit) { idField.setText(existing.getUserId() != null ? existing.getUserId() : ""); idField.setForeground(Color.BLACK); }
+        form.add(idField, gc);
+
+        // ── Name label ────────────────────────────────────────────
+        gc.gridy = 4; gc.insets = new Insets(0, 0, 6, 0);
         form.add(fieldLabel("Full Name"), gc);
 
         // ── Name field ────────────────────────────────────────────
-        gc.gridy = 3; gc.insets = new Insets(0, 0, 14, 0);
+        gc.gridy = 5; gc.insets = new Insets(0, 0, 14, 0);
         nameField = roundedField("e.g. John Smith");
         if (isEdit) { nameField.setText(existing.getName()); nameField.setForeground(Color.BLACK); }
         form.add(nameField, gc);
 
         // ── Email label ───────────────────────────────────────────
-        gc.gridy = 4; gc.insets = new Insets(0, 0, 6, 0);
+        gc.gridy = 6; gc.insets = new Insets(0, 0, 6, 0);
         form.add(fieldLabel("Email Address"), gc);
 
         // ── Email field ───────────────────────────────────────────
-        gc.gridy = 5; gc.insets = new Insets(0, 0, 14, 0);
+        gc.gridy = 7; gc.insets = new Insets(0, 0, 14, 0);
         emailField = roundedField("e.g. john@apu.asc.com");
         if (isEdit) { emailField.setText(existing.getEmail()); emailField.setForeground(Color.BLACK); }
         form.add(emailField, gc);
 
         // ── Password (Add only) ───────────────────────────────────
         if (!isEdit) {
-            gc.gridy = 6; gc.insets = new Insets(0, 0, 6, 0);
+            gc.gridy = 8; gc.insets = new Insets(0, 0, 6, 0);
             form.add(fieldLabel("Password"), gc);
 
-            gc.gridy = 7; gc.insets = new Insets(0, 0, 14, 0);
+            gc.gridy = 9; gc.insets = new Insets(0, 0, 14, 0);
             passwordField = roundedPasswordField();
             form.add(passwordField, gc);
         }
@@ -328,12 +339,13 @@ public class ManageStaffPanel extends JPanel {
     // ─── CRUD handlers ───────────────────────────────────────────
 
     private void handleAdd(JDialog dlg) {
+        String id    = textOf(idField,    "e.g. S1 or T1");
         String name  = textOf(nameField,  "e.g. John Smith");
         String email = textOf(emailField, "e.g. john@apu.asc.com");
         String pw    = new String(passwordField.getPassword()).trim();
         String role  = (String) roleCombo.getSelectedItem();
 
-        if (name.isEmpty() || email.isEmpty() || pw.isEmpty()) { error("All fields are required."); return; }
+        if (id.isEmpty() || name.isEmpty() || email.isEmpty() || pw.isEmpty()) { error("All fields are required."); return; }
         if (!email.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) { error("Enter a valid email address."); return; }
         
         // 1. If the input name and email match existing user in accounts.txt
@@ -348,18 +360,19 @@ public class ManageStaffPanel extends JPanel {
         // Additional check: if only the email exists, prompt accordingly.
         if (accountService.emailExists(email)) { error("Email already existed."); return; }
 
-        accountService.register(new User(name, email, pw, role));
+        accountService.register(new User(id, name, email, pw, role, 0));
         dlg.dispose();
         refreshTable((String) roleFilter.getSelectedItem());
         success("New " + role + " added successfully.");
     }
 
     private void handleEdit(User orig, JDialog dlg) {
+        String id    = textOf(idField,    "e.g. S1 or T1");
         String name  = textOf(nameField,  "e.g. John Smith");
         String email = textOf(emailField, "e.g. john@apu.asc.com");
         String role  = (String) roleCombo.getSelectedItem();
 
-        if (name.isEmpty() || email.isEmpty()) { error("Name and email cannot be empty."); return; }
+        if (id.isEmpty() || name.isEmpty() || email.isEmpty()) { error("ID, Name and email cannot be empty."); return; }
         if (!email.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) { error("Enter a valid email address."); return; }
         
         // 1. If the updated email already exists in accounts.txt for another account
@@ -370,7 +383,7 @@ public class ManageStaffPanel extends JPanel {
         }
 
         accountService.updateUser(orig.getEmail(),
-                new User(name, email, orig.getPassword(), role, orig.getProfilePicture()));
+                new User(id, name, email, orig.getPassword(), role, orig.getProfilePicture()));
         dlg.dispose();
         refreshTable((String) roleFilter.getSelectedItem());
         success("Member updated successfully.");
@@ -379,7 +392,8 @@ public class ManageStaffPanel extends JPanel {
     private void editSelected() {
         int row = table.getSelectedRow();
         if (row < 0) { error("Please select a row first."); return; }
-        String email = (String) tableModel.getValueAt(row, 2);
+        // Col 0: #, Col 1: ID, Col 2: Name, Col 3: Email, Col 4: Role
+        String email = (String) tableModel.getValueAt(row, 3);
         accountService.getAllUsers().stream()
                 .filter(u -> u.getEmail().equalsIgnoreCase(email))
                 .findFirst().ifPresent(this::showFormDialog);
@@ -388,8 +402,9 @@ public class ManageStaffPanel extends JPanel {
     private void deleteSelected() {
         int row = table.getSelectedRow();
         if (row < 0) { error("Please select a row first."); return; }
-        String name  = (String) tableModel.getValueAt(row, 1);
-        String email = (String) tableModel.getValueAt(row, 2);
+        // Col 0: #, Col 1: ID, Col 2: Name, Col 3: Email, Col 4: Role
+        String name  = (String) tableModel.getValueAt(row, 2);
+        String email = (String) tableModel.getValueAt(row, 3);
         if (JOptionPane.showConfirmDialog(this, "Delete " + name + "?",
                 "Confirm Delete", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
             accountService.deleteUser(email);
