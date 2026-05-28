@@ -32,17 +32,17 @@ public class ViewFeedbackPanel extends JPanel {
             + File.separator + "feedback.txt";
 
     public ViewFeedbackPanel() {
-        setLayout(new BorderLayout(0, 16));
+        setLayout(new GridLayout(2, 1, 0, 16));
         setBackground(UIConstants.BG_CONTENT);
         setBorder(new EmptyBorder(30, 36, 30, 36));
 
-        add(buildCommentsSection("Customer Comments", loadFile(COMMENTS_FILE)), BorderLayout.NORTH);
-        add(buildFeedbackSection("Technician Feedback", loadFile(FEEDBACK_FILE)), BorderLayout.CENTER);
+        add(buildCommentsSection("Customer Comments", "Customer comments on service and staff/technician", loadFile(COMMENTS_FILE)));
+        add(buildFeedbackSection("Technician Feedback", "Technician feedback on customer vehicles", loadFile(FEEDBACK_FILE)));
     }
 
-    private JPanel buildCommentsSection(String heading, List<String[]> rows) {
+    private JPanel buildCommentsSection(String heading, String subDesc, List<String[]> rows) {
         String[] columns = {"No", "Comment ID", "Appointment ID", "Staff ID", "Technician ID", "Rating", "Comment", "Date"};
-        JPanel section = createSectionBase(heading);
+        JPanel section = createSectionBase(heading, subDesc);
         DefaultTableModel model = createModel(columns);
         
         int idx = 1;
@@ -57,9 +57,9 @@ public class ViewFeedbackPanel extends JPanel {
         return finalizeSection(section, model, columns, true, rows.isEmpty());
     }
 
-    private JPanel buildFeedbackSection(String heading, List<String[]> rows) {
+    private JPanel buildFeedbackSection(String heading, String subDesc, List<String[]> rows) {
         String[] columns = {"No", "Feedback ID", "Appointment ID", "Technicia ID", "Condition", "Feedback", "Date"};
-        JPanel section = createSectionBase(heading);
+        JPanel section = createSectionBase(heading, subDesc);
         DefaultTableModel model = createModel(columns);
         
         int idx = 1;
@@ -74,14 +74,27 @@ public class ViewFeedbackPanel extends JPanel {
         return finalizeSection(section, model, columns, false, rows.isEmpty());
     }
 
-    private JPanel createSectionBase(String heading) {
+    private JPanel createSectionBase(String heading, String subDesc) {
         JPanel section = new JPanel(new BorderLayout(0, 10));
         section.setBackground(UIConstants.BG_CONTENT);
+
+        JPanel titlePanel = new JPanel();
+        titlePanel.setLayout(new BoxLayout(titlePanel, BoxLayout.Y_AXIS));
+        titlePanel.setOpaque(false);
 
         JLabel title = new JLabel(heading);
         title.setFont(UIConstants.FONT_BODY_BOLD);
         title.setForeground(UIConstants.TEXT_PRIMARY);
-        section.add(title, BorderLayout.NORTH);
+        titlePanel.add(title);
+
+        titlePanel.add(Box.createVerticalStrut(4));
+
+        JLabel desc = new JLabel(subDesc);
+        desc.setFont(UIConstants.FONT_SMALL);
+        desc.setForeground(UIConstants.TEXT_MUTED);
+        titlePanel.add(desc);
+
+        section.add(titlePanel, BorderLayout.NORTH);
         return section;
     }
 
