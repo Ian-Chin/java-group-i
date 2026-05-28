@@ -57,6 +57,38 @@ public class VehicleService {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // getVehiclesForUser — same data as getVehiclesByUserId but
+    // returned as typed Vehicle objects so callers don't have to
+    // index into raw String[] arrays.
+    // ─────────────────────────────────────────────────────────────
+    public List<Vehicle> getVehiclesForUser(String userId) {
+        List<Vehicle> result = new ArrayList<>();
+        File file = new File(FILE_PATH);
+        if (!file.exists()) return result;
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank()) continue;
+                String[] cols = line.split(",", EXPECTED_COLUMNS);
+                if (cols.length != EXPECTED_COLUMNS) continue;
+                if (!cols[1].trim().equalsIgnoreCase(userId)) continue;
+
+                result.add(new Vehicle(
+                        cols[0].trim(), // vehicleID
+                        cols[1].trim(), // userID
+                        cols[2].trim(), // type
+                        cols[3].trim(), // plate
+                        cols[4].trim(), // brand
+                        cols[5].trim(), // year
+                        cols[6].trim()  // colour
+                ));
+            }
+        } catch (IOException e) { e.printStackTrace(); }
+        return result;
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // getVehicleIdByUserAndPlate — looks up the vehicleID for a
     // given userId + plate combination. Returns null if not found.
     // Used in deleteVehicle() to find the vehicleID before deleting

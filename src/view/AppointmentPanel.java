@@ -5,6 +5,8 @@ import model.AppointmentService;
 import model.AppointmentService.Appointment;
 import model.PriceConfig;
 import model.User;
+import model.Vehicle;
+import model.VehicleService;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -19,6 +21,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.format.TextStyle;
+import java.util.ArrayList;
 import java.util.Locale;
 import java.util.List;
 
@@ -26,21 +29,29 @@ public class AppointmentPanel extends JPanel {
 
     private final AccountService accountService;
     private final AppointmentService appointmentService;
+    private final VehicleService vehicleService = new VehicleService();
     private final PriceConfig priceConfig = new PriceConfig();
 
     // Form fields
     private JComboBox<String> customerCombo;
+    private JComboBox<String> vehicleCombo;
     private JComboBox<String> technicianCombo;
     private JComboBox<String> serviceTypeCombo;
     private JButton datePickerBtn;
     private LocalDate selectedDate = null;
     private JComboBox<String> timeCombo;
 
+    // Vehicles currently shown in vehicleCombo (parallel to combo items after the placeholder)
+    private final List<Vehicle> currentVehicles = new ArrayList<>();
+
     private static final String CUSTOMER_PLACEHOLDER = "-- Select a customer --";
     private static final String TECHNICIAN_PLACEHOLDER = "-- Select a technician --";
     private static final String SERVICE_PLACEHOLDER = "-- Select a service type --";
     private static final String TIME_PLACEHOLDER = "-- Select a time slot --";
     private static final String DATE_PLACEHOLDER = "Select a date";
+    private static final String VEHICLE_PLACEHOLDER = "-- Select a vehicle --";
+    private static final String VEHICLE_NO_CUSTOMER = "-- Select customer first --";
+    private static final String VEHICLE_NONE = "-- No vehicles registered --";
 
     // Table
     private DefaultTableModel tableModel;
@@ -50,11 +61,6 @@ public class AppointmentPanel extends JPanel {
     private JComboBox<String> filterCombo;
 
     private static final String[] TABLE_COLUMNS = {"ID", "Customer", "Technician", "Service", "Service Name", "Date & Time", "Duration", "Status", ""};
-
-    private static final Color SUCCESS_GREEN  = new Color(40, 167, 69);
-    private static final Color WARNING_ORANGE = new Color(255, 165, 0);
-    private static final Color STATUS_PENDING = new Color(108, 117, 125);
-    private static final Color STATUS_WAITING = new Color(150, 100, 200);
 
     // Tier-tag colours (match ServicePricePanel)
     private static final Color TIER_NORMAL_FG = new Color(50, 90, 200);
@@ -160,6 +166,12 @@ public class AppointmentPanel extends JPanel {
         // Form fields
         formContent.add(formRow("Customer", customerCombo = styledCombo()));
         loadCustomers();
+        customerCombo.addActionListener(e -> loadVehiclesForSelectedCustomer());
+        formContent.add(Box.createVerticalStrut(14));
+
+        vehicleCombo = styledCombo();
+        formContent.add(formRow("Vehicle", vehicleCombo));
+        loadVehiclesForSelectedCustomer();
         formContent.add(Box.createVerticalStrut(14));
 
         formContent.add(formRow("Assign Technician", technicianCombo = styledCombo()));
@@ -539,12 +551,7 @@ public class AppointmentPanel extends JPanel {
                 lbl.setHorizontalAlignment(SwingConstants.CENTER);
                 lbl.setFont(new Font("SansSerif", Font.BOLD, 11));
                 String status = val != null ? val.toString() : "";
-                switch (status) {
-                    case "Completed":                  lbl.setForeground(SUCCESS_GREEN); break;
-                    case "In Progress":                lbl.setForeground(WARNING_ORANGE); break;
-                    case "Waiting for Confirmation":   lbl.setForeground(STATUS_WAITING); break;
-                    default:                           lbl.setForeground(STATUS_PENDING); break;
-                }
+                lbl.setForeground(AppointmentStatusStyle.fg(status));
                 return lbl;
             }
         });
@@ -598,6 +605,44 @@ public class AppointmentPanel extends JPanel {
             technicianCombo.addItem(u.getName() + " (" + u.getEmail() + ")");
         }
         technicianCombo.setSelectedIndex(0);
+    }
+
+    private void loadVehiclesForSelectedCustomer() {
+        if (vehicleCombo == null) return;
+        vehicleCombo.removeAllItems();
+        currentVehicles.clear();
+
+        Object sel = customerCombo == null ? null : customerCombo.getSelectedItem();
+        if (sel == null || CUSTOMER_PLACEHOLDER.equals(sel.toString())) {
+            vehicleCombo.addItem(VEHICLE_NO_CUSTOMER);
+            return;
+        }
+
+        String email = extractEmail(sel.toString());
+        String userId = null;
+        for (User u : accountService.getAllUsers()) {
+            if (u.getEmail() != null && u.getEmail().equalsIgnoreCase(email)) {
+                userId = u.getUserId();
+                break;
+            }
+        }
+        if (userId == null) {
+            vehicleCombo.addItem(VEHICLE_NONE);
+            return;
+        }
+
+        List<Vehicle> vehicles = vehicleService.getVehiclesForUser(userId);
+        if (vehicles.isEmpty()) {
+            vehicleCombo.addItem(VEHICLE_NONE);
+            return;
+        }
+
+        vehicleCombo.addItem(VEHICLE_PLACEHOLDER);
+        for (Vehicle v : vehicles) {
+            currentVehicles.add(v);
+            vehicleCombo.addItem(v.displayLabel());
+        }
+        vehicleCombo.setSelectedIndex(0);
     }
 
     private void loadTimeSlots() {
@@ -967,6 +1012,20 @@ public class AppointmentPanel extends JPanel {
         if (custSel == null || CUSTOMER_PLACEHOLDER.equals(custSel.toString())) {
             error("Please select a customer."); return;
         }
+        Object vehSel = vehicleCombo.getSelectedItem();
+        String vehSelStr = vehSel == null ? "" : vehSel.toString();
+        int vehIdx = vehicleCombo.getSelectedIndex() - 1; // first item is placeholder
+        if (vehSel == null
+                || VEHICLE_PLACEHOLDER.equals(vehSelStr)
+                || VEHICLE_NO_CUSTOMER.equals(vehSelStr)
+                || VEHICLE_NONE.equals(vehSelStr)
+                || vehIdx < 0 || vehIdx >= currentVehicles.size()) {
+            if (VEHICLE_NONE.equals(vehSelStr)) {
+                error("Selected customer has no registered vehicles."); return;
+            }
+            error("Please select a vehicle."); return;
+        }
+        String vehicleId = currentVehicles.get(vehIdx).getId();
         Object techSel = technicianCombo.getSelectedItem();
         if (techSel == null || TECHNICIAN_PLACEHOLDER.equals(techSel.toString())) {
             error("Please select a technician."); return;
@@ -996,7 +1055,7 @@ public class AppointmentPanel extends JPanel {
         String dateTime = date + " " + time;
 
         String id = appointmentService.nextId();
-        Appointment appt = new Appointment(id, custEmail, "", techEmail, serviceType,
+        Appointment appt = new Appointment(id, custEmail, vehicleId, techEmail, serviceType,
                 AppointmentService.STATUS_WAITING_CONFIRMATION, dateTime, duration, serviceName);
 
         if (appointmentService.add(appt)) {
@@ -1011,6 +1070,7 @@ public class AppointmentPanel extends JPanel {
 
     private void resetForm() {
         if (customerCombo.getItemCount() > 0) customerCombo.setSelectedIndex(0);
+        loadVehiclesForSelectedCustomer();
         if (technicianCombo.getItemCount() > 0) technicianCombo.setSelectedIndex(0);
         if (serviceTypeCombo.getItemCount() > 0) serviceTypeCombo.setSelectedIndex(0);
         if (timeCombo.getItemCount() > 0) timeCombo.setSelectedIndex(0);

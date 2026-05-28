@@ -420,12 +420,6 @@ public final class DashboardCards {
 
     /** Maps appointment status string to a display colour. */
     public static Color statusColor(String status) {
-        if (status == null) return GRAY;
-        switch (status) {
-            case "Completed":   return GREEN;
-            case "In Progress": return AMBER;
-            case "Pending":     return GRAY;
-            default:            return GRAY;
-        }
+        return AppointmentStatusStyle.fg(status);
     }
 }

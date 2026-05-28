@@ -146,9 +146,9 @@ public class TechDashboard extends JPanel {
         JPanel legend = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 0));
         legend.setOpaque(false);
         legend.setBorder(new EmptyBorder(12, 0, 0, 0));
-        legend.add(legendDot(GREEN, "Completed"));
-        legend.add(legendDot(ORANGE, "In Progress"));
-        legend.add(legendDot(GREY, "Pending"));
+        legend.add(legendDot(AppointmentStatusStyle.fg("Completed"),   "Completed"));
+        legend.add(legendDot(AppointmentStatusStyle.fg("In Progress"), "In Progress"));
+        legend.add(legendDot(AppointmentStatusStyle.fg("Pending"),     "Pending"));
         calCard.add(legend, BorderLayout.SOUTH);
 
         JPanel summaryCard = new JPanel(new BorderLayout()) {
@@ -267,12 +267,7 @@ public class TechDashboard extends JPanel {
                 int maxBars = Math.min(statuses.size(), 3);
                 for (int si = 0; si < maxBars; si++) {
                     String status = statuses.get(si);
-                    Color barColor;
-                    switch (status) {
-                        case "Completed":   barColor = GREEN;  break;
-                        case "In Progress": barColor = ORANGE; break;
-                        default:            barColor = GREY;   break;
-                    }
+                    Color barColor = AppointmentStatusStyle.fg(status);
                     final Color fc = isSel ? new Color(255, 255, 255, 200) : barColor;
                     JPanel bar = new JPanel() {
                         @Override protected void paintComponent(Graphics g) {
@@ -358,12 +353,7 @@ public class TechDashboard extends JPanel {
     }
  
     private JPanel buildAppointmentCard(Appointment a, String custName, String time) {
-        Color barColor;
-        switch (a.getStatus()) {
-            case "Completed": barColor = GREEN;  break;
-            case "In Progress": barColor = ORANGE; break;
-            default: barColor = GREY;   break;
-        }
+        Color barColor = AppointmentStatusStyle.fg(a.getStatus());
  
         JPanel card = new JPanel(new BorderLayout(8, 0)) {
             @Override protected void paintComponent(Graphics g) {
@@ -417,13 +407,7 @@ public class TechDashboard extends JPanel {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                Color bg;
-                switch (a.getStatus()) {
-                    case "Completed": bg = new Color(220, 245, 225); break;
-                    case "In Progress": bg = new Color(255, 243, 220); break;
-                    default: bg = new Color(235, 235, 240); break;
-                }
-                g2.setColor(bg);
+                g2.setColor(AppointmentStatusStyle.bg(a.getStatus()));
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
                 g2.dispose();
                 super.paintComponent(g);
@@ -493,11 +477,7 @@ public class TechDashboard extends JPanel {
  
             JLabel statusLbl = new JLabel(a.getStatus());
             statusLbl.setFont(new Font("SansSerif", Font.BOLD, 11));
-            switch (a.getStatus()) {
-                case "Completed": statusLbl.setForeground(GREEN);  break;
-                case "In Progress": statusLbl.setForeground(ORANGE); break;
-                default: statusLbl.setForeground(GREY);   break;
-            }
+            statusLbl.setForeground(AppointmentStatusStyle.fg(a.getStatus()));
             statusLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
             row.add(statusLbl);
             row.add(Box.createVerticalStrut(4));

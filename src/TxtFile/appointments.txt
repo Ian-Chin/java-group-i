@@ -83,4 +83,5 @@ AP82,C4,V9,T2,Major Service,Pending,2026-05-18 14:00,3,Full Engine Overhaul
 AP83,C5,V10,T4,Normal Service,Pending,2026-05-22 09:00,1,Oil & Filter Change
 AP84,C6,V11,T1,Major Service,Pending,2026-06-02 11:00,3,Transmission Service
 AP85,C7,V12,T2,Normal Service,Pending,2026-06-05 10:00,1,Brake Inspection
-AP86,lin@gmail.com,,alex@apu.asc.com,Major Service,Waiting for Confirmation,2026-05-28 10:00,3,Full Engine Overhaul
+AP86,C3,,T1,Major Service,Cancelled,2026-05-28,10:00,Full Engine Overhaul
+AP87,lin@gmail.com,V3,mike@gamil.com,Major Service,Waiting for Confirmation,2026-06-06 11:00,3,Full Engine Overhaul

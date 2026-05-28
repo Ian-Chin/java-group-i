@@ -258,11 +258,7 @@ public class TechFeedback extends JPanel {
                 JLabel badge = new JLabel(status, SwingConstants.CENTER);
                 badge.setFont(new Font("SansSerif", Font.BOLD, 11));
                 badge.setOpaque(true);
-                switch (status) {
-                    case "Completed": badge.setForeground(GREEN);  break;
-                    case "In Progress": badge.setForeground(ORANGE); break;
-                    default: badge.setForeground(GREY);   break;
-                }
+                badge.setForeground(AppointmentStatusStyle.fg(status));
                 JPanel wrap = new JPanel(new GridBagLayout());
                 wrap.setBackground(row % 2 == 0 ? Color.WHITE : new Color(248, 249, 253));
                 wrap.add(badge);

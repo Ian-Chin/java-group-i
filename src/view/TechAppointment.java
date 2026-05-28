@@ -201,15 +201,8 @@ public class TechAppointment extends JPanel {
             String s = v != null ? v.toString() : "";
             JLabel badge = new JLabel(s, SwingConstants.CENTER);
             badge.setFont(new Font("SansSerif", Font.BOLD, 11));
-            Color fc, bg2;
-            switch (s) {
-                case "Completed":
-                    fc = GREEN; bg2 = new Color(220, 245, 225); break;
-                case "In Progress":
-                    fc = ORANGE; bg2 = new Color(255, 245, 225); break;
-                default:
-                    fc = GREY; bg2 = new Color(235, 235, 240); break;
-            }
+            final Color fc = AppointmentStatusStyle.fg(s);
+            final Color bg2 = AppointmentStatusStyle.bg(s);
             badge.setForeground(fc);
             badge.setOpaque(true);
             badge.setBackground(bg2);
@@ -378,11 +371,7 @@ public class TechAppointment extends JPanel {
             val.setForeground(TEXT);
  
             if (field[0].equals("Status")) {
-                switch (field[1]) {
-                    case "Completed": val.setForeground(GREEN);  break;
-                    case "In Progress": val.setForeground(ORANGE); break;
-                    default: val.setForeground(GREY);   break;
-                }
+                val.setForeground(AppointmentStatusStyle.fg(field[1]));
                 val.setFont(new Font("SansSerif", Font.BOLD, 13));
             }
  

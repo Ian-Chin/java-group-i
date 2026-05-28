@@ -612,12 +612,7 @@ public class CounterStaffDashboard extends JPanel {
                 String date          = dt.contains(" ") ? dt.split(" ")[0] : dt;
                 String time          = dt.contains(" ") ? dt.split(" ")[1] : "";
 
-                Color statusColor;
-                switch (a.getStatus()) {
-                    case "In Progress":              statusColor = new Color(255, 165, 0);   break;
-                    case "Waiting for Confirmation": statusColor = new Color(150, 100, 200); break;
-                    default:                         statusColor = new Color(108, 117, 125); break;
-                }
+                Color statusColor = AppointmentStatusStyle.fg(a.getStatus());
 
                 JPanel row = new JPanel(new BorderLayout(10, 0)) {
                     @Override protected void paintComponent(Graphics g) {
@@ -1283,13 +1278,7 @@ public class CounterStaffDashboard extends JPanel {
                     int maxBars = Math.min(statuses.size(), 3);
                     for (int si = 0; si < maxBars; si++) {
                         String status = statuses.get(si);
-                        Color barColor;
-                        switch (status) {
-                            case "Completed":                  barColor = new Color(40, 167, 69);   break;
-                            case "In Progress":                barColor = new Color(255, 165, 0);   break;
-                            case "Waiting for Confirmation":   barColor = new Color(150, 100, 200); break;
-                            default:                           barColor = new Color(108, 117, 125); break;
-                        }
+                        Color barColor = AppointmentStatusStyle.fg(status);
                         final Color fc = isSel ? new Color(255, 255, 255, 200) : barColor;
                         JPanel bar = new JPanel() {
                             @Override protected void paintComponent(Graphics g) {
@@ -1356,13 +1345,7 @@ public class CounterStaffDashboard extends JPanel {
     private JPanel buildAppointmentCard(String id, String customer, String technician,
                                          String service, String time,
                                          int hours, String status) {
-        Color barColor;
-        switch (status) {
-            case "Completed":                  barColor = new Color(40, 167, 69);   break;
-            case "In Progress":                barColor = new Color(255, 165, 0);   break;
-            case "Waiting for Confirmation":   barColor = new Color(150, 100, 200); break;
-            default:                           barColor = new Color(108, 117, 125); break;
-        }
+        Color barColor = AppointmentStatusStyle.fg(status);
 
         JPanel card = new JPanel(new BorderLayout(8, 0)) {
             @Override protected void paintComponent(Graphics g) {
@@ -1414,14 +1397,7 @@ public class CounterStaffDashboard extends JPanel {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                Color bg;
-                switch (status) {
-                    case "Completed":                  bg = new Color(220, 245, 225); break;
-                    case "In Progress":                bg = new Color(255, 243, 220); break;
-                    case "Waiting for Confirmation":   bg = new Color(240, 230, 250); break;
-                    default:                           bg = new Color(235, 235, 240); break;
-                }
-                g2.setColor(bg);
+                g2.setColor(AppointmentStatusStyle.bg(status));
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
                 g2.dispose();
                 super.paintComponent(g);
@@ -1673,13 +1649,7 @@ public class CounterStaffDashboard extends JPanel {
                         int barY = rowY + 6;
                         int barH = rowHeight - 12;
 
-                        Color barColor;
-                        switch (a.getStatus()) {
-                            case "Completed":                  barColor = new Color(40, 167, 69);   break;
-                            case "In Progress":                barColor = new Color(255, 165, 0);   break;
-                            case "Waiting for Confirmation":   barColor = new Color(150, 100, 200); break;
-                            default:                           barColor = new Color(108, 117, 125); break;
-                        }
+                        Color barColor = AppointmentStatusStyle.fg(a.getStatus());
 
                         // Shadow
                         g2.setColor(new Color(0, 0, 0, 30));
