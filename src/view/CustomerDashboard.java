@@ -37,6 +37,7 @@ public class CustomerDashboard extends JPanel {
     private JLabel profileLabel;
     private JLabel avatarLabel;
     private JLabel headerTitle;
+    private JLabel notificationBadge;
 
     // ── Avatar colours ────────────────────────────────────────────
     private static final Color[] AVATAR_COLORS = {
@@ -189,6 +190,7 @@ public class CustomerDashboard extends JPanel {
             profileImage        = profilePicStorage.loadImage(user.getUserId());
         }
         if (avatarLabel != null) avatarLabel.repaint();
+        refreshNotificationBadge();
 
         if (staffReviewPage != null) staffReviewPage.setUser(app.getLoggedInUserObj());
         if (myFeedbackPage  != null) myFeedbackPage.setUser(app.getLoggedInUserObj());
@@ -687,7 +689,7 @@ public class CustomerDashboard extends JPanel {
         east.add(badge);
 
         if (awaiting) {
-            JButton confirmBtn = new JButton("Confirm") {
+            JButton confirmBtn = new JButton("Review") {
                 @Override protected void paintComponent(Graphics g) {
                     Graphics2D g2 = (Graphics2D) g.create();
                     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -707,8 +709,9 @@ public class CustomerDashboard extends JPanel {
             confirmBtn.setMaximumSize(new Dimension(72, 22));
             confirmBtn.setPreferredSize(new Dimension(72, 22));
             confirmBtn.addActionListener(e -> {
-                if (appointmentService.updateStatus(apptId, "Pending")) {
-                    rebuildDashboard();
+                AppointmentService.Appointment appointment = findAppointmentById(apptId);
+                if (appointment != null) {
+                    showAppointmentDecisionDialog(appointment, null);
                 }
             });
             east.add(Box.createVerticalStrut(4));
@@ -1371,8 +1374,291 @@ public class CustomerDashboard extends JPanel {
             }
         });
 
+        JButton notificationButton = createNotificationButton();
+        notificationButton.addActionListener(e -> showAppointmentNotificationDialog());
+
+        profileArea.add(notificationButton);
         profileArea.add(profileButton);
         return profileArea;
+    }
+
+    private JButton createNotificationButton() {
+        JButton button = new JButton() {
+            private boolean hover = false;
+            {
+                addMouseListener(new MouseAdapter() {
+                    @Override public void mouseEntered(MouseEvent e) { hover = true; repaint(); }
+                    @Override public void mouseExited(MouseEvent e)  { hover = false; repaint(); }
+                });
+            }
+
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(hover ? new Color(245, 246, 250) : Color.WHITE);
+                g2.fillOval(0, 0, getWidth() - 1, getHeight() - 1);
+                g2.setColor(UIConstants.BORDER_DEFAULT);
+                g2.drawOval(0, 0, getWidth() - 1, getHeight() - 1);
+                g2.setColor(UIConstants.TEXT_PRIMARY);
+                g2.setStroke(new BasicStroke(1.8f));
+                int cx = getWidth() / 2;
+                g2.drawArc(cx - 8, 10, 16, 16, 25, 130);
+                g2.drawLine(cx - 8, 18, cx - 8, 24);
+                g2.drawLine(cx + 8, 18, cx + 8, 24);
+                g2.drawLine(cx - 10, 24, cx + 10, 24);
+                g2.fillOval(cx - 2, 28, 4, 4);
+                g2.dispose();
+            }
+        };
+        button.setPreferredSize(new Dimension(38, 38));
+        button.setContentAreaFilled(false);
+        button.setBorderPainted(false);
+        button.setFocusPainted(false);
+        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        button.setToolTipText("Appointment notifications");
+        button.setLayout(null);
+
+        notificationBadge = new JLabel("0", SwingConstants.CENTER);
+        notificationBadge.setFont(new Font("SansSerif", Font.BOLD, 10));
+        notificationBadge.setForeground(Color.WHITE);
+        notificationBadge.setOpaque(true);
+        notificationBadge.setBackground(UIConstants.TEXT_DANGER);
+        notificationBadge.setBounds(23, 0, 17, 17);
+        button.add(notificationBadge);
+        refreshNotificationBadge();
+        return button;
+    }
+
+    private void refreshNotificationBadge() {
+        if (notificationBadge == null) return;
+        User user = app.getLoggedInUserObj();
+        int count = user == null ? 0
+                : appointmentService.countAwaitingConfirmationAppointments(
+                        user.getUserId(), user.getEmail());
+        notificationBadge.setText(count > 9 ? "9+" : String.valueOf(count));
+        notificationBadge.setVisible(count > 0);
+    }
+
+    private List<AppointmentService.Appointment> getAwaitingAppointmentsForCurrentUser() {
+        User user = app.getLoggedInUserObj();
+        if (user == null) return new ArrayList<>();
+        return appointmentService.getAwaitingConfirmationAppointments(
+                user.getUserId(), user.getEmail());
+    }
+
+    private void showAppointmentNotificationDialog() {
+        JDialog dialog = new JDialog(
+                (Frame) SwingUtilities.getWindowAncestor(this), "Appointment Notifications", true);
+        dialog.setSize(560, 480);
+        dialog.setLocationRelativeTo(this);
+        dialog.setLayout(new BorderLayout());
+        dialog.setResizable(false);
+
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(Color.WHITE);
+        header.setBorder(new EmptyBorder(16, 22, 12, 22));
+        JLabel title = new JLabel("Appointments Awaiting Confirmation");
+        title.setFont(new Font("SansSerif", Font.BOLD, 15));
+        title.setForeground(UIConstants.TEXT_PRIMARY);
+        header.add(title, BorderLayout.WEST);
+        dialog.add(header, BorderLayout.NORTH);
+
+        JScrollPane scrollPane = buildAwaitingAppointmentScrollPane(
+                getAwaitingAppointmentsForCurrentUser(), dialog);
+        scrollPane.setName("awaitingAppointmentScrollPane");
+        dialog.add(scrollPane, BorderLayout.CENTER);
+
+        JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 16, 10));
+        footer.setBackground(Color.WHITE);
+        footer.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UIConstants.BORDER_DEFAULT));
+        JButton closeBtn = createActionButton("Close", new Color(108, 117, 125), Color.WHITE);
+        closeBtn.setPreferredSize(new Dimension(78, 32));
+        closeBtn.addActionListener(e -> dialog.dispose());
+        footer.add(closeBtn);
+        dialog.add(footer, BorderLayout.SOUTH);
+
+        dialog.setVisible(true);
+    }
+
+    private JScrollPane buildAwaitingAppointmentScrollPane(
+            List<AppointmentService.Appointment> appointments, JDialog dialog) {
+        JPanel listPanel = new JPanel();
+        listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
+        listPanel.setBackground(Color.WHITE);
+        listPanel.setBorder(new EmptyBorder(4, 16, 16, 16));
+
+        if (appointments.isEmpty()) {
+            listPanel.add(makeEmptyLabel("There are no appointments awaiting your confirmation."));
+        } else {
+            for (int i = 0; i < appointments.size(); i++) {
+                listPanel.add(buildAwaitingAppointmentRow(appointments.get(i), dialog));
+                if (i < appointments.size() - 1) listPanel.add(Box.createVerticalStrut(6));
+            }
+        }
+
+        JScrollPane sp = new JScrollPane(listPanel);
+        sp.setBorder(null);
+        sp.getViewport().setBackground(Color.WHITE);
+        sp.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        sp.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        sp.getVerticalScrollBar().setUnitIncrement(16);
+        return sp;
+    }
+
+    private JPanel buildAwaitingAppointmentRow(AppointmentService.Appointment appointment,
+                                               JDialog parentDialog) {
+        String technician = appointmentController.resolveUserName(
+                app.getAccountService().getAllUsers(), appointment.getTechnicianId());
+        String vehicle = vehicleService.getVehicleLabel(appointment.getVehicleId());
+
+        JPanel panel = new JPanel(new BorderLayout(8, 0));
+        panel.setOpaque(false);
+        panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 82));
+        panel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(UIConstants.BORDER_DEFAULT, 1),
+                new EmptyBorder(8, 10, 8, 10)));
+        panel.setCursor(new Cursor(Cursor.HAND_CURSOR));
+
+        JPanel info = new JPanel();
+        info.setLayout(new BoxLayout(info, BoxLayout.Y_AXIS));
+        info.setOpaque(false);
+
+        JLabel main = new JLabel(appointment.getId() + " - " + appointment.getServiceType());
+        main.setFont(new Font("SansSerif", Font.BOLD, 12));
+        main.setForeground(UIConstants.TEXT_PRIMARY);
+        JLabel second = new JLabel(appointment.getDateTime() + " - " + vehicle);
+        second.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        second.setForeground(UIConstants.TEXT_MUTED);
+        JLabel third = new JLabel("Technician: " + technician);
+        third.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        third.setForeground(UIConstants.TEXT_MUTED);
+
+        info.add(Box.createVerticalGlue());
+        info.add(main);
+        info.add(Box.createVerticalStrut(2));
+        info.add(second);
+        info.add(Box.createVerticalStrut(1));
+        info.add(third);
+        info.add(Box.createVerticalGlue());
+        panel.add(info, BorderLayout.CENTER);
+
+        JLabel status = new JLabel("Awaiting", SwingConstants.CENTER);
+        status.setFont(new Font("SansSerif", Font.BOLD, 10));
+        status.setForeground(new Color(120, 70, 180));
+        status.setPreferredSize(new Dimension(74, 22));
+        panel.add(status, BorderLayout.EAST);
+
+        panel.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) {
+                showAppointmentDecisionDialog(appointment, parentDialog);
+            }
+        });
+        return panel;
+    }
+
+    private AppointmentService.Appointment findAppointmentById(String appointmentId) {
+        for (AppointmentService.Appointment appointment : appointmentService.getAll()) {
+            if (appointment.getId().equalsIgnoreCase(appointmentId)) {
+                return appointment;
+            }
+        }
+        return null;
+    }
+
+    private void showAppointmentDecisionDialog(AppointmentService.Appointment appointment,
+                                               JDialog listDialog) {
+        JDialog dialog = new JDialog(
+                (Frame) SwingUtilities.getWindowAncestor(this),
+                "Appointment Details - " + appointment.getId(), true);
+        dialog.setSize(520, 430);
+        dialog.setLocationRelativeTo(this);
+        dialog.setLayout(new BorderLayout());
+        dialog.setResizable(false);
+
+        JPanel root = new JPanel();
+        root.setLayout(new BoxLayout(root, BoxLayout.Y_AXIS));
+        root.setBackground(Color.WHITE);
+        root.setBorder(new EmptyBorder(18, 24, 18, 24));
+
+        JLabel title = new JLabel("Appointment Details");
+        title.setFont(new Font("SansSerif", Font.BOLD, 18));
+        title.setForeground(UIConstants.TEXT_PRIMARY);
+        title.setAlignmentX(Component.LEFT_ALIGNMENT);
+        root.add(title);
+        root.add(Box.createVerticalStrut(14));
+
+        String technician = appointmentController.resolveUserName(
+                app.getAccountService().getAllUsers(), appointment.getTechnicianId());
+        String vehicle = vehicleService.getVehicleLabel(appointment.getVehicleId());
+
+        root.add(makeInvoiceRowPanel("Appointment ID", appointment.getId(), false, 0));
+        root.add(makeInvoiceRowPanel("Vehicle", vehicle, true, 0));
+        root.add(makeInvoiceRowPanel("Technician", technician, false, 0));
+        root.add(makeInvoiceRowPanel("Service Type", appointment.getServiceType(), true, 0));
+        root.add(makeInvoiceRowPanel("Type of Service", appointment.getServiceName(), false, 0));
+        root.add(makeInvoiceRowPanel("Date & Time", appointment.getDateTime(), true, 0));
+        root.add(makeInvoiceRowPanel("Status", appointment.getStatus(), false, 0));
+
+        dialog.add(root, BorderLayout.CENTER);
+
+        JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 12));
+        footer.setBackground(Color.WHITE);
+        footer.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, UIConstants.BORDER_DEFAULT));
+        JButton rejectBtn = createActionButton("Reject", UIConstants.TEXT_DANGER, Color.WHITE);
+        JButton acceptBtn = createActionButton("Accept", COLOR_GREEN, Color.WHITE);
+        rejectBtn.setPreferredSize(new Dimension(94, 34));
+        acceptBtn.setPreferredSize(new Dimension(94, 34));
+
+        rejectBtn.addActionListener(e -> handleAppointmentDecision(
+                appointment, false, dialog, listDialog));
+        acceptBtn.addActionListener(e -> handleAppointmentDecision(
+                appointment, true, dialog, listDialog));
+
+        footer.add(rejectBtn);
+        footer.add(acceptBtn);
+        dialog.add(footer, BorderLayout.SOUTH);
+
+        dialog.setVisible(true);
+    }
+
+    private void handleAppointmentDecision(AppointmentService.Appointment appointment,
+                                           boolean accepted, JDialog detailDialog,
+                                           JDialog listDialog) {
+        User user = app.getLoggedInUserObj();
+        if (user == null) return;
+
+        boolean saved = accepted
+                ? appointmentService.acceptAwaitingAppointment(
+                        appointment.getId(), user.getUserId(), user.getEmail())
+                : appointmentService.rejectAwaitingAppointment(
+                        appointment.getId(), user.getUserId(), user.getEmail());
+
+        if (!saved) {
+            JOptionPane.showMessageDialog(this,
+                    "Unable to update this appointment. It may have already been changed.",
+                    "Update Failed", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        detailDialog.dispose();
+        refreshUser();
+        refreshAwaitingAppointmentDialogContent(listDialog);
+        JOptionPane.showMessageDialog(this,
+                accepted ? "Appointment accepted successfully."
+                         : "Appointment rejected successfully.",
+                "Appointment Updated", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void refreshAwaitingAppointmentDialogContent(JDialog dialog) {
+        if (dialog == null || !dialog.isVisible()) return;
+        JScrollPane scrollPane = findNamedScrollPane(dialog.getContentPane(),
+                "awaitingAppointmentScrollPane");
+        if (scrollPane == null) return;
+        JScrollPane replacement = buildAwaitingAppointmentScrollPane(
+                getAwaitingAppointmentsForCurrentUser(), dialog);
+        scrollPane.setViewportView(replacement.getViewport().getView());
+        scrollPane.revalidate();
+        scrollPane.repaint();
     }
 
     // ═══════════════════════════════════════════════════════════════

@@ -17,6 +17,8 @@ public class AppointmentService {
     private static final int EXPECTED_COLUMNS = 9;
 
     public static final String STATUS_WAITING_CONFIRMATION = "Waiting for Confirmation";
+    public static final String STATUS_PENDING = "Pending";
+    public static final String STATUS_CANCELLED = "Cancelled";
 
     private static final DateTimeFormatter DATE_TIME_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -85,11 +87,19 @@ public class AppointmentService {
                 String[] cols = line.split(",", EXPECTED_COLUMNS);
                 if (cols.length != LEGACY_COLUMNS && cols.length != EXPECTED_COLUMNS) continue;
 
+                String dateTime = cols[6].trim();
                 int duration;
-                try { duration = Integer.parseInt(cols[7].trim()); }
-                catch (NumberFormatException e) { duration = 1; }
+                String serviceName = "";
 
-                String serviceName = cols.length == EXPECTED_COLUMNS ? cols[8].trim() : "";
+                if (cols.length == EXPECTED_COLUMNS && looksLikeTime(cols[7].trim())) {
+                    dateTime = cols[6].trim() + " " + cols[7].trim();
+                    duration = inferDurationHours(cols[4].trim());
+                    serviceName = cols[8].trim();
+                } else {
+                    try { duration = Integer.parseInt(cols[7].trim()); }
+                    catch (NumberFormatException e) { duration = inferDurationHours(cols[4].trim()); }
+                    serviceName = cols.length == EXPECTED_COLUMNS ? cols[8].trim() : "";
+                }
 
                 list.add(new Appointment(
                         cols[0].trim(), // [0] appointmentID
@@ -98,7 +108,7 @@ public class AppointmentService {
                         cols[3].trim(), // [3] technicianID
                         cols[4].trim(), // [4] serviceType (tier)
                         cols[5].trim(), // [5] status
-                        cols[6].trim(), // [6] dateTime
+                        dateTime,        // [6] dateTime
                         duration,       // [7] durationHours
                         serviceName     // [8] serviceName (optional)
                 ));
@@ -395,6 +405,85 @@ public class AppointmentService {
         return found && saveAll(all);
     }
 
+    public List<Appointment> getAwaitingConfirmationAppointments(String userId, String email) {
+        List<Appointment> result = new ArrayList<>();
+        for (Appointment a : getAll()) {
+            if (isSameCustomer(a, userId, email)
+                    && a.getStatus().equalsIgnoreCase(STATUS_WAITING_CONFIRMATION)) {
+                result.add(a);
+            }
+        }
+        result.sort((a, b) -> a.getDateTime().compareToIgnoreCase(b.getDateTime()));
+        return result;
+    }
+
+    public int countAwaitingConfirmationAppointments(String userId, String email) {
+        return getAwaitingConfirmationAppointments(userId, email).size();
+    }
+
+    public boolean acceptAwaitingAppointment(String appointmentId, String userId, String email) {
+        return updateAwaitingAppointmentStatus(appointmentId, userId, email, STATUS_PENDING);
+    }
+
+    public boolean rejectAwaitingAppointment(String appointmentId, String userId, String email) {
+        return updateAwaitingAppointmentStatus(appointmentId, userId, email, STATUS_CANCELLED);
+    }
+
+    private boolean updateAwaitingAppointmentStatus(String appointmentId, String userId,
+                                                   String email, String newStatus) {
+        File file = new File(FILE_PATH);
+        if (!file.exists()) return false;
+
+        List<String> lines = new ArrayList<>();
+        boolean updated = false;
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank() || line.trim().startsWith("#")) {
+                    lines.add(line);
+                    continue;
+                }
+
+                String[] cols = line.split(",", EXPECTED_COLUMNS);
+                if (cols.length != LEGACY_COLUMNS && cols.length != EXPECTED_COLUMNS) {
+                    lines.add(line);
+                    continue;
+                }
+
+                Appointment appointment = parseColumns(cols);
+                boolean sameAppointment = appointment.getId().equalsIgnoreCase(appointmentId);
+                boolean canUpdate = sameAppointment
+                        && isSameCustomer(appointment, userId, email)
+                        && appointment.getStatus().equalsIgnoreCase(STATUS_WAITING_CONFIRMATION);
+
+                if (canUpdate) {
+                    appointment.setStatus(newStatus);
+                    lines.add(formatNotificationDecisionRow(appointment, userId));
+                    updated = true;
+                } else {
+                    lines.add(line);
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            return false;
+        }
+
+        if (!updated) return false;
+
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file, false))) {
+            for (int i = 0; i < lines.size(); i++) {
+                if (i > 0) writer.newLine();
+                writer.write(lines.get(i));
+            }
+            return true;
+        } catch (IOException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Feedback and Comment methods
     // ─────────────────────────────────────────────────────────────
@@ -487,5 +576,91 @@ public class AppointmentService {
             e.printStackTrace();
             return false;
         }
+    }
+
+    private Appointment parseColumns(String[] cols) {
+        String dateTime = cols[6].trim();
+        int duration;
+        String serviceName = "";
+
+        if (cols.length == EXPECTED_COLUMNS && looksLikeTime(cols[7].trim())) {
+            dateTime = cols[6].trim() + " " + cols[7].trim();
+            duration = inferDurationHours(cols[4].trim());
+            serviceName = cols[8].trim();
+        } else {
+            try { duration = Integer.parseInt(cols[7].trim()); }
+            catch (NumberFormatException e) { duration = inferDurationHours(cols[4].trim()); }
+            serviceName = cols.length == EXPECTED_COLUMNS ? cols[8].trim() : "";
+        }
+
+        return new Appointment(
+                cols[0].trim(),
+                cols[1].trim(),
+                cols[2].trim(),
+                cols[3].trim(),
+                cols[4].trim(),
+                cols[5].trim(),
+                dateTime,
+                duration,
+                serviceName);
+    }
+
+    private boolean isSameCustomer(Appointment appointment, String userId, String email) {
+        String customer = appointment.getCustomerId();
+        return matches(customer, userId) || matches(customer, email);
+    }
+
+    private boolean matches(String value, String expected) {
+        return value != null && expected != null
+                && !expected.isBlank()
+                && value.trim().equalsIgnoreCase(expected.trim());
+    }
+
+    private static boolean looksLikeTime(String value) {
+        return value != null && value.trim().matches("\\d{1,2}:\\d{2}");
+    }
+
+    private static int inferDurationHours(String serviceType) {
+        return "Major Service".equalsIgnoreCase(serviceType) ? 3 : 1;
+    }
+
+    private String formatNotificationDecisionRow(Appointment appointment, String currentUserId) {
+        String[] dateTimeParts = splitDateTime(appointment.getDateTime());
+        String customerId = resolveAccountId(appointment.getCustomerId(), currentUserId);
+        String technicianId = resolveAccountId(appointment.getTechnicianId(), appointment.getTechnicianId());
+        return String.join(",",
+                appointment.getId(),
+                customerId,
+                appointment.getVehicleId(),
+                technicianId,
+                appointment.getServiceType(),
+                appointment.getStatus(),
+                dateTimeParts[0],
+                dateTimeParts[1],
+                appointment.getServiceName() == null ? "" : appointment.getServiceName());
+    }
+
+    private String resolveAccountId(String value, String fallback) {
+        if (value == null || value.isBlank()) return fallback == null ? "" : fallback;
+
+        for (User user : new AccountService().getAllUsers()) {
+            if (user.getEmail().equalsIgnoreCase(value.trim())
+                    || (user.getUserId() != null && user.getUserId().equalsIgnoreCase(value.trim()))) {
+                return user.getUserId();
+            }
+        }
+
+        return fallback == null ? value.trim() : fallback;
+    }
+
+    private String[] splitDateTime(String dateTime) {
+        if (dateTime == null) return new String[]{"", ""};
+        String trimmed = dateTime.trim();
+        int splitAt = trimmed.indexOf(' ');
+        if (splitAt < 0) return new String[]{trimmed, ""};
+        return new String[]{
+                trimmed.substring(0, splitAt).trim(),
+                trimmed.substring(splitAt + 1).trim()
+        };
     }
 }

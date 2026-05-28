@@ -325,7 +325,7 @@ public class StaffReviewPage extends JPanel {
         card.setLayout(new BorderLayout());
 
         String[] columns = {
-            "Comment ID", "Staff Name", "Technician Name",
+            "Comment ID", "Service History ID", "Technician Name",
             "Appointment ID", "Vehicle Type", "Car Plate",
             "Rating", "Feedback", "Date"
         };
