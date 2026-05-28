@@ -3,6 +3,7 @@ package view;
 import model.AccountService;
 import model.AppointmentService;
 import model.AppointmentService.Appointment;
+import model.PriceConfig;
 import model.User;
 
 import javax.swing.*;
@@ -25,6 +26,7 @@ public class AppointmentPanel extends JPanel {
 
     private final AccountService accountService;
     private final AppointmentService appointmentService;
+    private final PriceConfig priceConfig = new PriceConfig();
 
     // Form fields
     private JComboBox<String> customerCombo;
@@ -47,11 +49,18 @@ public class AppointmentPanel extends JPanel {
     private JTextField searchField;
     private JComboBox<String> filterCombo;
 
-    private static final String[] TABLE_COLUMNS = {"ID", "Customer", "Technician", "Service", "Date & Time", "Duration", "Status", ""};
+    private static final String[] TABLE_COLUMNS = {"ID", "Customer", "Technician", "Service", "Service Name", "Date & Time", "Duration", "Status", ""};
 
     private static final Color SUCCESS_GREEN  = new Color(40, 167, 69);
     private static final Color WARNING_ORANGE = new Color(255, 165, 0);
     private static final Color STATUS_PENDING = new Color(108, 117, 125);
+    private static final Color STATUS_WAITING = new Color(150, 100, 200);
+
+    // Tier-tag colours (match ServicePricePanel)
+    private static final Color TIER_NORMAL_FG = new Color(50, 90, 200);
+    private static final Color TIER_NORMAL_BG = new Color(230, 237, 255);
+    private static final Color TIER_MAJOR_FG  = new Color(10, 120, 150);
+    private static final Color TIER_MAJOR_BG  = new Color(220, 245, 250);
 
     public AppointmentPanel(AccountService accountService) {
         this.accountService = accountService;
@@ -159,9 +168,11 @@ public class AppointmentPanel extends JPanel {
 
         serviceTypeCombo = styledCombo();
         serviceTypeCombo.addItem(SERVICE_PLACEHOLDER);
-        serviceTypeCombo.addItem("Normal Service (1 Hour)");
-        serviceTypeCombo.addItem("Major Service (3 Hours)");
-        formContent.add(formRow("Service Type", serviceTypeCombo));
+        for (String[] s : priceConfig.getServices()) {
+            String hrs = PriceConfig.TIER_MAJOR.equals(s[1]) ? "3h" : "1h";
+            serviceTypeCombo.addItem(s[0] + "  \u2014  " + s[1] + " (" + hrs + ")");
+        }
+        formContent.add(formRow("Service Name", serviceTypeCombo));
         formContent.add(Box.createVerticalStrut(14));
 
         datePickerBtn = new JButton(DATE_PLACEHOLDER) {
@@ -335,10 +346,10 @@ public class AppointmentPanel extends JPanel {
         searchWrap.add(searchIcon, BorderLayout.WEST);
         searchWrap.add(searchField, BorderLayout.CENTER);
 
-        filterCombo = new JComboBox<>(new String[]{"All Status", "Pending", "In Progress", "Completed"});
+        filterCombo = new JComboBox<>(new String[]{"All Status", "Waiting for Confirmation", "Pending", "In Progress", "Completed"});
         filterCombo.setFont(UIConstants.FONT_SMALL_BOLD);
         filterCombo.setBackground(Color.WHITE);
-        filterCombo.setPreferredSize(new Dimension(120, 38));
+        filterCombo.setPreferredSize(new Dimension(180, 38));
         filterCombo.setCursor(new Cursor(Cursor.HAND_CURSOR));
         filterCombo.addActionListener(e -> refreshTable());
 
@@ -357,7 +368,7 @@ public class AppointmentPanel extends JPanel {
         styleTable(table);
 
         TableRowSorter<DefaultTableModel> sorter = new TableRowSorter<>(tableModel);
-        sorter.setSortable(7, false);
+        sorter.setSortable(8, false);
         sorter.setComparator(0, (java.util.Comparator<String>) (a, b) -> {
             int na = extractIdNumber(a);
             int nb = extractIdNumber(b);
@@ -371,20 +382,21 @@ public class AppointmentPanel extends JPanel {
         cm.getColumn(0).setMaxWidth(60);
         cm.getColumn(1).setPreferredWidth(110);
         cm.getColumn(2).setPreferredWidth(110);
-        cm.getColumn(3).setPreferredWidth(100);
-        cm.getColumn(4).setPreferredWidth(130);
-        cm.getColumn(5).setPreferredWidth(60);
-        cm.getColumn(5).setMaxWidth(70);
-        cm.getColumn(6).setPreferredWidth(85);
-        cm.getColumn(6).setMaxWidth(95);
-        cm.getColumn(7).setPreferredWidth(70);
-        cm.getColumn(7).setMaxWidth(80);
+        cm.getColumn(3).setPreferredWidth(110);
+        cm.getColumn(4).setPreferredWidth(150);
+        cm.getColumn(5).setPreferredWidth(130);
+        cm.getColumn(6).setPreferredWidth(60);
+        cm.getColumn(6).setMaxWidth(70);
+        cm.getColumn(7).setPreferredWidth(150);
+        cm.getColumn(7).setMaxWidth(170);
+        cm.getColumn(8).setPreferredWidth(70);
+        cm.getColumn(8).setMaxWidth(80);
 
         table.addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) {
                 int viewCol = table.columnAtPoint(e.getPoint());
                 int viewRow = table.rowAtPoint(e.getPoint());
-                if (viewRow < 0 || viewCol != 7) return;
+                if (viewRow < 0 || viewCol != 8) return;
                 int row = table.convertRowIndexToModel(viewRow);
                 String id = (String) tableModel.getValueAt(row, 0);
 
@@ -494,12 +506,33 @@ public class AppointmentPanel extends JPanel {
         centre.setHorizontalAlignment(SwingConstants.CENTER);
         t.getColumnModel().getColumn(0).setCellRenderer(centre);
 
+        // Service tier column — coloured tag (matches ServicePricePanel)
+        t.getColumnModel().getColumn(3).setCellRenderer(new DefaultTableCellRenderer() {
+            @Override public Component getTableCellRendererComponent(JTable tbl, Object val,
+                    boolean sel, boolean foc, int row, int col) {
+                super.getTableCellRendererComponent(tbl, val, sel, foc, row, col);
+                setHorizontalAlignment(SwingConstants.CENTER);
+                setFont(new Font("SansSerif", Font.BOLD, 11));
+                String tier = val == null ? "" : val.toString();
+                if (PriceConfig.TIER_NORMAL.equals(tier)) {
+                    setForeground(TIER_NORMAL_FG);
+                    setBackground(TIER_NORMAL_BG);
+                } else {
+                    setForeground(TIER_MAJOR_FG);
+                    setBackground(TIER_MAJOR_BG);
+                }
+                if (sel) { setBackground(new Color(200, 215, 255)); setForeground(UIConstants.TEXT_DARK); }
+                setOpaque(true);
+                return this;
+            }
+        });
+
         DefaultTableCellRenderer durRenderer = new DefaultTableCellRenderer();
         durRenderer.setHorizontalAlignment(SwingConstants.CENTER);
-        t.getColumnModel().getColumn(5).setCellRenderer(durRenderer);
+        t.getColumnModel().getColumn(6).setCellRenderer(durRenderer);
 
         // Status column
-        t.getColumnModel().getColumn(6).setCellRenderer(new DefaultTableCellRenderer() {
+        t.getColumnModel().getColumn(7).setCellRenderer(new DefaultTableCellRenderer() {
             @Override public Component getTableCellRendererComponent(JTable tbl, Object val,
                     boolean sel, boolean foc, int row, int col) {
                 JLabel lbl = (JLabel) super.getTableCellRendererComponent(tbl, val, sel, foc, row, col);
@@ -507,16 +540,17 @@ public class AppointmentPanel extends JPanel {
                 lbl.setFont(new Font("SansSerif", Font.BOLD, 11));
                 String status = val != null ? val.toString() : "";
                 switch (status) {
-                    case "Completed":   lbl.setForeground(SUCCESS_GREEN); break;
-                    case "In Progress": lbl.setForeground(WARNING_ORANGE); break;
-                    default:            lbl.setForeground(STATUS_PENDING); break;
+                    case "Completed":                  lbl.setForeground(SUCCESS_GREEN); break;
+                    case "In Progress":                lbl.setForeground(WARNING_ORANGE); break;
+                    case "Waiting for Confirmation":   lbl.setForeground(STATUS_WAITING); break;
+                    default:                           lbl.setForeground(STATUS_PENDING); break;
                 }
                 return lbl;
             }
         });
 
         // Action column — edit + delete icons only
-        t.getColumnModel().getColumn(7).setCellRenderer(new DefaultTableCellRenderer() {
+        t.getColumnModel().getColumn(8).setCellRenderer(new DefaultTableCellRenderer() {
             @Override public Component getTableCellRendererComponent(JTable tbl, Object val,
                     boolean sel, boolean foc, int row, int col) {
                 JPanel cell = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 10));
@@ -595,12 +629,15 @@ public class AppointmentPanel extends JPanel {
             String custName = resolveName(a.getCustomerEmail());
             String techName = resolveName(a.getTechnicianEmail());
 
+            String svcName = a.getServiceName() == null ? "" : a.getServiceName();
+
             // Search filter — matches against ID, customer, technician, service, date/time
             if (!searchText.isEmpty()) {
                 boolean match = a.getId().toLowerCase().contains(searchText)
                         || custName.toLowerCase().contains(searchText)
                         || techName.toLowerCase().contains(searchText)
                         || a.getServiceType().toLowerCase().contains(searchText)
+                        || svcName.toLowerCase().contains(searchText)
                         || a.getDateTime().toLowerCase().contains(searchText);
                 if (!match) continue;
             }
@@ -610,6 +647,7 @@ public class AppointmentPanel extends JPanel {
                     custName,
                     techName,
                     a.getServiceType(),
+                    svcName,
                     a.getDateTime(),
                     a.getDurationHours() + "h",
                     a.getStatus(),
@@ -750,10 +788,15 @@ public class AppointmentPanel extends JPanel {
         if (techSelected != null) techBox.setSelectedItem(techSelected);
 
         JComboBox<String> serviceBox = styledCombo();
-        serviceBox.addItem("Normal Service (1 Hour)");
-        serviceBox.addItem("Major Service (3 Hours)");
-        serviceBox.setSelectedItem("Major Service".equalsIgnoreCase(target.getServiceType())
-                ? "Major Service (3 Hours)" : "Normal Service (1 Hour)");
+        String currentSvcName = target.getServiceName() == null ? "" : target.getServiceName();
+        String selectedEntry = null;
+        for (String[] s : priceConfig.getServices()) {
+            String hrs = PriceConfig.TIER_MAJOR.equals(s[1]) ? "3h" : "1h";
+            String entry = s[0] + "  \u2014  " + s[1] + " (" + hrs + ")";
+            serviceBox.addItem(entry);
+            if (s[0].equalsIgnoreCase(currentSvcName)) selectedEntry = entry;
+        }
+        if (selectedEntry != null) serviceBox.setSelectedItem(selectedEntry);
 
         String currentDate = target.getDateTime();
         String currentTime = "08:00";
@@ -804,7 +847,7 @@ public class AppointmentPanel extends JPanel {
         form.add(Box.createVerticalStrut(14));
         form.add(formRow("Assign Technician", techBox));
         form.add(Box.createVerticalStrut(14));
-        form.add(formRow("Service Type", serviceBox));
+        form.add(formRow("Service Name", serviceBox));
         form.add(Box.createVerticalStrut(14));
         form.add(dateFormRow("Date", dateBtn));
         form.add(Box.createVerticalStrut(14));
@@ -875,11 +918,13 @@ public class AppointmentPanel extends JPanel {
             }
             String custEmail = extractEmail(custSel.toString());
             String techEmail = extractEmail(techSel.toString());
-            String serviceType = svcSel.toString().contains("Normal") ? "Normal Service" : "Major Service";
-            int duration = serviceType.equals("Normal Service") ? 1 : 3;
+            String serviceSel = svcSel.toString();
+            String serviceName = parseServiceName(serviceSel);
+            String serviceType = serviceSel.contains(PriceConfig.TIER_MAJOR) ? PriceConfig.TIER_MAJOR : PriceConfig.TIER_NORMAL;
+            int duration = serviceType.equals(PriceConfig.TIER_NORMAL) ? 1 : 3;
             String dateTime = dateHolder[0].toString() + " " + timeSel.toString();
 
-            if (appointmentService.update(id, custEmail, techEmail, serviceType, dateTime, duration)) {
+            if (appointmentService.update(id, custEmail, techEmail, serviceType, dateTime, duration, serviceName)) {
                 dialog.dispose();
                 refreshTable();
             } else {
@@ -942,15 +987,17 @@ public class AppointmentPanel extends JPanel {
         String techEmail = extractEmail(techSel.toString());
 
         String serviceSelection = svcSel.toString();
-        String serviceType = serviceSelection.contains("Normal") ? "Normal Service" : "Major Service";
-        int duration = serviceType.equals("Normal Service") ? 1 : 3;
+        String serviceName = parseServiceName(serviceSelection);
+        String serviceType = serviceSelection.contains(PriceConfig.TIER_MAJOR) ? PriceConfig.TIER_MAJOR : PriceConfig.TIER_NORMAL;
+        int duration = serviceType.equals(PriceConfig.TIER_NORMAL) ? 1 : 3;
 
         String date = selectedDate.toString();
         String time = timeSel.toString();
         String dateTime = date + " " + time;
 
         String id = appointmentService.nextId();
-        Appointment appt = new Appointment(id, custEmail, "", techEmail, serviceType, "Pending", dateTime, duration);
+        Appointment appt = new Appointment(id, custEmail, "", techEmail, serviceType,
+                AppointmentService.STATUS_WAITING_CONFIRMATION, dateTime, duration, serviceName);
 
         if (appointmentService.add(appt)) {
             refreshTable();
@@ -969,6 +1016,11 @@ public class AppointmentPanel extends JPanel {
         if (timeCombo.getItemCount() > 0) timeCombo.setSelectedIndex(0);
         selectedDate = null;
         datePickerBtn.setText(DATE_PLACEHOLDER);
+    }
+
+    private String parseServiceName(String comboEntry) {
+        int sep = comboEntry.indexOf("  \u2014  ");
+        return sep > 0 ? comboEntry.substring(0, sep).trim() : comboEntry.trim();
     }
 
     private String extractEmail(String entry) {

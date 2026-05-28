@@ -13,7 +13,10 @@ public class AppointmentService {
     private static final String FILE_PATH = "src" + File.separator
             + "TxtFile" + File.separator + "appointments.txt";
 
-    private static final int EXPECTED_COLUMNS = 8;
+    private static final int LEGACY_COLUMNS = 8;
+    private static final int EXPECTED_COLUMNS = 9;
+
+    public static final String STATUS_WAITING_CONFIRMATION = "Waiting for Confirmation";
 
     private static final DateTimeFormatter DATE_TIME_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -28,10 +31,19 @@ public class AppointmentService {
         private String status;
         private final String dateTime;
         private final int durationHours;
+        private final String serviceName;
 
         public Appointment(String id, String customerId, String vehicleId,
                            String technicianId, String serviceType,
                            String status, String dateTime, int durationHours) {
+            this(id, customerId, vehicleId, technicianId, serviceType,
+                 status, dateTime, durationHours, "");
+        }
+
+        public Appointment(String id, String customerId, String vehicleId,
+                           String technicianId, String serviceType,
+                           String status, String dateTime, int durationHours,
+                           String serviceName) {
             this.id            = id;
             this.customerId    = customerId;
             this.vehicleId     = vehicleId;
@@ -40,6 +52,7 @@ public class AppointmentService {
             this.status        = status;
             this.dateTime      = dateTime;
             this.durationHours = durationHours;
+            this.serviceName   = serviceName == null ? "" : serviceName;
         }
 
         public String getId()             { return id; }
@@ -51,6 +64,7 @@ public class AppointmentService {
         public void   setStatus(String s) { this.status = s; }
         public String getDateTime()       { return dateTime; }
         public int    getDurationHours()  { return durationHours; }
+        public String getServiceName()    { return serviceName; }
 
         // Keep old getter names so existing code still compiles
         public String getCustomerEmail()   { return customerId; }
@@ -69,21 +83,24 @@ public class AppointmentService {
                 if (line.isBlank() || line.trim().startsWith("#")) continue;
 
                 String[] cols = line.split(",", EXPECTED_COLUMNS);
-                if (cols.length != EXPECTED_COLUMNS) continue;
+                if (cols.length != LEGACY_COLUMNS && cols.length != EXPECTED_COLUMNS) continue;
 
                 int duration;
                 try { duration = Integer.parseInt(cols[7].trim()); }
                 catch (NumberFormatException e) { duration = 1; }
+
+                String serviceName = cols.length == EXPECTED_COLUMNS ? cols[8].trim() : "";
 
                 list.add(new Appointment(
                         cols[0].trim(), // [0] appointmentID
                         cols[1].trim(), // [1] customerID
                         cols[2].trim(), // [2] vehicleID
                         cols[3].trim(), // [3] technicianID
-                        cols[4].trim(), // [4] serviceType
+                        cols[4].trim(), // [4] serviceType (tier)
                         cols[5].trim(), // [5] status
                         cols[6].trim(), // [6] dateTime
-                        duration        // [7] durationHours
+                        duration,       // [7] durationHours
+                        serviceName     // [8] serviceName (optional)
                 ));
             }
         } catch (IOException e) {
@@ -104,7 +121,8 @@ public class AppointmentService {
                     appt.getServiceType(),
                     appt.getStatus(),
                     appt.getDateTime(),
-                    String.valueOf(appt.getDurationHours())
+                    String.valueOf(appt.getDurationHours()),
+                    appt.getServiceName() == null ? "" : appt.getServiceName()
             ));
             return true;
         } catch (IOException e) {
@@ -171,7 +189,7 @@ public class AppointmentService {
 
                 // If the line does not have the right number of columns,
                 // keep it as-is to avoid corrupting the file
-                if (cols.length != EXPECTED_COLUMNS) {
+                if (cols.length != LEGACY_COLUMNS && cols.length != EXPECTED_COLUMNS) {
                     linesToKeep.add(line);
                     continue;
                 }
@@ -246,7 +264,8 @@ public class AppointmentService {
             // Step 2: We only care about "Pending" or "In Progress" appointments.
             //         "Completed" appointments go to the Payment section, not here.
             if (!status.equalsIgnoreCase("Pending")
-                    && !status.equalsIgnoreCase("In Progress")) {
+                    && !status.equalsIgnoreCase("In Progress")
+                    && !status.equalsIgnoreCase(STATUS_WAITING_CONFIRMATION)) {
                 continue;
             }
 
@@ -331,6 +350,12 @@ public class AppointmentService {
     // ─────────────────────────────────────────────────────────────
     public boolean update(String id, String customerId, String technicianId,
                           String serviceType, String dateTime, int durationHours) {
+        return update(id, customerId, technicianId, serviceType, dateTime, durationHours, null);
+    }
+
+    public boolean update(String id, String customerId, String technicianId,
+                          String serviceType, String dateTime, int durationHours,
+                          String serviceName) {
         List<Appointment> all = getAll();
         boolean found = false;
         for (int i = 0; i < all.size(); i++) {
@@ -344,7 +369,8 @@ public class AppointmentService {
                         serviceType,
                         a.getStatus(),
                         dateTime,
-                        durationHours);
+                        durationHours,
+                        serviceName != null ? serviceName : a.getServiceName());
                 all.set(i, replacement);
                 found = true;
                 break;
@@ -452,7 +478,8 @@ public class AppointmentService {
                            + a.getServiceType()  + ","
                            + a.getStatus()       + ","
                            + a.getDateTime()     + ","
-                           + a.getDurationHours());
+                           + a.getDurationHours()+ ","
+                           + (a.getServiceName() == null ? "" : a.getServiceName()));
                 writer.newLine();
             }
             return true;

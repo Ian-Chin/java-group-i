@@ -80,10 +80,14 @@ public class CounterStaffDashboard extends JPanel {
         contentPanel  = new JPanel(contentLayout);
         contentPanel.setBackground(UIConstants.BG_CONTENT);
 
-        contentPanel.add(wrapScrollable(buildDashboardContent()),                              "Dashboard");
+        JScrollPane dashCard = wrapScrollable(buildDashboardContent());
+        dashCard.putClientProperty("cardName", "Dashboard");
+        contentPanel.add(dashCard, "Dashboard");
         contentPanel.add(wrapScrollable(new CustomerManagementPanel(app.getAccountService())), "Customer Management");
         contentPanel.add(wrapScrollable(new AppointmentPanel(app.getAccountService())),        "Appointments");
-        contentPanel.add(wrapScrollable(buildCalendarContent()),                               "Calendar");
+        JScrollPane calCard = wrapScrollable(buildCalendarContent());
+        calCard.putClientProperty("cardName", "Calendar");
+        contentPanel.add(calCard, "Calendar");
         contentPanel.add(wrapScrollable(new PaymentCollectionPanel(app.getAccountService())),  "Payment Collection");
 
         dayDetailPanel = new JPanel(new BorderLayout());
@@ -304,6 +308,7 @@ public class CounterStaffDashboard extends JPanel {
                     styleNavBtn(btns[j], NAV_ITEMS[j].equals(activeNav));
                 }
                 headerTitle.setText(name);
+                rebuildLiveCard(name);
                 contentLayout.show(contentPanel, name);
             });
             sidebar.add(btns[i]);
@@ -415,6 +420,7 @@ public class CounterStaffDashboard extends JPanel {
         int pendingAppts    = 0;
         int completedAppts  = 0;
         int inProgressAppts = 0;
+        int waitingAppts    = 0;
         int totalServiceHours = 0;
 
         List<Appointment> upcomingList = new ArrayList<>();
@@ -425,9 +431,10 @@ public class CounterStaffDashboard extends JPanel {
             if (apptDate.equals(today)) todayAppts++;
             totalServiceHours += a.getDurationHours();
             switch (a.getStatus()) {
-                case "Pending":     pendingAppts++;    break;
-                case "In Progress": inProgressAppts++; break;
-                case "Completed":   completedAppts++;  break;
+                case "Pending":                  pendingAppts++;    break;
+                case "In Progress":              inProgressAppts++; break;
+                case "Completed":                completedAppts++;  break;
+                case "Waiting for Confirmation": waitingAppts++;    break;
             }
             if (apptDate.compareTo(today) >= 0 && !"Completed".equals(a.getStatus())) {
                 upcomingList.add(a);
@@ -464,7 +471,7 @@ public class CounterStaffDashboard extends JPanel {
         midRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 280));
 
         midRow.add(buildUpcomingAppointmentsCard(upcomingList, acctService));
-        midRow.add(buildStatusBreakdownCard(pendingAppts, inProgressAppts, completedAppts, totalAppts));
+        midRow.add(buildStatusBreakdownCard(waitingAppts, pendingAppts, inProgressAppts, completedAppts, totalAppts));
 
         page.add(midRow);
         page.add(Box.createVerticalStrut(16));
@@ -607,8 +614,9 @@ public class CounterStaffDashboard extends JPanel {
 
                 Color statusColor;
                 switch (a.getStatus()) {
-                    case "In Progress": statusColor = new Color(255, 165, 0);   break;
-                    default:            statusColor = new Color(108, 117, 125); break;
+                    case "In Progress":              statusColor = new Color(255, 165, 0);   break;
+                    case "Waiting for Confirmation": statusColor = new Color(150, 100, 200); break;
+                    default:                         statusColor = new Color(108, 117, 125); break;
                 }
 
                 JPanel row = new JPanel(new BorderLayout(10, 0)) {
@@ -657,11 +665,13 @@ public class CounterStaffDashboard extends JPanel {
                 info.add(detailLine);
                 row.add(info, BorderLayout.CENTER);
 
-                JLabel statusLbl = new JLabel(a.getStatus());
+                String shortStatus = "Waiting for Confirmation".equals(a.getStatus()) ? "Awaiting" : a.getStatus();
+                JLabel statusLbl = new JLabel(shortStatus);
                 statusLbl.setFont(new Font("SansSerif", Font.BOLD, 10));
                 statusLbl.setForeground(statusColor);
                 statusLbl.setHorizontalAlignment(SwingConstants.RIGHT);
-                statusLbl.setPreferredSize(new Dimension(70, 20));
+                int lblW = statusLbl.getFontMetrics(statusLbl.getFont()).stringWidth(shortStatus) + 8;
+                statusLbl.setPreferredSize(new Dimension(Math.max(70, lblW), 20));
                 row.add(statusLbl, BorderLayout.EAST);
 
                 listPanel.add(row);
@@ -685,7 +695,7 @@ public class CounterStaffDashboard extends JPanel {
     // APPOINTMENT STATUS BREAKDOWN CARD
     // =========================================================
 
-    private JPanel buildStatusBreakdownCard(int pending, int inProgress,
+    private JPanel buildStatusBreakdownCard(int waiting, int pending, int inProgress,
                                              int completed, int total) {
         JPanel card = new JPanel() {
             @Override protected void paintComponent(Graphics g) {
@@ -716,6 +726,8 @@ public class CounterStaffDashboard extends JPanel {
         card.add(subtitle);
         card.add(Box.createVerticalStrut(20));
 
+        card.add(buildStatusBar("Waiting for Confirmation", waiting, total, new Color(150, 100, 200), new Color(240, 230, 250)));
+        card.add(Box.createVerticalStrut(14));
         card.add(buildStatusBar("Pending",     pending,    total, new Color(108, 117, 125), new Color(235, 235, 240)));
         card.add(Box.createVerticalStrut(14));
         card.add(buildStatusBar("In Progress", inProgress, total, new Color(255, 165, 0),   new Color(255, 243, 220)));
@@ -1273,9 +1285,10 @@ public class CounterStaffDashboard extends JPanel {
                         String status = statuses.get(si);
                         Color barColor;
                         switch (status) {
-                            case "Completed":   barColor = new Color(40, 167, 69);   break;
-                            case "In Progress": barColor = new Color(255, 165, 0);   break;
-                            default:            barColor = new Color(108, 117, 125); break;
+                            case "Completed":                  barColor = new Color(40, 167, 69);   break;
+                            case "In Progress":                barColor = new Color(255, 165, 0);   break;
+                            case "Waiting for Confirmation":   barColor = new Color(150, 100, 200); break;
+                            default:                           barColor = new Color(108, 117, 125); break;
                         }
                         final Color fc = isSel ? new Color(255, 255, 255, 200) : barColor;
                         JPanel bar = new JPanel() {
@@ -1345,9 +1358,10 @@ public class CounterStaffDashboard extends JPanel {
                                          int hours, String status) {
         Color barColor;
         switch (status) {
-            case "Completed":   barColor = new Color(40, 167, 69);   break;
-            case "In Progress": barColor = new Color(255, 165, 0);   break;
-            default:            barColor = new Color(108, 117, 125); break;
+            case "Completed":                  barColor = new Color(40, 167, 69);   break;
+            case "In Progress":                barColor = new Color(255, 165, 0);   break;
+            case "Waiting for Confirmation":   barColor = new Color(150, 100, 200); break;
+            default:                           barColor = new Color(108, 117, 125); break;
         }
 
         JPanel card = new JPanel(new BorderLayout(8, 0)) {
@@ -1395,15 +1409,17 @@ public class CounterStaffDashboard extends JPanel {
         line2.setForeground(UIConstants.TEXT_SECONDARY);
         line2.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel statusLabel = new JLabel(status) {
+        String statusText = "Waiting for Confirmation".equals(status) ? "Awaiting" : status;
+        JLabel statusLabel = new JLabel(statusText) {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 Color bg;
                 switch (status) {
-                    case "Completed":   bg = new Color(220, 245, 225); break;
-                    case "In Progress": bg = new Color(255, 243, 220); break;
-                    default:            bg = new Color(235, 235, 240); break;
+                    case "Completed":                  bg = new Color(220, 245, 225); break;
+                    case "In Progress":                bg = new Color(255, 243, 220); break;
+                    case "Waiting for Confirmation":   bg = new Color(240, 230, 250); break;
+                    default:                           bg = new Color(235, 235, 240); break;
                 }
                 g2.setColor(bg);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
@@ -1415,7 +1431,9 @@ public class CounterStaffDashboard extends JPanel {
         statusLabel.setForeground(barColor);
         statusLabel.setHorizontalAlignment(SwingConstants.CENTER);
         statusLabel.setBorder(new EmptyBorder(2, 8, 2, 8));
-        statusLabel.setMaximumSize(new Dimension(80, 18));
+        statusLabel.setMaximumSize(new Dimension(120, 20));
+        statusLabel.setPreferredSize(new Dimension(
+                statusLabel.getFontMetrics(statusLabel.getFont()).stringWidth(statusText) + 18, 20));
         statusLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         details.add(line1);
@@ -1453,6 +1471,48 @@ public class CounterStaffDashboard extends JPanel {
     }
 
     // =========================================================
+    // REBUILD a live card (Calendar / Dashboard) so it picks up
+    // changes made elsewhere (e.g. new appointment created).
+    // =========================================================
+    /** Truncate text with ellipsis so it fits within maxWidth pixels. */
+    private static String fitText(FontMetrics fm, String text, int maxWidth) {
+        if (text == null) return "";
+        if (maxWidth <= 0) return "";
+        if (fm.stringWidth(text) <= maxWidth) return text;
+        String ell = "\u2026";
+        int ellW = fm.stringWidth(ell);
+        if (maxWidth <= ellW) return "";
+        int lo = 0, hi = text.length();
+        while (lo < hi) {
+            int mid = (lo + hi + 1) >>> 1;
+            if (fm.stringWidth(text.substring(0, mid)) + ellW <= maxWidth) lo = mid;
+            else hi = mid - 1;
+        }
+        return text.substring(0, lo) + ell;
+    }
+
+    private void rebuildLiveCard(String name) {
+        JComponent rebuilt;
+        switch (name) {
+            case "Calendar":  rebuilt = wrapScrollable(buildCalendarContent()); break;
+            case "Dashboard": rebuilt = wrapScrollable(buildDashboardContent()); break;
+            default: return;
+        }
+        for (Component c : contentPanel.getComponents()) {
+            if (!(c instanceof JComponent)) continue;
+            Object key = ((JComponent) c).getClientProperty("cardName");
+            if (name.equals(key)) {
+                contentPanel.remove(c);
+                break;
+            }
+        }
+        rebuilt.putClientProperty("cardName", name);
+        contentPanel.add(rebuilt, name);
+        contentPanel.revalidate();
+        contentPanel.repaint();
+    }
+
+    // =========================================================
     // DAY DETAIL / GANTT CHART
     // =========================================================
 
@@ -1484,6 +1544,7 @@ public class CounterStaffDashboard extends JPanel {
         backBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         backBtn.addActionListener(e -> {
             headerTitle.setText("Calendar");
+            rebuildLiveCard("Calendar");
             contentLayout.show(contentPanel, "Calendar");
         });
         topBar.add(backBtn, BorderLayout.WEST);
@@ -1500,6 +1561,7 @@ public class CounterStaffDashboard extends JPanel {
 
         JPanel legend = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 0));
         legend.setOpaque(false);
+        legend.add(legendDot(new Color(150, 100, 200), "Waiting"));
         legend.add(legendDot(new Color(108, 117, 125), "Pending"));
         legend.add(legendDot(new Color(255, 165, 0),   "In Progress"));
         legend.add(legendDot(new Color(40, 167, 69),   "Completed"));
@@ -1543,7 +1605,7 @@ public class CounterStaffDashboard extends JPanel {
         int endHour      = 20;
         int totalHours   = endHour - startHour;
         int leftPad      = 16;
-        int rowHeight    = 118;
+        int rowHeight    = 128;
         int headerHeight = 32;
 
         JPanel ganttChart = new JPanel() {
@@ -1613,9 +1675,10 @@ public class CounterStaffDashboard extends JPanel {
 
                         Color barColor;
                         switch (a.getStatus()) {
-                            case "Completed":   barColor = new Color(40, 167, 69);   break;
-                            case "In Progress": barColor = new Color(255, 165, 0);   break;
-                            default:            barColor = new Color(108, 117, 125); break;
+                            case "Completed":                  barColor = new Color(40, 167, 69);   break;
+                            case "In Progress":                barColor = new Color(255, 165, 0);   break;
+                            case "Waiting for Confirmation":   barColor = new Color(150, 100, 200); break;
+                            default:                           barColor = new Color(108, 117, 125); break;
                         }
 
                         // Shadow
@@ -1635,34 +1698,29 @@ public class CounterStaffDashboard extends JPanel {
                         String vehicleInfo = vehService.getVehiclePlate(a.getVehicleId());
                         g2.setColor(Color.WHITE);
 
+                        int textMaxW = barW - 16;
+                        String svcName = a.getServiceName() == null || a.getServiceName().isBlank()
+                                ? a.getServiceType() : a.getServiceName();
+
                         g2.setFont(new Font("SansSerif", Font.BOLD, 12));
-                        FontMetrics fm1 = g2.getFontMetrics();
-                        if (fm1.stringWidth(techName) < barW - 16)
-                            g2.drawString(techName, barX + 12, barY + 18);
+                        g2.drawString(fitText(g2.getFontMetrics(), techName, textMaxW), barX + 12, barY + 16);
 
-                        g2.setFont(new Font("SansSerif", Font.PLAIN, 12));
-                        FontMetrics fm2 = g2.getFontMetrics();
-                        String svcLine = a.getServiceType() + " (" + a.getDurationHours() + "h)";
-                        if (fm2.stringWidth(svcLine) < barW - 16)
-                            g2.drawString(svcLine, barX + 12, barY + 35);
+                        g2.setFont(new Font("SansSerif", Font.BOLD, 11));
+                        g2.drawString(fitText(g2.getFontMetrics(), svcName, textMaxW), barX + 12, barY + 32);
 
                         g2.setFont(new Font("SansSerif", Font.PLAIN, 11));
-                        FontMetrics fm3 = g2.getFontMetrics();
-                        String custLine = "Customer: " + custName;
-                        if (fm3.stringWidth(custLine) < barW - 16)
-                            g2.drawString(custLine, barX + 12, barY + 51);
+                        String tierLine = a.getServiceType() + "  \u2022  " + a.getDurationHours() + "h";
+                        g2.drawString(fitText(g2.getFontMetrics(), tierLine, textMaxW), barX + 12, barY + 48);
 
                         g2.setFont(new Font("SansSerif", Font.PLAIN, 11));
-                        FontMetrics fm4 = g2.getFontMetrics();
-                        String vehLine = "Vehicle: " + vehicleInfo;
-                        if (fm4.stringWidth(vehLine) < barW - 16)
-                            g2.drawString(vehLine, barX + 12, barY + 67);
+                        g2.drawString(fitText(g2.getFontMetrics(), "Customer: " + custName, textMaxW), barX + 12, barY + 64);
+
+                        g2.setFont(new Font("SansSerif", Font.PLAIN, 11));
+                        g2.drawString(fitText(g2.getFontMetrics(), "Vehicle: " + vehicleInfo, textMaxW), barX + 12, barY + 80);
 
                         g2.setFont(new Font("SansSerif", Font.PLAIN, 10));
-                        FontMetrics fm5 = g2.getFontMetrics();
-                        String line5 = timePart + "  \u2022  " + a.getStatus();
-                        if (fm5.stringWidth(line5) < barW - 16)
-                            g2.drawString(line5, barX + 12, barY + 84);
+                        String shortStatus = "Waiting for Confirmation".equals(a.getStatus()) ? "Awaiting" : a.getStatus();
+                        g2.drawString(fitText(g2.getFontMetrics(), timePart + "  \u2022  " + shortStatus, textMaxW), barX + 12, barY + 96);
                     }
                     rowIdx++;
                 }

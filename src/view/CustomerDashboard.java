@@ -656,27 +656,65 @@ public class CustomerDashboard extends JPanel {
         panel.add(info, BorderLayout.CENTER);
 
         boolean inProgress = status.equalsIgnoreCase("In Progress");
-        JLabel badge = new JLabel(status) {
+        boolean awaiting   = status.equalsIgnoreCase("Waiting for Confirmation");
+        final Color badgeBg = awaiting    ? new Color(150, 100, 200, 28)
+                            : inProgress  ? new Color(40, 130, 220, 22)
+                                          : new Color(230, 160, 40, 22);
+        final Color badgeFg = awaiting    ? new Color(120, 70, 180)
+                            : inProgress  ? new Color(40, 130, 220)
+                                          : new Color(200, 130, 20);
+        JLabel badge = new JLabel(awaiting ? "Awaiting" : status) {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(inProgress
-                        ? new Color(40, 130, 220, 22)
-                        : new Color(230, 160, 40, 22));
+                g2.setColor(badgeBg);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
                 g2.dispose();
                 super.paintComponent(g);
             }
         };
         badge.setFont(new Font("SansSerif", Font.BOLD, 10));
-        badge.setForeground(inProgress ? new Color(40, 130, 220) : new Color(200, 130, 20));
+        badge.setForeground(badgeFg);
         badge.setHorizontalAlignment(SwingConstants.CENTER);
         badge.setPreferredSize(new Dimension(72, 22));
         badge.setBorder(new EmptyBorder(0, 4, 0, 4));
 
-        JPanel east = new JPanel(new GridBagLayout());
+        JPanel east = new JPanel();
+        east.setLayout(new BoxLayout(east, BoxLayout.Y_AXIS));
         east.setOpaque(false);
+        badge.setAlignmentX(Component.CENTER_ALIGNMENT);
+        east.add(Box.createVerticalGlue());
         east.add(badge);
+
+        if (awaiting) {
+            JButton confirmBtn = new JButton("Confirm") {
+                @Override protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2.setColor(new Color(150, 100, 200));
+                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
+                    g2.dispose();
+                    super.paintComponent(g);
+                }
+            };
+            confirmBtn.setFont(new Font("SansSerif", Font.BOLD, 10));
+            confirmBtn.setForeground(Color.WHITE);
+            confirmBtn.setContentAreaFilled(false);
+            confirmBtn.setBorderPainted(false);
+            confirmBtn.setFocusPainted(false);
+            confirmBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+            confirmBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
+            confirmBtn.setMaximumSize(new Dimension(72, 22));
+            confirmBtn.setPreferredSize(new Dimension(72, 22));
+            confirmBtn.addActionListener(e -> {
+                if (appointmentService.updateStatus(apptId, "Pending")) {
+                    rebuildDashboard();
+                }
+            });
+            east.add(Box.createVerticalStrut(4));
+            east.add(confirmBtn);
+        }
+        east.add(Box.createVerticalGlue());
         panel.add(east, BorderLayout.EAST);
 
         return panel;
