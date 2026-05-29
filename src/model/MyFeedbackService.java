@@ -241,8 +241,8 @@ public class MyFeedbackService {
                 line = line.trim();
                 if (line.isEmpty() || line.startsWith("#")) continue;
 
-                // Split into 8 columns
-                String[] cols = line.split(",", 8);
+                // Split into up to 9 columns (appointments.txt has 9 fields including optional serviceName)
+                String[] cols = line.split(",", 9);
                 if (cols.length < 8) continue;
 
                 String apptId      = cols[0].trim();
