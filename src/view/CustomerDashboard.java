@@ -1644,7 +1644,8 @@ public class CustomerDashboard extends JPanel {
         JLabel title = new JLabel("Appointment Details");
         title.setFont(new Font("SansSerif", Font.BOLD, 18));
         title.setForeground(UIConstants.TEXT_PRIMARY);
-        title.setAlignmentX(Component.LEFT_ALIGNMENT);
+        title.setAlignmentX(Component.CENTER_ALIGNMENT);
+        title.setHorizontalAlignment(SwingConstants.CENTER);
         root.add(title);
         root.add(Box.createVerticalStrut(14));
 
