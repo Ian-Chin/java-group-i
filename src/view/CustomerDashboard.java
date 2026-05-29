@@ -18,6 +18,10 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Ellipse2D;
 import java.awt.image.BufferedImage;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -359,8 +363,22 @@ public class CustomerDashboard extends JPanel {
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 370));
         row.setPreferredSize(new Dimension(Integer.MAX_VALUE, 370));
 
-        row.add(buildActivityChartCard(allAppts, paidIds), BorderLayout.CENTER);
-        row.add(buildBreakdownCard(allAppts),              BorderLayout.EAST);
+        // Filter appointments to only those before now and not cancelled
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+        LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Kuala_Lumpur"));
+        List<String[]> pastFiltered = new ArrayList<>();
+        for (String[] rowA : allAppts) {
+            try {
+                LocalDateTime ldt = LocalDateTime.parse(rowA[5], dtf);
+                String status = rowA.length > 4 && rowA[4] != null ? rowA[4].trim() : "";
+                if (ldt.isBefore(now) && (status.equalsIgnoreCase("Pending") || status.equalsIgnoreCase("Completed"))) {
+                    pastFiltered.add(rowA);
+                }
+            } catch (DateTimeParseException ignored) {}
+        }
+
+        row.add(buildActivityChartCard(pastFiltered, paidIds), BorderLayout.CENTER);
+        row.add(buildBreakdownCard(pastFiltered),              BorderLayout.EAST);
         return row;
     }
 
@@ -381,16 +399,22 @@ public class CustomerDashboard extends JPanel {
         chartPanel.setOpaque(false);
         card.add(chartPanel, BorderLayout.CENTER);
 
-        // ── Total spent → paymentService ─────────────────────────
-        double totalSpent  = paymentService.calcTotalSpent(allAppts, paidIds, appointmentController);
-        double avgPerVisit = allAppts.isEmpty() ? 0 : totalSpent / allAppts.size();
+        // ── Total spent → compute from appointments list (already filtered)
+        double totalSpent  = 0;
+        int totalSvc = allAppts.size();
+        for (String[] row : allAppts) {
+            try {
+                totalSpent += Double.parseDouble(appointmentController.calculateAmount(row[3], row[6]));
+            } catch (NumberFormatException ignored) {}
+        }
+        double avgPerVisit = totalSvc == 0 ? 0 : totalSpent / totalSvc;
 
         JPanel statsRow = new JPanel(new GridLayout(1, 3, 0, 0));
         statsRow.setOpaque(false);
         statsRow.setBorder(new EmptyBorder(22, 0, 0, 0));
         statsRow.setPreferredSize(new Dimension(0, 66));
 
-        statsRow.add(buildSmallStat("Total Services",    String.valueOf(allAppts.size())));
+        statsRow.add(buildSmallStat("Total Services",    String.valueOf(totalSvc)));
         statsRow.add(buildSmallStat("Total Spent",        String.format("RM %,.0f", totalSpent)));
         statsRow.add(buildSmallStat("Average Per Visit",  String.format("RM %,.0f", avgPerVisit)));
         card.add(statsRow, BorderLayout.SOUTH);
@@ -1850,7 +1874,9 @@ public class CustomerDashboard extends JPanel {
             if (data == null || data.isEmpty()) return;
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            int w = getWidth(), h = getHeight(), labelH = 18, topPad = 8;
+            int w = getWidth(), h = getHeight();
+            int labelH = 20; // space for month labels
+            int topPad = 30; // extra space so numeric labels fit above bars
             int chartH = h - labelH - topPad, n = data.size();
             if (n == 0 || chartH <= 0) { g2.dispose(); return; }
             int maxVal = data.values().stream().mapToInt(Integer::intValue).max().orElse(1);
@@ -1862,27 +1888,44 @@ public class CustomerDashboard extends JPanel {
                 int count = entries.get(i).getValue();
                 int colX  = 8 + i * colW;
                 int barX  = colX + (colW - barW) / 2;
-                if (count > 0) {
-                    int barH = (int) ((double) count / maxVal * chartH);
-                    int barY = topPad + chartH - barH;
+                int barH = (int) ((double) count / maxVal * chartH);
+                int barY = topPad + chartH - barH;
+
+                // draw bar if height > 0
+                if (barH > 0) {
                     g2.setColor(new Color(80, 110, 230, 180));
                     g2.fillRoundRect(barX, barY, barW, barH, 4, 4);
+                }
+
+                // draw count above the bar (prefer above; fall back inside if not enough space)
+                if (count > 0) {
                     g2.setFont(new Font("SansSerif", Font.BOLD, 10));
-                    g2.setColor(new Color(80, 110, 230));
                     FontMetrics fm = g2.getFontMetrics();
                     String cnt = String.valueOf(count);
                     int lx = barX + barW / 2 - fm.stringWidth(cnt) / 2;
-                    if (barY - 3 > topPad) g2.drawString(cnt, lx, barY - 2);
-                } else {
-                    g2.setColor(new Color(80, 110, 230, 35));
-                    g2.fillRoundRect(barX, topPad + chartH - 4, barW, 4, 2, 2);
+                    int aboveY = barY - 6; // baseline for text above the bar
+                    // highlight for specific months
+                    String month = entries.get(i).getKey();
+                    boolean highlight = "Feb".equalsIgnoreCase(month)
+                            || "Mar".equalsIgnoreCase(month)
+                            || "Apr".equalsIgnoreCase(month)
+                            || "May".equalsIgnoreCase(month);
+                    if (aboveY - fm.getAscent() > 0) {
+                        g2.setColor(highlight ? new Color(80, 110, 230) : new Color(120, 130, 145));
+                        g2.drawString(cnt, lx, aboveY);
+                    } else {
+                        g2.setColor(Color.WHITE);
+                        g2.drawString(cnt, lx, barY + fm.getAscent() + 3);
+                    }
                 }
+
+                // month label under column
                 g2.setFont(new Font("SansSerif", Font.PLAIN, 10));
                 g2.setColor(new Color(120, 130, 145));
-                FontMetrics fm = g2.getFontMetrics();
+                FontMetrics fmMonth = g2.getFontMetrics();
                 String month = entries.get(i).getKey();
-                int lx = colX + (colW - fm.stringWidth(month)) / 2;
-                g2.drawString(month, lx, h - 3);
+                int lxMonth = colX + (colW - fmMonth.stringWidth(month)) / 2;
+                g2.drawString(month, lxMonth, h - 3);
             }
             g2.dispose();
         }
