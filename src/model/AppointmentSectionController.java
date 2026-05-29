@@ -102,7 +102,7 @@ public class AppointmentSectionController {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // AMOUNT CALCULATION  ← FIXED
+    // AMOUNT CALCULATION
     // ═══════════════════════════════════════════════════════════════
     public String calculateAmount(String serviceType, String durationStr) {
         PriceConfig prices = new PriceConfig();

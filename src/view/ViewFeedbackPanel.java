@@ -16,13 +16,6 @@ import java.util.List;
  * Data is read from two text files:
  *   - customer_comments.txt   : commentID,appointmentID,rating,comment,staffID,techID
  *   - technician_feedback.txt : feedbackID,appointmentID,vehicleCondition,workDone,recommendations,date
- *
- * OOP highlights:
- *  - Encapsulation : file paths and parsing hidden inside private methods
- *  - Inheritance   : extends JPanel
- *  - Abstraction   : table building abstracted into buildTable()
- *  - Polymorphism  : loadComments() and loadFeedback() both return List<String[]>
- *                    and are displayed by the same generic renderTable() method
  */
 public class ViewFeedbackPanel extends JPanel {
 

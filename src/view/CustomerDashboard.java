@@ -671,7 +671,6 @@ public class CustomerDashboard extends JPanel {
 
         if (unpaid.size() > 2) {
             JButton viewAll = createTextLinkButton("View all");
-            // ── FIX: pass null as parentDialog — this IS the top-level card button ──
             viewAll.addActionListener(e ->
                     showViewAllPendingDialog("All Pending Payments"));
             titleRow.add(viewAll, BorderLayout.EAST);

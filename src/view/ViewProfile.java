@@ -658,7 +658,7 @@ public class ViewProfile extends JPanel {
         vehicleScrollPane.getViewport().setOpaque(false);
         vehicleScrollPane.getVerticalScrollBar().setUnitIncrement(10);
 
-        // Fixed height = exactly MAX_VISIBLE rows visible before scrolling.
+        // Height = exactly MAX_VISIBLE rows visible before scrolling.
         int scrollPaneHeight = (MAX_VISIBLE * ROW_H) + ((MAX_VISIBLE - 1) * 6);
         vehicleScrollPane.setPreferredSize(new Dimension(0, scrollPaneHeight));
         vehicleScrollPane.setMaximumSize(new Dimension(Integer.MAX_VALUE, scrollPaneHeight));
