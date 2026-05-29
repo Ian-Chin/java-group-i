@@ -18,3 +18,8 @@ File > Import > Git > Projects From Git > Clone URL > Finish > You are all set!
 
 ## Source Code issue
 Please delete the repo and import again (in root)
+
+## Import Reference Library
+itextpdf-5.5.13.2.jar
+link: https://mvnrepository.com/artifact/com.itextpdf/itextpdf/5.5.13.2
+Choose: jar for installation and import purpose
