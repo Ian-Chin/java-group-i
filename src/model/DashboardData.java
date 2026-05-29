@@ -163,6 +163,9 @@ public class DashboardData {
         for (String[] r : appointments) {
             if (r.length < 6) continue;
             String t = r[5].trim();
+            if (t.equalsIgnoreCase("Waiting for Confirmation")) {
+                t = "Wait Confirm";
+            }
             if (!t.isEmpty()) m.merge(t, 1, Integer::sum);
         }
         return m;
