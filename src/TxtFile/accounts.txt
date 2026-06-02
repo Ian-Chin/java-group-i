@@ -1,4 +1,4 @@
-M1,Bowie,b@gmail.com,Bowie1234,admin,0
+M1,Bowie,b@apu.asc.com,Bowie1234,admin,0
 S1,Ian Chin,ian@apu.asc.com,admin1234,staff,0
 T1,Alex Wong,alex@apu.asc.com,Tech1234,technician,1
 T2,Sarah Lee,sarah@apu.asc.com,Tech1234,technician,2
@@ -16,3 +16,4 @@ C6,Ryan Ng,ryan@gmail.com,Cust1234,customer,3
 C7,Kayden,kayden@gmail.com,kay12345,customer,3
 C8,Bobo,b@apu.asc.com,admin1234,technician,5
 C9,Kai,kai@gmail.com,kai12345,customer,5
+S2,Kelwin,k@apu.asc.com,Kelwin1234,staff,0
