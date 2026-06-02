@@ -16,4 +16,3 @@ C6,Ryan Ng,ryan@gmail.com,Cust1234,customer,3
 C7,Kayden,kayden@gmail.com,kay12345,customer,3
 C8,Bobo,b@apu.asc.com,admin1234,technician,5
 C9,Kai,kai@gmail.com,kai12345,customer,5
-S2,Kelwin,k@apu.asc.com,Kelwin1234,staff,0
